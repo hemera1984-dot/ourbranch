@@ -112,6 +112,20 @@ async function main() {
   mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
   assert.equal(mEvs.filter(e => e.source_key === "mg:C-2026-014:3")[0].status, "취소");
 
+  // 6-3) 장소 왕복 + 도입자 열람 (팀이 달라도 자기가 도입한 팀원의 일정을 본다)
+  const pl = await (await api("t-fc1", "POST", "/events", { date: "2026-08-03", memberEmail: "fc1@x.com", kind: "상담", title: "고객 상담", place: "강남 스타벅스" })).json();
+  const plEv = (await (await api("t-fc1", "GET", "/events?from=2026-08-03&to=2026-08-03")).json()).find(e => e.id === pl.id);
+  assert.equal(plEv.place, "강남 스타벅스");
+  // fc2(2팀)를 fc1(1팀)의 도입 팀원으로 지정
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, role: "팀원", recruiterEmail: "fc1@x.com" })).status, 200);
+  assert.equal((await api("t-fc2", "POST", "/events", { date: "2026-08-04", memberEmail: "fc2@x.com", kind: "교육", title: "신인 교육" })).status, 200);
+  const recEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-04&to=2026-08-04")).json();
+  assert.equal(recEvs.filter(e => e.member_email === "fc2@x.com").length, 1);   // 도입자는 보인다
+  const fc2boot = await (await api("t-fc1", "GET", "/bootstrap")).json();
+  assert.ok(fc2boot.members.some(m => m.email === "fc2@x.com"));               // 명단에도 나타난다
+  const otherView = await (await api("t-esl1", "GET", "/events?from=2026-08-04&to=2026-08-04")).json();
+  assert.equal(otherView.filter(e => e.member_email === "fc2@x.com").length, 0); // 도입자 아닌 1팀 부지점장에겐 안 보인다
+
   // 7) 출근 자가 보고 + upsert
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: true })).status, 200);
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: false })).status, 200);

@@ -25,13 +25,16 @@ export function openDb(file) {
     -- 계정과의 연결 고리는 이메일 (마이가디언 accounts.email 소문자 기준).
     -- is_manager: 관리자(팀원 추가·삭제, 조직도 수정). 부지점장 이상 기본, 총관리자가 토글.
     -- can_view_all: 자기 팀 밖 열람 (총관리자가 승인한 부지점장용).
+    -- recruiter_email: 도입자(이 사람을 뽑은 사람). 도입자는 팀이 달라도
+    -- 자기가 도입한 팀원의 일정을 열람할 수 있다 (2026-07-31 일정 원칙).
     CREATE TABLE IF NOT EXISTS members (
-      email        TEXT PRIMARY KEY,
-      name         TEXT NOT NULL DEFAULT '',
-      team_id      INTEGER REFERENCES teams(id),
-      role         TEXT NOT NULL DEFAULT '팀원',
-      is_manager   INTEGER NOT NULL DEFAULT 0,
-      can_view_all INTEGER NOT NULL DEFAULT 0
+      email           TEXT PRIMARY KEY,
+      name            TEXT NOT NULL DEFAULT '',
+      team_id         INTEGER REFERENCES teams(id),
+      role            TEXT NOT NULL DEFAULT '팀원',
+      is_manager      INTEGER NOT NULL DEFAULT 0,
+      can_view_all    INTEGER NOT NULL DEFAULT 0,
+      recruiter_email TEXT
     );
 
     -- team_id가 NULL이면 지점 공통 공지 (전원 열람)
@@ -69,7 +72,8 @@ export function openDb(file) {
       source        TEXT,
       source_key    TEXT UNIQUE,
       status        TEXT NOT NULL DEFAULT '예정',
-      customer_code TEXT NOT NULL DEFAULT ''
+      customer_code TEXT NOT NULL DEFAULT '',
+      place         TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 
@@ -138,6 +142,13 @@ export function openDb(file) {
       due      TEXT
     );
   `);
+
+  // 이미 만들어진 DB에 컬럼 추가 (있으면 실패하므로 삼킨다 — 마이가디언 방식)
+  for (const sql of [
+    "ALTER TABLE members ADD COLUMN recruiter_email TEXT",
+    "ALTER TABLE events ADD COLUMN place TEXT NOT NULL DEFAULT ''"
+  ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
+
   return db;
 }
 

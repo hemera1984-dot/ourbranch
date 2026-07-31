@@ -66,6 +66,8 @@ function userFor(req) {
   const member = getMember(db, email);
   const isSuper = !!acc.is_admin;
   const gradeManager = acc.grade === "BM" || acc.grade === "ESL";
+  // 도입자: 팀이 달라도 자기가 도입한 팀원의 일정을 본다
+  const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ?").all(email).map(r => r.email);
   return {
     email,
     name: acc.name,
@@ -73,7 +75,8 @@ function userFor(req) {
     teamId: member ? member.team_id : null,
     isSuper,
     isManager: isSuper || gradeManager || !!(member && member.is_manager),
-    seesAll: isSuper || acc.grade === "BM" || !!(member && member.can_view_all)
+    seesAll: isSuper || acc.grade === "BM" || !!(member && member.can_view_all),
+    recruits
   };
 }
 
@@ -93,8 +96,8 @@ function route(method, pattern, needManager, handler) {
 // 앱 셸 부트스트랩 — 지점명·팀·구성원·내 권한을 한 번에
 route("GET", /^\/bootstrap$/, false, (req, res, user) => {
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all FROM members ORDER BY team_id, name").all()
-    .filter(m => canSeeTeam(user, m.team_id));
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email FROM members ORDER BY team_id, name").all()
+    .filter(m => canSeeTeam(user, m.team_id) || user.recruits.includes(m.email));
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: user,
@@ -140,7 +143,7 @@ route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
-    .filter(e => canSeeTeam(user, e.team_id));
+    .filter(e => canSeeTeam(user, e.team_id) || (e.member_email && user.recruits.includes(e.member_email)));
   send(res, 200, list);
 });
 
@@ -154,8 +157,8 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   if (memberEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
   if (memberEmail != null && memberEmail !== user.email && !user.isManager)
     return send(res, 403, { error: "본인 일정만" });
-  const r = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(teamId, memberEmail, b.date, b.start || null, b.end || null, b.kind || "기타", b.title || "");
+  const r = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(teamId, memberEmail, b.date, b.start || null, b.end || null, b.kind || "기타", b.title || "", b.place || "");
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
@@ -185,9 +188,9 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   if (!e || !canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
   if (e.member_email !== user.email && !user.isManager) return send(res, 403, { error: "본인 일정만" });
   const b = await readJson(req);
-  db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ? WHERE id = ?")
+  db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ? WHERE id = ?")
     .run(b.memberEmail !== undefined ? (b.memberEmail ? b.memberEmail.toLowerCase() : null) : e.member_email,
-         b.date ?? e.date, b.start ?? e.start, b.end ?? e.end, b.kind ?? e.kind, b.title ?? e.title, e.id);
+         b.date ?? e.date, b.start ?? e.start, b.end ?? e.end, b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, e.id);
   send(res, 200, { ok: true });
 });
 
@@ -375,16 +378,18 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   if ((b.isManager != null || b.canViewAll != null) && !user.isSuper)
     return send(res, 403, { error: "총관리자만" });
   db.prepare(
-    `INSERT INTO members (email, name, team_id, role, is_manager, can_view_all) VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO members (email, name, team_id, role, is_manager, can_view_all, recruiter_email) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        name = excluded.name, team_id = excluded.team_id, role = excluded.role,
        is_manager = COALESCE(?, members.is_manager),
-       can_view_all = COALESCE(?, members.can_view_all)`
+       can_view_all = COALESCE(?, members.can_view_all),
+       recruiter_email = COALESCE(?, members.recruiter_email)`
   ).run(
     b.email.toLowerCase(), b.name || "", b.teamId ?? null, b.role || "팀원",
-    b.isManager ? 1 : 0, b.canViewAll ? 1 : 0,
+    b.isManager ? 1 : 0, b.canViewAll ? 1 : 0, b.recruiterEmail ? b.recruiterEmail.toLowerCase() : null,
     b.isManager == null ? null : (b.isManager ? 1 : 0),
-    b.canViewAll == null ? null : (b.canViewAll ? 1 : 0)
+    b.canViewAll == null ? null : (b.canViewAll ? 1 : 0),
+    b.recruiterEmail === undefined ? null : (b.recruiterEmail ? b.recruiterEmail.toLowerCase() : "")
   );
   send(res, 200, { ok: true });
 });

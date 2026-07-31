@@ -56,8 +56,9 @@
           <select id="ro-role" class="input">
             <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option><option>지점장</option>
           </select>
+          <select id="ro-recruiter" class="input"><option value="">도입자 없음</option></select>
           <button class="btn primary" id="ro-add">추가</button>
-          <span class="note">지점장은 팀 소속 없이 지점 직속으로 들어갑니다.</span>
+          <span class="note">지점장은 팀 소속 없이 지점 직속으로 들어갑니다. 도입자는 팀이 달라도 이 사람의 일정을 볼 수 있습니다.</span>
         </div>
         <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
           <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑2팀)" style="width:180px">
@@ -244,6 +245,12 @@
   function renderOrg() {
     $("org-admin").hidden = !BOOT.me.isManager;
     $("ro-team-tools").hidden = !BOOT.me.isSuper;
+    var rec = $("ro-recruiter");
+    var cur = rec.value;
+    rec.innerHTML = '<option value="">도입자 없음</option>' + BOOT.members.map(function (m) {
+      return '<option value="' + esc(m.email) + '">도입자: ' + esc(m.name) + "</option>";
+    }).join("");
+    rec.value = cur;
 
     function rowHtml(m) {
       var tools = "";
@@ -255,10 +262,12 @@
           tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="canViewAll" data-on="' + (m.can_view_all ? 1 : 0) + '">'
             + (m.can_view_all ? "전체열람 회수" : "전체열람 부여") + "</button>";
       }
+      var recName = m.recruiter_email ? nameOf(m.recruiter_email) : "";
       return '<div class="org-row' + (m.role === "팀원" || m.role === "부팀장" || m.role === "팀장" ? " depth-1" : "") + '">'
         + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
         + '<span class="name">' + esc(m.name) + "</span>"
         + '<span class="meta">' + esc(m.email && m.email.indexOf("@미등록.local") < 0 ? m.email : "이메일 미등록")
+        + (recName ? " · 도입 " + esc(recName) : "")
         + (m.can_view_all ? " · 전체열람" : "") + "</span>" + tools + "</div>";
     }
 
@@ -285,8 +294,9 @@
     var role = $("ro-role").value;
     var email = $("ro-email").value.trim() || (name + "@미등록.local");
     var teamId = role === "지점장" ? null : (myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id));
-    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: teamId, role: role } })
-      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; renderOrg(); });
+    var recruiter = $("ro-recruiter").value || undefined;
+    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: teamId, role: role, recruiterEmail: recruiter } })
+      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; $("ro-recruiter").value = ""; renderOrg(); });
   });
   $("ro-team-add").addEventListener("click", function () {
     var name = $("ro-team-name").value.trim();
@@ -333,7 +343,8 @@
     { key: "start", label: "시작", width: 55 },
     { key: "end", label: "종료", width: 55 },
     { key: "kind", label: "구분", width: 55 },
-    { key: "title", label: "내용", width: 200 }
+    { key: "title", label: "내용", width: 180 },
+    { key: "place", label: "장소", width: 120 }
   ];
 
   function loadWeek() {
@@ -343,12 +354,16 @@
       + (days[4].getMonth() + 1) + "월 " + days[4].getDate() + "일" + (weekOffset === 0 ? " (이번 주)" : "");
     var teamId = myTeamId();
     api("/events?from=" + from + "&to=" + to).then(function (evs) {
-      // 자기 팀 + 지점 직속(team_id 없음, 지점장 등). 취소된 고객미팅은 숨긴다.
-      evs = evs.filter(function (e) { return (e.team_id === teamId || e.team_id == null) && e.status !== "취소"; });
+      // 자기 팀 + 지점 직속(지점장 등) + 내가 도입한 팀원(팀이 달라도). 취소 건은 숨긴다.
+      evs = evs.filter(function (e) {
+        var visible = e.team_id === teamId || e.team_id == null
+          || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
+        return visible && e.status !== "취소";
+      });
       renderWeekView(evs, days);
       var rows = evs.map(function (e) {
         return { _id: e.id, member: e.member_email ? nameOf(e.member_email) : "", date: e.date,
-                 start: e.start || "", end: e.end || "", kind: e.kind, title: e.title };
+                 start: e.start || "", end: e.end || "", kind: e.kind, title: e.title, place: e.place || "" };
       });
       evGrid = makeGrid($("ev-grid"), {
         cols: EV_COLS,
@@ -379,7 +394,9 @@
     return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '">'
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
       + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
-      + title + "</div>";
+      + title
+      + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "")
+      + "</div>";
   }
   function renderWeekView(evs, days) {
     var todayStr = fmtDate(new Date());
@@ -415,7 +432,8 @@
         extras[e.member_email] = true;
     });
     Object.keys(extras).forEach(function (em) {
-      h.push('<div class="week-name">' + esc(nameOf(em) || em) + '<span class="sub">명단 외</span></div>');
+      var sub = BOOT.me.recruits.indexOf(em) >= 0 ? "내 도입" : "명단 외";
+      h.push('<div class="week-name">' + esc(nameOf(em) || em) + '<span class="sub">' + sub + "</span></div>");
       rowCells(function (e) { return e.member_email === em; }, em);
     });
     h.push("</div>");
@@ -441,6 +459,7 @@
       + '<div class="pop-row"><input type="time" class="input" id="pop-start" value="' + esc(o.start || "") + '">'
       + '<input type="time" class="input" id="pop-end" value="' + esc(o.end || "") + '"></div>'
       + '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="' + esc(o.title || "") + '"></div>'
+      + '<div class="pop-row"><input type="text" class="input" id="pop-place" placeholder="장소" value="' + esc(o.place || "") + '"></div>'
       + '<div class="pop-row"><button class="btn primary" id="pop-save">저장</button>'
       + (isNew ? "" : '<button class="btn" id="pop-del">삭제</button>')
       + '<button class="btn" id="pop-close">닫기</button></div>';
@@ -462,7 +481,8 @@
         memberEmail: o.em || null, date: o.date, kind: kind,
         start: p.querySelector("#pop-start").value || null,
         end: p.querySelector("#pop-end").value || null,
-        title: p.querySelector("#pop-title").value.trim()
+        title: p.querySelector("#pop-title").value.trim(),
+        place: p.querySelector("#pop-place").value.trim()
       };
       var req = isNew
         ? api("/events", { method: "POST", body: Object.assign({ teamId: myTeamId() }, body) })
@@ -483,7 +503,7 @@
       var em = ev.member_email || "";
       if (!canWriteCell(em)) return;
       e.stopPropagation();
-      openPop(slot, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title });
+      openPop(slot, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place });
       return;
     }
     var cell = e.target.closest(".week-cell");
@@ -513,14 +533,14 @@
       var who = resolve(r); if (!who) return;
       jobs.push(api("/events", { method: "POST", body: {
         teamId: teamId, memberEmail: who.memberEmail,
-        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title
+        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title, place: r.place || ""
       } }));
     });
     evGrid.dirtyRows().forEach(function (r) {
       var who = resolve(r); if (!who) return;
       jobs.push(api("/events/" + r._id, { method: "POST", body: {
         memberEmail: who.memberEmail,
-        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title
+        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title, place: r.place || ""
       } }));
     });
     Promise.all(jobs).then(loadWeek);

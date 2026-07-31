@@ -114,6 +114,8 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .slot { display: flex; align-items: baseline; gap: 5px; margin: 1px 0; white-space: nowrap; }
 .slot-time { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
 .slot-title { font-size: 12px; }
+.slot-place { font-size: 11px; color: var(--ter); }
+.slot-place::before { content: "· "; }
 .cell-empty { color: var(--line-input); }
 
 /* 일정 구분 칩 — 색은 신호로만 */
