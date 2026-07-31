@@ -90,6 +90,14 @@ async function main() {
   const ev2 = await (await api("t-fc2", "GET", "/events?from=2026-08-01&to=2026-08-01")).json();
   assert.equal(ev2.length, 0);   // 2팀 팀원에게 1팀 일정 안 보임
 
+  // 6-1) 일정 수정: 본인 것만 (관리자는 팀 것도)
+  const evs1 = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-01")).json();
+  const mineEv = evs1.find(e => e.member_email === "fc1@x.com");
+  assert.equal((await api("t-fc1", "POST", "/events/" + mineEv.id, { start: "10:00", end: "11:00" })).status, 200);
+  const teamEv = evs1.find(e => !e.member_email);
+  assert.equal((await api("t-fc1", "POST", "/events/" + teamEv.id, { title: "침범" })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/events/" + teamEv.id, { title: "팀회의(변경)" })).status, 200);
+
   // 7) 출근 자가 보고 + upsert
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: true })).status, 200);
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: false })).status, 200);

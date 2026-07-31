@@ -159,6 +159,17 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
+route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
+  const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
+  if (!e || !canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (e.member_email !== user.email && !user.isManager) return send(res, 403, { error: "본인 일정만" });
+  const b = await readJson(req);
+  db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ? WHERE id = ?")
+    .run(b.memberEmail !== undefined ? (b.memberEmail ? b.memberEmail.toLowerCase() : null) : e.member_email,
+         b.date ?? e.date, b.start ?? e.start, b.end ?? e.end, b.kind ?? e.kind, b.title ?? e.title, e.id);
+  send(res, 200, { ok: true });
+});
+
 route("DELETE", /^\/events\/(\d+)$/, false, (req, res, user, m) => {
   const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
   if (!e) return send(res, 404, { error: "없음" });

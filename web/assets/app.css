@@ -91,6 +91,41 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .badge.green { background: var(--green-bg); color: var(--green); }
 .badge.gray { background: var(--canvas); color: var(--sub); border: 1px solid var(--line); }
 
+/* ── 조직도 ── */
+.org-team-head { display: flex; align-items: center; gap: 8px; }
+.org-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--line); }
+.org-row:first-child { border-top: 0; }
+.org-row.depth-1 { padding-left: 36px; }
+.org-row .name { font-weight: 600; min-width: 90px; }
+.org-row .meta { color: var(--sub); font-size: 12px; flex: 1; }
+.org-row .btn { padding: 3px 9px; font-size: 11px; }
+
+/* ── 주간 확인표 ── */
+.week-grid { display: grid; grid-template-columns: 120px repeat(5, 1fr); background: var(--surface); }
+.week-cell, .week-name, .week-head-cell {
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  padding: 6px 8px; min-height: 34px;
+}
+.week-head-cell { background: var(--canvas); font-size: 11px; color: var(--sub); font-weight: 600; min-height: 0; }
+.week-head-cell.today { color: var(--blue); }
+.week-name { font-weight: 600; font-size: 12px; }
+.week-name .sub { display: block; font-weight: 400; font-size: 11px; color: var(--ter); }
+.week-grid > :nth-child(6n) { border-right: 0; }
+.slot { display: flex; align-items: baseline; gap: 5px; margin: 1px 0; white-space: nowrap; }
+.slot-time { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.slot-title { font-size: 12px; }
+.cell-empty { color: var(--line-input); }
+
+/* 일정 구분 칩 — 색은 신호로만 */
+.chip { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.k-상담 { background: var(--blue-bg); color: var(--blue); }
+.k-외근 { background: var(--green-bg); color: var(--green); }
+.k-교육 { background: var(--amber-bg); color: var(--amber); }
+.k-회의 { background: #eceff4; color: var(--navy); }
+.k-마감 { background: var(--red-bg); color: var(--red); }
+.k-휴가 { background: var(--red-bg); color: var(--red); }
+.k-내근, .k-기타 { background: var(--canvas); color: var(--sub); border: 1px solid var(--line); }
+
 /* ── 로그인 게이트 ── */
 .gate { max-width: 420px; margin: 12vh auto; }
 .gate .card-pad { padding: 28px; }

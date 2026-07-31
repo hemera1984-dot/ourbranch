@@ -13,7 +13,7 @@
 <div id="gate" class="gate" hidden>
   <div class="card"><div class="card-pad">
     <p class="eyebrow">지점 팀 관리</p>
-    <h1 id="gate-title">로그인</h1>
+    <h1>로그인</h1>
     <p class="page-desc">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
     <div class="toolbar">
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="세션 토큰 (마이가디언 로그인 연동 전 임시)">
@@ -27,9 +27,10 @@
   <aside class="sidebar">
     <div class="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></div>
     <nav class="nav" id="nav">
+      <a href="#org" data-screen="org">조직도</a>
+      <a href="#sched" data-screen="sched">일정</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
-      <a href="#roster" data-screen="roster">팀원 명단</a>
     </nav>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span></div>
   </aside>
@@ -37,10 +38,58 @@
   <main class="main">
     <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
       <select id="team-pick" class="input" hidden></select>
-      <button class="btn" id="month-prev">이전 달</button>
-      <strong id="month-label" style="font-variant-numeric:tabular-nums"></strong>
-      <button class="btn" id="month-next">다음 달</button>
+      <span id="month-nav" hidden>
+        <button class="btn" id="month-prev">이전 달</button>
+        <strong id="month-label" style="font-variant-numeric:tabular-nums;margin:0 6px"></strong>
+        <button class="btn" id="month-next">다음 달</button>
+      </span>
     </div>
+
+    <section id="screen-org" hidden>
+      <p class="eyebrow">조직</p>
+      <h1>조직도</h1>
+      <p class="page-desc">지점장 아래 부지점장이 팀의 단위입니다. 여기서 넣은 명단이 일정·일지·업적 화면에 그대로 나열됩니다.</p>
+      <div id="org-admin" class="card card-pad" hidden style="margin-bottom:14px">
+        <div class="toolbar">
+          <input id="ro-name" class="input" placeholder="이름" style="width:110px">
+          <input id="ro-email" class="input" placeholder="이메일 (없으면 비워두기)" style="width:220px">
+          <select id="ro-role" class="input">
+            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option><option>지점장</option>
+          </select>
+          <button class="btn primary" id="ro-add">추가</button>
+          <span class="note">지점장은 팀 소속 없이 지점 직속으로 들어갑니다.</span>
+        </div>
+        <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
+          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑2팀)" style="width:180px">
+          <button class="btn" id="ro-team-add">팀 추가</button>
+        </div>
+      </div>
+      <div id="org-list"></div>
+    </section>
+
+    <section id="screen-sched" hidden>
+      <p class="eyebrow">일정</p>
+      <h1>주간 확인표</h1>
+      <p class="page-desc">첫 줄은 팀 공유 일정, 그 아래가 팀원별입니다. 아래 표에 줄을 추가하면 확인표에 바로 반영됩니다.</p>
+      <div class="toolbar" style="margin-bottom:10px">
+        <button class="btn" id="week-prev">이전 주</button>
+        <button class="btn" id="week-today">이번 주</button>
+        <button class="btn" id="week-next">다음 주</button>
+        <strong id="week-label" style="font-variant-numeric:tabular-nums"></strong>
+      </div>
+      <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
+      <div class="section">
+        <div class="section-head">
+          <h2>일정 입력</h2>
+          <div class="toolbar">
+            <span class="note">팀원 칸을 비우면 팀 공유 일정(관리자만)입니다. 구분: 상담·외근·내근·교육·회의·휴가·마감·기타</span>
+            <button class="btn" id="ev-add">줄 추가</button>
+            <button class="btn primary" id="ev-save">저장</button>
+          </div>
+        </div>
+        <div id="ev-grid" class="card"></div>
+      </div>
+    </section>
 
     <section id="screen-ta" hidden>
       <p class="eyebrow">도입 활동</p>
@@ -62,30 +111,8 @@
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
-      <p class="page-desc">팀원 명단에 있는 사람이 그대로 나열됩니다. 본인 칸에 계약을 넣으면 합계는 자동입니다. 목표 입력은 부지점장 몫입니다.</p>
+      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 본인 칸에 계약을 넣으면 합계는 자동입니다. 목표 입력은 부지점장 몫입니다.</p>
       <div id="perf-body"></div>
-    </section>
-
-    <section id="screen-roster" hidden>
-      <p class="eyebrow">조직</p>
-      <h1>팀원 명단</h1>
-      <p class="page-desc">부지점장이 명단을 넣으면 일지·업적 화면에 팀원이 나열됩니다.</p>
-      <div id="roster-admin" class="card card-pad" hidden style="margin-bottom:14px">
-        <div class="toolbar">
-          <input id="ro-name" class="input" placeholder="이름" style="width:110px">
-          <input id="ro-email" class="input" placeholder="이메일 (없으면 비워두기)" style="width:220px">
-          <select id="ro-role" class="input">
-            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option><option>지점장</option>
-          </select>
-          <button class="btn primary" id="ro-add">추가</button>
-          <span class="note">이메일이 있어야 본인 로그인·본인 입력이 열립니다.</span>
-        </div>
-        <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
-          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑2팀)" style="width:180px">
-          <button class="btn" id="ro-team-add">팀 추가</button>
-        </div>
-      </div>
-      <div id="roster-list"></div>
     </section>
   </main>
 </div>
@@ -98,14 +125,21 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var screen = (location.hash || "#ta").slice(1);
-  var taGrid = null, perfGrids = [];
+  var SCREENS = ["org", "sched", "ta", "perf"];
+  var screen = (location.hash || "#org").slice(1);
+  if (SCREENS.indexOf(screen) < 0) screen = "org";
+  var taGrid = null, perfGrids = [], evGrid = null;
+  var ROLE_RANK = { "지점장": 0, "부지점장": 1, "팀장": 2, "부팀장": 3, "팀원": 4 };
+  var KINDS = ["상담", "외근", "내근", "교육", "회의", "휴가", "마감", "기타"];
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
     });
+  }
+  function fmtDate(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
   function api(path, opts) {
@@ -153,23 +187,27 @@
     $("me-role").textContent = (BOOT.me.isSuper ? "총관리자" : BOOT.me.isManager ? "관리자" : "팀원");
     var pick = $("team-pick");
     if (BOOT.me.seesAll && BOOT.teams.length) {
+      var cur = pick.value;
       pick.hidden = false;
       pick.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
+      if (cur) pick.value = cur;
     }
+  }
+  function refreshBoot() {
+    return api("/bootstrap").then(function (b) { BOOT = b; renderShell(); });
   }
 
   function show(name) {
     screen = name;
-    ["ta", "perf", "roster"].forEach(function (s) {
-      $("screen-" + s).hidden = s !== name;
-    });
+    SCREENS.forEach(function (s) { $("screen-" + s).hidden = s !== name; });
     document.querySelectorAll("#nav a").forEach(function (a) {
       a.classList.toggle("active", a.dataset.screen === name);
     });
-    $("ctx-bar").style.display = name === "roster" ? "none" : "";
+    $("month-nav").hidden = !(name === "ta" || name === "perf");
+    if (name === "org") renderOrg();
+    if (name === "sched") loadWeek();
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
-    if (name === "roster") renderRoster();
   }
   $("nav").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
@@ -187,9 +225,216 @@
   function monthLabel() { var p = month.split("-"); return Number(p[0]) + "년 " + Number(p[1]) + "월"; }
 
   function rosterOf(teamId) {
-    return BOOT.members.filter(function (m) { return m.team_id === teamId; });
+    return BOOT.members.filter(function (m) { return m.team_id === teamId; })
+      .sort(function (a, b) { return (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9) || a.name.localeCompare(b.name); });
+  }
+  function emailOf(name) {
+    var m = BOOT.members.filter(function (x) { return x.name === name; })[0];
+    if (m) return m.email;
+    return name === BOOT.me.name ? BOOT.me.email : null;
+  }
+  function nameOf(email) {
+    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
+    if (m) return m.name;
+    return email === BOOT.me.email ? BOOT.me.name : (email || "");
   }
   function canWriteAs(name) { return BOOT.me.isManager || name === BOOT.me.name; }
+
+  // ── 조직도 ──
+  function renderOrg() {
+    $("org-admin").hidden = !BOOT.me.isManager;
+    $("ro-team-tools").hidden = !BOOT.me.isSuper;
+
+    function rowHtml(m) {
+      var tools = "";
+      if (BOOT.me.isManager) tools += '<button class="btn ro-del" data-email="' + esc(m.email) + '">삭제</button>';
+      if (BOOT.me.isSuper) {
+        tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="isManager" data-on="' + (m.is_manager ? 1 : 0) + '">'
+          + (m.is_manager ? "관리자 해제" : "관리자 지정") + "</button>";
+        if (m.role === "부지점장")
+          tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="canViewAll" data-on="' + (m.can_view_all ? 1 : 0) + '">'
+            + (m.can_view_all ? "전체열람 회수" : "전체열람 부여") + "</button>";
+      }
+      return '<div class="org-row' + (m.role === "팀원" || m.role === "부팀장" || m.role === "팀장" ? " depth-1" : "") + '">'
+        + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
+        + '<span class="name">' + esc(m.name) + "</span>"
+        + '<span class="meta">' + esc(m.email && m.email.indexOf("@미등록.local") < 0 ? m.email : "이메일 미등록")
+        + (m.can_view_all ? " · 전체열람" : "") + "</span>" + tools + "</div>";
+    }
+
+    var html = "";
+    var direct = BOOT.members.filter(function (m) { return m.team_id == null; })
+      .sort(function (a, b) { return (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9); });
+    if (direct.length) {
+      html += '<div class="section"><div class="section-head"><h2>' + esc(BOOT.branchName || "지점") + '</h2></div><div class="card">'
+        + direct.map(rowHtml).join("") + "</div></div>";
+    }
+    html += BOOT.teams.map(function (t) {
+      var list = rosterOf(t.id);
+      return '<div class="section"><div class="section-head"><div class="org-team-head"><h2>' + esc(t.name) + "</h2>"
+        + '<span class="badge gray">' + list.length + "명</span></div></div><div class=\"card\">"
+        + (list.length ? list.map(rowHtml).join("") : '<div class="empty">이 팀에 등록된 팀원이 없습니다.</div>')
+        + "</div></div>";
+    }).join("");
+    $("org-list").innerHTML = html || '<div class="card"><div class="empty">팀이 아직 없습니다. 팀부터 추가합니다.</div></div>';
+  }
+
+  $("ro-add").addEventListener("click", function () {
+    var name = $("ro-name").value.trim();
+    if (!name) return;
+    var role = $("ro-role").value;
+    var email = $("ro-email").value.trim() || (name + "@미등록.local");
+    var teamId = role === "지점장" ? null : (myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id));
+    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: teamId, role: role } })
+      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; renderOrg(); });
+  });
+  $("ro-team-add").addEventListener("click", function () {
+    var name = $("ro-team-name").value.trim();
+    if (!name) return;
+    api("/admin/teams", { method: "POST", body: { name: name } })
+      .then(refreshBoot).then(function () { $("ro-team-name").value = ""; renderOrg(); });
+  });
+  $("org-list").addEventListener("click", function (e) {
+    var del = e.target.closest(".ro-del");
+    if (del) {
+      if (!confirm("명단에서 삭제할까?")) return;
+      api("/admin/members/" + encodeURIComponent(del.dataset.email), { method: "DELETE" })
+        .then(refreshBoot).then(renderOrg);
+      return;
+    }
+    var flag = e.target.closest(".ro-flag");
+    if (flag) {
+      var m = BOOT.members.filter(function (x) { return x.email === flag.dataset.email; })[0];
+      if (!m) return;
+      var body = { email: m.email, name: m.name, teamId: m.team_id, role: m.role };
+      body[flag.dataset.flag] = flag.dataset.on !== "1";
+      api("/admin/members", { method: "POST", body: body }).then(refreshBoot).then(renderOrg);
+    }
+  });
+
+  // ── 일정 (주간 확인표 + 입력) ──
+  var weekOffset = 0;
+  var DAY_NAMES = ["월", "화", "수", "목", "금"];
+  function mondayOf(d) {
+    var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+  }
+  function weekDays() {
+    var start = mondayOf(new Date());
+    start.setDate(start.getDate() + weekOffset * 7);
+    var days = [];
+    for (var i = 0; i < 5; i++) days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+    return days;
+  }
+  var EV_COLS = [
+    { key: "member", label: "팀원 (비우면 팀 공유)", width: 110 },
+    { key: "date", label: "날짜", width: 95 },
+    { key: "start", label: "시작", width: 55 },
+    { key: "end", label: "종료", width: 55 },
+    { key: "kind", label: "구분", width: 55 },
+    { key: "title", label: "내용", width: 200 }
+  ];
+
+  function loadWeek() {
+    var days = weekDays();
+    var from = fmtDate(days[0]), to = fmtDate(days[4]);
+    $("week-label").textContent = (days[0].getMonth() + 1) + "월 " + days[0].getDate() + "일 – "
+      + (days[4].getMonth() + 1) + "월 " + days[4].getDate() + "일" + (weekOffset === 0 ? " (이번 주)" : "");
+    var teamId = myTeamId();
+    api("/events?from=" + from + "&to=" + to).then(function (evs) {
+      evs = evs.filter(function (e) { return e.team_id === teamId; });
+      renderWeekView(evs, days);
+      var rows = evs.map(function (e) {
+        return { _id: e.id, member: e.member_email ? nameOf(e.member_email) : "", date: e.date,
+                 start: e.start || "", end: e.end || "", kind: e.kind, title: e.title };
+      });
+      evGrid = makeGrid($("ev-grid"), {
+        cols: EV_COLS,
+        rows: rows,
+        fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "상담" },
+        canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.isManager; },
+        onDeleteRow: function (r, done) { api("/events/" + r._id, { method: "DELETE" }).then(done).then(loadWeek); }
+      });
+      if (!rows.length) evGrid.addRow();
+    });
+  }
+
+  function slotHtml(e) {
+    var kindCls = "k-" + (KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+    return '<div class="slot">'
+      + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
+      + '<span class="chip ' + kindCls + '">' + esc(e.kind) + "</span>"
+      + (e.title ? '<span class="slot-title">' + esc(e.title) + "</span>" : "")
+      + "</div>";
+  }
+  function renderWeekView(evs, days) {
+    var todayStr = fmtDate(new Date());
+    var h = ['<div class="week-grid">'];
+    h.push('<div class="week-head-cell">팀원</div>');
+    days.forEach(function (d) {
+      h.push('<div class="week-head-cell' + (fmtDate(d) === todayStr ? " today" : "") + '">'
+        + DAY_NAMES[(d.getDay() + 6) % 7] + " " + (d.getMonth() + 1) + "/" + d.getDate() + "</div>");
+    });
+    function rowCells(filter) {
+      days.forEach(function (d) {
+        var ds = fmtDate(d);
+        var items = evs.filter(function (e) { return e.date === ds && filter(e); })
+          .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+        h.push('<div class="week-cell">' + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">-</span>') + "</div>");
+      });
+    }
+    h.push('<div class="week-name"><strong>팀 공유</strong><span class="sub">전체 일정</span></div>');
+    rowCells(function (e) { return !e.member_email; });
+    var roster = rosterOf(myTeamId());
+    roster.forEach(function (m) {
+      h.push('<div class="week-name">' + esc(m.name) + '<span class="sub">' + esc(m.role) + "</span></div>");
+      rowCells(function (e) { return e.member_email === m.email; });
+    });
+    // 명단 밖 인원(총관리자 등)의 개인 일정도 놓치지 않는다
+    var extras = {};
+    evs.forEach(function (e) {
+      if (e.member_email && !roster.some(function (m) { return m.email === e.member_email; }))
+        extras[e.member_email] = true;
+    });
+    Object.keys(extras).forEach(function (em) {
+      h.push('<div class="week-name">' + esc(nameOf(em) || em) + '<span class="sub">명단 외</span></div>');
+      rowCells(function (e) { return e.member_email === em; });
+    });
+    h.push("</div>");
+    $("week-view").innerHTML = h.join("");
+  }
+
+  $("week-prev").addEventListener("click", function () { weekOffset--; loadWeek(); });
+  $("week-today").addEventListener("click", function () { weekOffset = 0; loadWeek(); });
+  $("week-next").addEventListener("click", function () { weekOffset++; loadWeek(); });
+  $("ev-add").addEventListener("click", function () { if (evGrid) evGrid.addRow(); });
+  $("ev-save").addEventListener("click", function () {
+    if (!evGrid || !evGrid.hasChanges()) return;
+    var teamId = myTeamId();
+    var jobs = [];
+    function resolve(r) {
+      if (!r.member) return { memberEmail: null };            // 팀 공유
+      var email = emailOf(r.member);
+      if (!email) { alert("명단에 없는 이름입니다: " + r.member); return null; }
+      return { memberEmail: email };
+    }
+    evGrid.newRows().filter(function (r) { return r.date; }).forEach(function (r) {
+      var who = resolve(r); if (!who) return;
+      jobs.push(api("/events", { method: "POST", body: {
+        teamId: teamId, memberEmail: who.memberEmail,
+        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title
+      } }));
+    });
+    evGrid.dirtyRows().forEach(function (r) {
+      var who = resolve(r); if (!who) return;
+      jobs.push(api("/events/" + r._id, { method: "POST", body: {
+        memberEmail: who.memberEmail,
+        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title
+      } }));
+    });
+    Promise.all(jobs).then(loadWeek);
+  });
 
   // ── TA 일지 ──
   var TA_COLS = [
@@ -217,7 +462,7 @@
       taGrid = makeGrid($("ta-grid"), {
         cols: TA_COLS,
         rows: rows,
-        fixed: { author: BOOT.me.name, date: new Date().toISOString().slice(0, 10) },
+        fixed: { author: BOOT.me.name, date: fmtDate(new Date()) },
         canEditRow: function (r) { return canWriteAs(r.author); },
         onDeleteRow: function (r, done) { api("/ta/" + r._id, { method: "DELETE" }).then(done); }
       });
@@ -270,7 +515,7 @@
       perfGrids = [];
       var body = $("perf-body");
       if (!names.length) {
-        body.innerHTML = '<div class="card"><div class="empty">팀원 명단이 비어 있습니다. 팀원 명단 화면에서 먼저 등록합니다.</div></div>';
+        body.innerHTML = '<div class="card"><div class="empty">팀원 명단이 비어 있습니다. 조직도 화면에서 먼저 등록합니다.</div></div>';
         return;
       }
       body.innerHTML = names.map(function (n, i) {
@@ -300,14 +545,13 @@
         perfGrids.push({ member: n, grid: g, sumEl: $("perf-sum-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
       });
-
-      body.addEventListener("click", function (e) {
-        var b = e.target.closest(".add-row");
-        if (b) perfGrids[Number(b.dataset.i)].grid.addRow();
-        if (e.target.id === "perf-save") savePerf(teamId);
-      });
     });
   }
+  $("perf-body").addEventListener("click", function (e) {
+    var b = e.target.closest(".add-row");
+    if (b) perfGrids[Number(b.dataset.i)].grid.addRow();
+    if (e.target.id === "perf-save") savePerf(myTeamId());
+  });
   function updateSum(pg) {
     var rs = pg.grid.rows().filter(function (r) { return r.contract_date || r.premium || r.canp; });
     var prem = 0, canp = 0;
@@ -330,51 +574,6 @@
       if (goals.length) jobs.push(api("/perf/goals", { method: "POST", body: { teamId: teamId, month: month, goals: goals } }));
     }
     Promise.all(jobs).then(loadPerf);
-  }
-
-  // ── 팀원 명단 ──
-  function renderRoster() {
-    var admin = $("roster-admin");
-    admin.hidden = !BOOT.me.isManager;
-    $("ro-team-tools").hidden = !BOOT.me.isSuper;
-    var byTeam = {};
-    BOOT.members.forEach(function (m) { (byTeam[m.team_id] = byTeam[m.team_id] || []).push(m); });
-    var html = BOOT.teams.map(function (t) {
-      var list = byTeam[t.id] || [];
-      return '<div class="section"><div class="section-head"><h2>' + esc(t.name)
-        + ' <span class="badge gray">' + list.length + "명</span></h2></div><div class=\"card\">"
-        + (list.length ? list.map(function (m) {
-          return '<div class="roster-row"><span class="name">' + esc(m.name) + "</span>"
-            + '<span class="badge ' + (m.is_manager ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
-            + '<span class="meta">' + esc(m.email || "이메일 미등록") + (m.can_view_all ? ' · 전체열람' : "") + "</span>"
-            + (BOOT.me.isManager ? '<button class="btn ro-del" data-email="' + esc(m.email) + '">삭제</button>' : "")
-            + "</div>";
-        }).join("") : '<div class="empty">이 팀에 등록된 팀원이 없습니다.</div>')
-        + "</div></div>";
-    }).join("");
-    $("roster-list").innerHTML = html || '<div class="card"><div class="empty">팀이 아직 없습니다.</div></div>';
-  }
-  $("ro-add").addEventListener("click", function () {
-    var name = $("ro-name").value.trim();
-    if (!name) return;
-    var email = $("ro-email").value.trim() || (name + "@미등록.local");
-    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id), role: $("ro-role").value } })
-      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; renderRoster(); });
-  });
-  $("ro-team-add").addEventListener("click", function () {
-    var name = $("ro-team-name").value.trim();
-    if (!name) return;
-    api("/admin/teams", { method: "POST", body: { name: name } })
-      .then(refreshBoot).then(function () { $("ro-team-name").value = ""; renderRoster(); renderShell(); });
-  });
-  $("roster-list").addEventListener("click", function (e) {
-    var b = e.target.closest(".ro-del"); if (!b) return;
-    if (!confirm("명단에서 삭제할까?")) return;
-    api("/admin/members/" + encodeURIComponent(b.dataset.email), { method: "DELETE" })
-      .then(refreshBoot).then(renderRoster);
-  });
-  function refreshBoot() {
-    return api("/bootstrap").then(function (b) { BOOT = b; });
   }
 
   // ── 시작 ──
