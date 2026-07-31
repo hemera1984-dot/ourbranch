@@ -129,6 +129,29 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 a.slot-title { color: var(--blue); text-decoration: none; }
 a.slot-title:hover { text-decoration: underline; }
 
+/* ── 일정 빠른 입력 (셀 클릭) ── */
+.week-cell.can-add { cursor: pointer; }
+.week-cell.can-add:hover { background: var(--blue-bg); }
+.slot.editable { cursor: pointer; border-radius: 3px; }
+.slot.editable:hover { background: var(--blue-bg); }
+.pop {
+  position: absolute; z-index: 50; width: 264px; background: var(--surface);
+  border: 1px solid var(--line-input); border-radius: 6px; padding: 12px;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, .12);
+}
+.pop-title { font-size: 11px; color: var(--sub); font-weight: 600; margin-bottom: 8px; }
+.pop-row { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.pop-row .input { width: 100%; }
+.pop-row input[type="time"] { width: 50%; }
+.kpicks { display: flex; flex-wrap: wrap; gap: 4px; }
+.kpick {
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface);
+  font-size: 11px; font-weight: 600; color: var(--sub); cursor: pointer;
+  transition: border-color .14s, color .14s, background .14s;
+}
+.kpick:hover { border-color: var(--blue); color: var(--blue); }
+.kpick.sel { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
 /* ── 로그인 게이트 ── */
 .gate { max-width: 420px; margin: 12vh auto; }
 .gate .card-pad { padding: 28px; }

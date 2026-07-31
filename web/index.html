@@ -70,7 +70,7 @@
     <section id="screen-sched" hidden>
       <p class="eyebrow">일정</p>
       <h1>주간 확인표</h1>
-      <p class="page-desc">첫 줄은 팀 공유 일정, 그 아래가 팀원별입니다. 아래 표에 줄을 추가하면 확인표에 바로 반영됩니다.</p>
+      <p class="page-desc">칸을 누르면 그 자리에서 바로 입력됩니다 — 팀원과 날짜는 칸이 정해줍니다. 등록된 일정을 누르면 수정·삭제. 관리자는 팀원 칸을 눌러 대신 넣을 수 있습니다.</p>
       <div class="toolbar" style="margin-bottom:10px">
         <button class="btn" id="week-prev">이전 주</button>
         <button class="btn" id="week-today">이번 주</button>
@@ -80,9 +80,9 @@
       <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
       <div class="section">
         <div class="section-head">
-          <h2>일정 입력</h2>
+          <h2>일괄 입력</h2>
           <div class="toolbar">
-            <span class="note">팀원 칸을 비우면 팀 공유 일정(관리자만)입니다. 구분: 상담·외근·내근·교육·회의·휴가·마감·기타</span>
+            <span class="note">엑셀에서 여러 줄을 복사해 붙여넣을 때 씁니다. 팀원 칸을 비우면 팀 공유(관리자만).</span>
             <button class="btn" id="ev-add">줄 추가</button>
             <button class="btn primary" id="ev-save">저장</button>
           </div>
@@ -361,41 +361,52 @@
     });
   }
 
+  var evsById = {};
+  function canWriteCell(em) {
+    // 빈 em = 팀 공유(관리자만). 본인 칸은 본인, 남의 칸은 관리자.
+    return em ? (em === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager;
+  }
   function slotHtml(e) {
     var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
-    // 고객미팅(마이가디언 연동)은 고객 코드만 표시하고 마이가디언 고객 상세로 연결
+    // 고객미팅(마이가디언 연동)은 여기서 수정하지 않는다 — 코드 표기 + 고객 상세 딥링크만
+    var fromMg = e.source === "myguardian";
+    var editable = !fromMg && (e.member_email ? (e.member_email === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager);
     var title = e.title
-      ? (e.kind === "고객미팅" && e.customer_code
+      ? (fromMg && e.customer_code
         ? '<a class="slot-title" target="_blank" href="https://app.insurguard.life/web/customers/?code=' + encodeURIComponent(e.customer_code) + '">' + esc(e.title) + "</a>"
         : '<span class="slot-title">' + esc(e.title) + "</span>")
       : "";
-    return '<div class="slot">'
+    return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '">'
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
       + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
       + title + "</div>";
   }
   function renderWeekView(evs, days) {
     var todayStr = fmtDate(new Date());
+    evsById = {};
+    evs.forEach(function (e) { evsById[e.id] = e; });
     var h = ['<div class="week-grid">'];
     h.push('<div class="week-head-cell">팀원</div>');
     days.forEach(function (d) {
       h.push('<div class="week-head-cell' + (fmtDate(d) === todayStr ? " today" : "") + '">'
         + DAY_NAMES[(d.getDay() + 6) % 7] + " " + (d.getMonth() + 1) + "/" + d.getDate() + "</div>");
     });
-    function rowCells(filter) {
+    function rowCells(filter, em) {
       days.forEach(function (d) {
         var ds = fmtDate(d);
         var items = evs.filter(function (e) { return e.date === ds && filter(e); })
           .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
-        h.push('<div class="week-cell">' + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">-</span>') + "</div>");
+        h.push('<div class="week-cell' + (canWriteCell(em) ? " can-add" : "") + '" data-em="' + esc(em || "") + '" data-date="' + ds + '"'
+          + (canWriteCell(em) ? ' title="눌러서 일정 추가"' : "") + ">"
+          + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">-</span>') + "</div>");
       });
     }
     h.push('<div class="week-name"><strong>팀 공유</strong><span class="sub">전체 일정</span></div>');
-    rowCells(function (e) { return !e.member_email; });
+    rowCells(function (e) { return !e.member_email; }, "");
     var roster = rosterOf(myTeamId());
     roster.forEach(function (m) {
       h.push('<div class="week-name">' + esc(m.name) + '<span class="sub">' + esc(m.role) + "</span></div>");
-      rowCells(function (e) { return e.member_email === m.email; });
+      rowCells(function (e) { return e.member_email === m.email; }, m.email);
     });
     // 명단 밖 인원(총관리자 등)의 개인 일정도 놓치지 않는다
     var extras = {};
@@ -405,11 +416,84 @@
     });
     Object.keys(extras).forEach(function (em) {
       h.push('<div class="week-name">' + esc(nameOf(em) || em) + '<span class="sub">명단 외</span></div>');
-      rowCells(function (e) { return e.member_email === em; });
+      rowCells(function (e) { return e.member_email === em; }, em);
     });
     h.push("</div>");
     $("week-view").innerHTML = h.join("");
   }
+
+  // ── 셀 클릭 빠른 입력 — 팀원·날짜는 셀이 정하고, 사람은 내용만 넣는다 ──
+  function closePop() {
+    var p = document.querySelector(".pop");
+    if (p) p.remove();
+  }
+  function openPop(anchor, o) {
+    // o: { id?, em, date, kind, start, end, title }
+    closePop();
+    var isNew = o.id == null;
+    var who = o.em ? (nameOf(o.em) || o.em) : "팀 공유";
+    var p = document.createElement("div");
+    p.className = "pop";
+    p.innerHTML = '<div class="pop-title">' + esc(who) + " · " + esc(o.date) + "</div>"
+      + '<div class="kpicks">' + KINDS.map(function (k) {
+        return '<button type="button" class="kpick' + (k === o.kind ? " sel" : "") + '" data-k="' + k + '">' + k + "</button>";
+      }).join("") + "</div>"
+      + '<div class="pop-row"><input type="time" class="input" id="pop-start" value="' + esc(o.start || "") + '">'
+      + '<input type="time" class="input" id="pop-end" value="' + esc(o.end || "") + '"></div>'
+      + '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="' + esc(o.title || "") + '"></div>'
+      + '<div class="pop-row"><button class="btn primary" id="pop-save">저장</button>'
+      + (isNew ? "" : '<button class="btn" id="pop-del">삭제</button>')
+      + '<button class="btn" id="pop-close">닫기</button></div>';
+    document.body.appendChild(p);
+    var r = anchor.getBoundingClientRect();
+    var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 280);
+    p.style.left = Math.max(8, left) + "px";
+    p.style.top = (r.bottom + window.scrollY + 4) + "px";
+
+    var kind = o.kind || "상담";
+    p.querySelector(".kpicks").addEventListener("click", function (e) {
+      var b = e.target.closest(".kpick"); if (!b) return;
+      kind = b.dataset.k;
+      p.querySelectorAll(".kpick").forEach(function (x) { x.classList.toggle("sel", x === b); });
+    });
+    p.querySelector("#pop-close").addEventListener("click", closePop);
+    p.querySelector("#pop-save").addEventListener("click", function () {
+      var body = {
+        memberEmail: o.em || null, date: o.date, kind: kind,
+        start: p.querySelector("#pop-start").value || null,
+        end: p.querySelector("#pop-end").value || null,
+        title: p.querySelector("#pop-title").value.trim()
+      };
+      var req = isNew
+        ? api("/events", { method: "POST", body: Object.assign({ teamId: myTeamId() }, body) })
+        : api("/events/" + o.id, { method: "POST", body: body });
+      req.then(function () { closePop(); loadWeek(); });
+    });
+    if (!isNew) p.querySelector("#pop-del").addEventListener("click", function () {
+      api("/events/" + o.id, { method: "DELETE" }).then(function () { closePop(); loadWeek(); });
+    });
+    p.querySelector("#pop-title").focus();
+  }
+  $("week-view").addEventListener("click", function (e) {
+    if (e.target.closest("a.slot-title")) return;               // 딥링크는 그대로
+    var slot = e.target.closest(".slot");
+    if (slot && slot.dataset.eid) {
+      var ev = evsById[slot.dataset.eid];
+      if (!ev || ev.source === "myguardian") return;
+      var em = ev.member_email || "";
+      if (!canWriteCell(em)) return;
+      e.stopPropagation();
+      openPop(slot, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title });
+      return;
+    }
+    var cell = e.target.closest(".week-cell");
+    if (cell && cell.classList.contains("can-add"))
+      openPop(cell, { em: cell.dataset.em, date: cell.dataset.date, kind: "상담" });
+  });
+  document.addEventListener("mousedown", function (e) {
+    if (!e.target.closest(".pop") && !e.target.closest(".week-cell")) closePop();
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
 
   $("week-prev").addEventListener("click", function () { weekOffset--; loadWeek(); });
   $("week-today").addEventListener("click", function () { weekOffset = 0; loadWeek(); });
