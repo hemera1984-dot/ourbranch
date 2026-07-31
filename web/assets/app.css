@@ -127,6 +127,7 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .k-마감 { background: var(--red-bg); color: var(--red); }
 .k-휴가 { background: var(--red-bg); color: var(--red); }
 .k-내근, .k-기타 { background: var(--canvas); color: var(--sub); border: 1px solid var(--line); }
+.k-면접 { background: #efe9fb; color: #5b3fa8; }
 .k-고객미팅 { background: var(--blue-bg); color: var(--blue); }
 a.slot-title { color: var(--blue); text-decoration: none; }
 a.slot-title:hover { text-decoration: underline; }

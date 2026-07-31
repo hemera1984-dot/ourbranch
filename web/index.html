@@ -29,6 +29,7 @@
     <nav class="nav" id="nav">
       <a href="#org" data-screen="org">조직도</a>
       <a href="#sched" data-screen="sched">일정</a>
+      <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
     </nav>
@@ -92,6 +93,43 @@
       </div>
     </section>
 
+    <section id="screen-board" hidden>
+      <p class="eyebrow">팀 운영</p>
+      <h1>미션·공지</h1>
+      <p class="page-desc">부지점장이 팀원 개인 미션·팀 미션·공지를 정합니다. 지점장은 모든 팀의 미션·공지를 보고 부지점장에게도 부여할 수 있습니다.</p>
+
+      <div class="section">
+        <div class="section-head"><h2>미션</h2></div>
+        <div id="task-admin" class="card card-pad" hidden style="margin-bottom:10px">
+          <div class="toolbar">
+            <select id="task-target" class="input"></select>
+            <input id="task-title" class="input" placeholder="미션 제목" style="flex:1;min-width:160px">
+            <input id="task-due" class="input" type="date" title="기한">
+            <button class="btn primary" id="task-add">부여</button>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <input id="task-content" class="input" placeholder="내용 (선택)" style="flex:1">
+          </div>
+        </div>
+        <div id="task-list"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h2>공지</h2></div>
+        <div id="notice-admin" class="card card-pad" hidden style="margin-bottom:10px">
+          <div class="toolbar">
+            <select id="notice-scope" class="input"><option value="team">이 팀</option><option value="branch">지점 전체</option></select>
+            <input id="notice-title" class="input" placeholder="공지 제목" style="flex:1;min-width:160px">
+            <button class="btn primary" id="notice-add">등록</button>
+          </div>
+          <div class="toolbar" style="margin-top:8px">
+            <textarea id="notice-body" class="input" rows="3" placeholder="본문 — 줄바꿈으로 문단을 나눕니다" style="flex:1;resize:vertical"></textarea>
+          </div>
+        </div>
+        <div id="notice-list"></div>
+      </div>
+    </section>
+
     <section id="screen-ta" hidden>
       <p class="eyebrow">도입 활동</p>
       <h1>TA 일지</h1>
@@ -126,12 +164,12 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["org", "sched", "ta", "perf"];
+  var SCREENS = ["org", "sched", "board", "ta", "perf"];
   var screen = (location.hash || "#org").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "org";
   var taGrid = null, perfGrids = [], evGrid = null;
   var ROLE_RANK = { "지점장": 0, "부지점장": 1, "팀장": 2, "부팀장": 3, "팀원": 4 };
-  var KINDS = ["상담", "외근", "내근", "교육", "회의", "휴가", "마감", "기타"];
+  var KINDS = ["상담", "외근", "내근", "교육", "면접", "회의", "휴가", "마감", "기타"];
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -207,6 +245,7 @@
     $("month-nav").hidden = !(name === "ta" || name === "perf");
     if (name === "org") renderOrg();
     if (name === "sched") loadWeek();
+    if (name === "board") loadBoard();
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
   }
@@ -544,6 +583,107 @@
       } }));
     });
     Promise.all(jobs).then(loadWeek);
+  });
+
+  // ── 미션·공지 ──
+  function loadBoard() {
+    var teamId = myTeamId();
+    $("task-admin").hidden = !BOOT.me.isManager;
+    $("notice-admin").hidden = !BOOT.me.isManager;
+    if (BOOT.me.isManager) {
+      $("task-target").innerHTML = '<option value="전체">팀 전체</option>'
+        + rosterOf(teamId).map(function (m) { return '<option value="' + esc(m.email) + '">' + esc(m.name) + "</option>"; }).join("");
+    }
+    Promise.all([api("/tasks"), api("/notices")]).then(function (res) {
+      renderTasks(res[0].filter(function (t) { return t.team_id === teamId; }));
+      renderNotices(res[1].filter(function (n) { return n.team_id == null || n.team_id === teamId; }));
+    });
+  }
+
+  function targetLabel(targets) {
+    if (targets === "전체") return "팀 전체";
+    return (targets || []).map(function (em) { return nameOf(em) || em; }).join(", ");
+  }
+  function isMyTask(t) {
+    return t.targets === "전체" || (Array.isArray(t.targets) && t.targets.indexOf(BOOT.me.email) >= 0);
+  }
+  function renderTasks(list) {
+    var el = $("task-list");
+    if (!list.length) { el.innerHTML = '<div class="card"><div class="empty">부여된 미션이 없습니다.</div></div>'; return; }
+    var stCls = { "요청": "gray", "진행중": "blue", "완료": "green" };
+    el.innerHTML = '<div class="card">' + list.map(function (t) {
+      var canAct = isMyTask(t) || BOOT.me.isManager;
+      var today = fmtDate(new Date());
+      var overdue = t.due && t.due < today && t.status !== "완료";
+      return '<div class="org-row">'
+        + '<span class="badge ' + stCls[t.status] + '">' + esc(t.status) + "</span>"
+        + '<span class="name" style="min-width:0">' + esc(t.title) + "</span>"
+        + '<span class="meta">' + esc(targetLabel(t.targets))
+        + (t.content ? " · " + esc(t.content) : "")
+        + " · " + esc(t.assigned) + " 부여"
+        + (t.due ? ' · <span style="color:' + (overdue ? "var(--red)" : "inherit") + '">기한 ' + esc(t.due) + (overdue ? " 경과" : "") + "</span>" : "") + "</span>"
+        + (canAct && t.status !== "진행중" && t.status !== "완료" ? '<button class="btn task-st" data-id="' + t.id + '" data-st="진행중">시작</button>' : "")
+        + (canAct && t.status !== "완료" ? '<button class="btn task-st" data-id="' + t.id + '" data-st="완료">완료</button>' : "")
+        + (BOOT.me.isManager ? '<button class="btn task-del" data-id="' + t.id + '">삭제</button>' : "")
+        + "</div>";
+    }).join("") + "</div>";
+  }
+
+  function renderNotices(list) {
+    var el = $("notice-list");
+    if (!list.length) { el.innerHTML = '<div class="card"><div class="empty">등록된 공지가 없습니다.</div></div>'; return; }
+    el.innerHTML = list.map(function (n) {
+      return '<div class="card" style="margin-bottom:10px"><div class="card-pad">'
+        + '<div class="toolbar" style="margin-bottom:6px">'
+        + '<span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">' + (n.team_id == null ? "지점 전체" : "팀") + "</span>"
+        + '<strong style="flex:1">' + esc(n.title) + "</strong>"
+        + '<span class="note">' + esc(n.author) + " · " + esc((n.created || "").slice(0, 10)) + "</span>"
+        + (BOOT.me.isManager ? '<button class="btn notice-del" data-id="' + n.id + '">삭제</button>' : "")
+        + "</div>"
+        + (n.body || []).map(function (p) { return "<p style='margin:4px 0'>" + esc(p) + "</p>"; }).join("")
+        + '<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">'
+        + (n.comments || []).map(function (c) {
+          return '<p style="margin:3px 0"><span class="note">' + esc(c.author) + " · " + esc((c.created || "").slice(0, 10)) + "</span> " + esc(c.content) + "</p>";
+        }).join("")
+        + '<div class="toolbar" style="margin-top:6px"><input class="input cmt-input" data-id="' + n.id + '" placeholder="댓글" style="flex:1">'
+        + '<button class="btn cmt-add" data-id="' + n.id + '">등록</button></div>'
+        + "</div></div></div>";
+    }).join("");
+  }
+
+  $("task-add").addEventListener("click", function () {
+    var title = $("task-title").value.trim();
+    if (!title) return;
+    var target = $("task-target").value;
+    api("/tasks", { method: "POST", body: {
+      teamId: myTeamId(), title: title, content: $("task-content").value.trim(),
+      targets: target === "전체" ? "전체" : [target], due: $("task-due").value || null
+    } }).then(function () { $("task-title").value = ""; $("task-content").value = ""; $("task-due").value = ""; loadBoard(); });
+  });
+  $("task-list").addEventListener("click", function (e) {
+    var st = e.target.closest(".task-st");
+    if (st) { api("/tasks/" + st.dataset.id + "/status", { method: "POST", body: { status: st.dataset.st } }).then(loadBoard); return; }
+    var del = e.target.closest(".task-del");
+    if (del && confirm("이 미션을 삭제할까?")) api("/tasks/" + del.dataset.id, { method: "DELETE" }).then(loadBoard);
+  });
+  $("notice-add").addEventListener("click", function () {
+    var title = $("notice-title").value.trim();
+    if (!title) return;
+    var body = $("notice-body").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    api("/notices", { method: "POST", body: {
+      teamId: $("notice-scope").value === "branch" ? null : myTeamId(), title: title, body: body
+    } }).then(function () { $("notice-title").value = ""; $("notice-body").value = ""; loadBoard(); });
+  });
+  $("notice-list").addEventListener("click", function (e) {
+    var add = e.target.closest(".cmt-add");
+    if (add) {
+      var inp = document.querySelector('.cmt-input[data-id="' + add.dataset.id + '"]');
+      if (!inp.value.trim()) return;
+      api("/notices/" + add.dataset.id + "/comments", { method: "POST", body: { content: inp.value.trim() } }).then(loadBoard);
+      return;
+    }
+    var del = e.target.closest(".notice-del");
+    if (del && confirm("이 공지를 삭제할까?")) api("/notices/" + del.dataset.id, { method: "DELETE" }).then(loadBoard);
   });
 
   // ── TA 일지 ──

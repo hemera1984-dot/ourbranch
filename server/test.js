@@ -170,6 +170,17 @@ async function main() {
   assert.equal(perf.goals[0].goal, "1,000(100)");
   assert.equal((await (await api("t-fc2", "GET", "/perf?month=2026-08")).json()).rows.length, 0);
 
+  // 10-1) 미션: 대상 본인만 상태 변경, 삭제는 관리자만
+  const t1 = await (await api("t-esl1", "POST", "/tasks", { title: "개인 미션", targets: ["fc1@x.com"], due: "2026-08-10" })).json();
+  const t2 = await (await api("t-esl1", "POST", "/tasks", { title: "팀 미션", targets: "전체" })).json();
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + t1.id + "/status", { status: "진행중" })).status, 200);
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + t2.id + "/status", { status: "진행중" })).status, 200);
+  // fc1이 아닌 대상의 미션: 만들어서 fc1이 못 바꾸는지 — esl 대상 미션
+  const t3 = await (await api("t-super", "POST", "/tasks", { teamId: 1, title: "부지점장 개인 미션", targets: ["esl1@x.com"] })).json();
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + t3.id + "/status", { status: "완료" })).status, 403);
+  assert.equal((await api("t-fc1", "DELETE", "/tasks/" + t1.id)).status, 403);
+  assert.equal((await api("t-esl1", "DELETE", "/tasks/" + t1.id)).status, 200);
+
   // 11) 본인 것만: 팀원이 남 이름으로 일지·업적 입력 불가, 부지점장은 가능
   assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "부지점장1" }] })).status, 403);
   assert.equal((await api("t-esl1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "팀원1" }] })).status, 200);

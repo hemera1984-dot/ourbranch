@@ -247,9 +247,27 @@ route("POST", /^\/tasks$/, true, async (req, res, user) => {
 route("POST", /^\/tasks\/(\d+)\/status$/, false, async (req, res, user, m) => {
   const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
   if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
+  // 상태 변경은 미션 대상 본인 또는 관리자만
+  const targets = JSON.parse(t.targets);
+  const isTarget = targets === "전체" || (Array.isArray(targets) && targets.includes(user.email));
+  if (!isTarget && !user.isManager) return send(res, 403, { error: "대상 본인만" });
   const b = await readJson(req);
   if (!["요청", "진행중", "완료"].includes(b.status)) return send(res, 400, { error: "상태 값 오류" });
   db.prepare("UPDATE tasks SET status = ? WHERE id = ?").run(b.status, t.id);
+  send(res, 200, { ok: true });
+});
+
+route("DELETE", /^\/tasks\/(\d+)$/, true, (req, res, user, m) => {
+  const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
+  if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM tasks WHERE id = ?").run(t.id);
+  send(res, 200, { ok: true });
+});
+
+route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
+  const n = db.prepare("SELECT * FROM notices WHERE id = ?").get(Number(m[1]));
+  if (!n || !canSeeTeam(user, n.team_id)) return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM notices WHERE id = ?").run(n.id);
   send(res, 200, { ok: true });
 });
 
