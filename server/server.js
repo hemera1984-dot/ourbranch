@@ -215,6 +215,98 @@ route("POST", /^\/tasks\/(\d+)\/status$/, false, async (req, res, user, m) => {
   send(res, 200, { ok: true });
 });
 
+// ---- TA 일지 ----
+// 엑셀형 그리드 전제: 조회는 월 단위 한 방, 저장은 여러 줄 한 방(붙여넣기 대응).
+const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note"];
+
+route("GET", /^\/ta$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const month = q.get("month") || today().slice(0, 7);
+  const list = db.prepare("SELECT * FROM ta_logs WHERE date LIKE ? ORDER BY date, id").all(month + "%")
+    .filter(r => canSeeTeam(user, r.team_id));
+  send(res, 200, list);
+});
+
+route("POST", /^\/ta$/, false, async (req, res, user) => {
+  const b = await readJson(req);                          // { teamId?, rows: [...] }
+  const teamId = b.teamId ?? user.teamId;
+  if (teamId == null || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·행이 없습니다" });
+  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, ${TA_FIELDS.join(", ")})
+    VALUES (?, ?${", ?".repeat(TA_FIELDS.length)})`);
+  const ids = [];
+  for (const r of b.rows) {
+    if (!r.date) continue;
+    ids.push(Number(ins.run(teamId, r.author || user.name, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
+  }
+  send(res, 200, { ids });
+});
+
+route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
+  const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
+  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  const b = await readJson(req);
+  const sets = TA_FIELDS.filter(f => b[f] != null);
+  if (b.author != null) sets.push("author");
+  if (!sets.length) return send(res, 400, { error: "고칠 값이 없습니다" });
+  db.prepare(`UPDATE ta_logs SET ${sets.map(f => f + " = ?").join(", ")} WHERE id = ?`)
+    .run(...sets.map(f => String(b[f])), row.id);
+  send(res, 200, { ok: true });
+});
+
+route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
+  const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
+  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (row.author !== user.name && !user.isManager) return send(res, 403, { error: "본인 기록만" });
+  db.prepare("DELETE FROM ta_logs WHERE id = ?").run(row.id);
+  send(res, 200, { ok: true });
+});
+
+// ---- 업적현황 ----
+route("GET", /^\/perf$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const month = q.get("month") || today().slice(0, 7);
+  const rows = db.prepare("SELECT * FROM perf WHERE month = ? ORDER BY member, contract_date, id").all(month)
+    .filter(r => canSeeTeam(user, r.team_id));
+  const goals = db.prepare("SELECT * FROM perf_goals WHERE month = ?").all(month)
+    .filter(g => canSeeTeam(user, g.team_id));
+  send(res, 200, { rows, goals });
+});
+
+route("POST", /^\/perf$/, false, async (req, res, user) => {
+  const b = await readJson(req);                          // { teamId?, month, rows: [{member, contract_date, premium, canp, note}] }
+  const teamId = b.teamId ?? user.teamId;
+  if (teamId == null || !b.month || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·월·행이 없습니다" });
+  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  const ins = db.prepare("INSERT INTO perf (team_id, month, member, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  const ids = [];
+  for (const r of b.rows) {
+    if (!r.member) continue;
+    ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", Number(r.premium) || 0, Number(r.canp) || 0, r.note || "").lastInsertRowid));
+  }
+  send(res, 200, { ids });
+});
+
+route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
+  const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
+  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM perf WHERE id = ?").run(row.id);
+  send(res, 200, { ok: true });
+});
+
+route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
+  const b = await readJson(req);                          // { teamId?, month, goals: [{member, goal}] }
+  const teamId = b.teamId ?? user.teamId;
+  if (teamId == null || !b.month || !Array.isArray(b.goals)) return send(res, 400, { error: "팀·월·목표가 없습니다" });
+  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  const up = db.prepare(
+    `INSERT INTO perf_goals (team_id, month, member, goal) VALUES (?, ?, ?, ?)
+     ON CONFLICT(team_id, month, member) DO UPDATE SET goal = excluded.goal`
+  );
+  for (const g of b.goals) if (g.member) up.run(teamId, b.month, g.member, g.goal || "");
+  send(res, 200, { ok: true });
+});
+
 // ---- 관리 (팀·구성원·설정) ----
 route("POST", /^\/admin\/teams$/, true, async (req, res) => {
   const b = await readJson(req);

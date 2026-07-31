@@ -77,6 +77,49 @@ export function openDb(file) {
       UNIQUE(email, date)
     );
 
+    -- TA 일지 — 실물 시트(TA일지 미래4팀/하랑1팀) 열 구조 그대로.
+    -- 후보자 개인정보(이름·번호·주소)는 서버에만 두고 저장소·외부 산출물에는 마스킹.
+    CREATE TABLE IF NOT EXISTS ta_logs (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id      INTEGER NOT NULL REFERENCES teams(id),
+      author       TEXT NOT NULL,
+      date         TEXT NOT NULL,
+      cand_name    TEXT NOT NULL DEFAULT '',
+      gender       TEXT NOT NULL DEFAULT '',
+      age          TEXT NOT NULL DEFAULT '',
+      region       TEXT NOT NULL DEFAULT '',
+      safe_phone   TEXT NOT NULL DEFAULT '',
+      real_phone   TEXT NOT NULL DEFAULT '',
+      result       TEXT NOT NULL DEFAULT '',
+      reject_sms   TEXT NOT NULL DEFAULT '',
+      cis_sms      TEXT NOT NULL DEFAULT '',
+      note         TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_ta_team_date ON ta_logs(team_id, date);
+
+    -- 업적현황 — 실물 시트(팀 업적) 구조: 팀원별 계약 한 줄(계약일·월납·CANP), 월 단위 집계.
+    -- 팀원은 계정이 없을 수 있어(신인) 이름 문자열로 둔다.
+    CREATE TABLE IF NOT EXISTS perf (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id       INTEGER NOT NULL REFERENCES teams(id),
+      month         TEXT NOT NULL,
+      member        TEXT NOT NULL,
+      contract_date TEXT NOT NULL DEFAULT '',
+      premium       REAL NOT NULL DEFAULT 0,
+      canp          REAL NOT NULL DEFAULT 0,
+      note          TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_perf_team_month ON perf(team_id, month);
+
+    -- 팀원별 월 목표 (시트의 "목표 1,000(100)" 줄)
+    CREATE TABLE IF NOT EXISTS perf_goals (
+      team_id INTEGER NOT NULL REFERENCES teams(id),
+      month   TEXT NOT NULL,
+      member  TEXT NOT NULL,
+      goal    TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (team_id, month, member)
+    );
+
     CREATE TABLE IF NOT EXISTS tasks (
       id       INTEGER PRIMARY KEY AUTOINCREMENT,
       team_id  INTEGER NOT NULL REFERENCES teams(id),

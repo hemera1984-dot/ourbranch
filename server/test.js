@@ -102,7 +102,39 @@ async function main() {
   const eslSees = await (await api("t-esl1", "GET", "/notices")).json();
   assert.equal(eslSees.length, 2);   // 전체열람 승인 후 지점 공통+1팀 (2팀 공지는 아직 없음)
 
-  console.log("전체 통과 — 인증·팀 분리·관리자·총관리자 경계 확인 완료");
+  // 9) TA 일지: 여러 줄 저장(붙여넣기), 월 조회, 팀 분리, 본인 기록만 삭제
+  const taRows = [
+    { date: "2026-08-01", cand_name: "홍길동", gender: "남", age: "27", region: "서울", result: "부재" },
+    { date: "2026-08-01", cand_name: "김영희", gender: "여", age: "25", region: "경기", result: "CIS 약속 8/5 14시" }
+  ];
+  const taRes = await (await api("t-fc1", "POST", "/ta", { rows: taRows })).json();
+  assert.equal(taRes.ids.length, 2);
+  let ta = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
+  assert.equal(ta.length, 2);
+  assert.equal((await api("t-fc2", "GET", "/ta?month=2026-08")).status, 200);
+  assert.equal((await (await api("t-fc2", "GET", "/ta?month=2026-08")).json()).length, 0);   // 2팀은 안 보임
+  assert.equal((await api("t-fc1", "POST", "/ta/" + taRes.ids[0], { result: "재통화 약속" })).status, 200);
+  ta = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
+  assert.equal(ta[0].result, "재통화 약속");
+  assert.equal((await api("t-fc1", "DELETE", "/ta/" + taRes.ids[1])).status, 200);
+
+  // 10) 업적: 월별 저장·조회·합계 재료, 목표는 관리자만
+  const pf = await (await api("t-esl1", "POST", "/perf", {
+    month: "2026-08",
+    rows: [
+      { member: "팀원1", contract_date: "2026-08-03", premium: 100000, canp: 120 },
+      { member: "팀원1", contract_date: "2026-08-10", premium: 50000, canp: 60 }
+    ]
+  })).json();
+  assert.equal(pf.ids.length, 2);
+  assert.equal((await api("t-fc1", "POST", "/perf/goals", { month: "2026-08", goals: [{ member: "팀원1", goal: "1,000(100)" }] })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/perf/goals", { month: "2026-08", goals: [{ member: "팀원1", goal: "1,000(100)" }] })).status, 200);
+  const perf = await (await api("t-fc1", "GET", "/perf?month=2026-08")).json();
+  assert.equal(perf.rows.length, 2);
+  assert.equal(perf.goals[0].goal, "1,000(100)");
+  assert.equal((await (await api("t-fc2", "GET", "/perf?month=2026-08")).json()).rows.length, 0);
+
+  console.log("전체 통과 — 인증·팀 분리·관리자·총관리자·TA일지·업적 경계 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
