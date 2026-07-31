@@ -1,0 +1,111 @@
+/* 하랑지점 — 마이가디언 패밀리 디자인 언어 (헌법 요약본)
+   네이비 사이드바 + 시안 라인, Pretendard 단일, 1px 선 구분, radius 6/4/3, 0.14s 색 전환만 */
+
+:root {
+  --canvas: #f5f7fa; --surface: #ffffff; --ink: #172033; --sub: #596579; --ter: #8993a3;
+  --line: #dfe4eb; --line-input: #cbd3de; --blue: #0758d6; --blue-h: #0648ad; --blue-bg: #edf4ff;
+  --navy: #102a4e; --cyan: #00a6c7;
+  --green: #0d7a3f; --green-bg: #e8f5ee; --red: #b42318; --red-bg: #fdecea; --amber: #93540a; --amber-bg: #fdf3e0;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+  background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.6;
+  word-break: keep-all;
+}
+button, input, select { font: inherit; color: inherit; }
+
+/* ── 뼈대: 좌측 사이드바 + 본문 ── */
+.shell { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 216px; flex: none; background: var(--navy); color: #cfd8e5;
+  border-top: 4px solid var(--cyan); display: flex; flex-direction: column;
+}
+.brand { padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.brand-name { display: block; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -0.035em; }
+.brand-caption { display: block; font-size: 10px; color: #8fa3bd; letter-spacing: .08em; font-weight: 600; margin-top: 2px; }
+.nav { padding: 10px 0; flex: 1; }
+.nav a {
+  display: block; padding: 9px 20px; color: #cfd8e5; text-decoration: none; font-weight: 600;
+  border-left: 3px solid transparent; transition: background .14s, color .14s, border-color .14s;
+}
+.nav a:hover { background: rgba(255,255,255,.05); color: #fff; }
+.nav a.active { background: rgba(0,166,199,.12); color: #fff; border-left-color: var(--cyan); }
+.side-user { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.08); font-size: 11px; color: #8fa3bd; }
+.side-user strong { display: block; color: #fff; font-size: 13px; }
+
+.main { flex: 1; min-width: 0; padding: 26px 30px; }
+.eyebrow { margin: 0 0 4px; font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--ter); }
+h1 { margin: 0 0 4px; font-size: 25px; font-weight: 800; letter-spacing: -0.04em; }
+.page-desc { margin: 0 0 20px; color: var(--sub); }
+h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.035em; }
+.section { margin-top: 18px; }
+.section-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.section-head p { margin: 2px 0 0; color: var(--sub); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.card-pad { padding: 16px 20px; }
+.empty { padding: 26px 20px; color: var(--ter); text-align: center; }
+
+/* ── 버튼·입력 ── */
+.btn {
+  display: inline-block; padding: 7px 14px; border: 1px solid var(--line-input); border-radius: 4px;
+  background: var(--surface); font-weight: 600; cursor: pointer; transition: background .14s, border-color .14s, color .14s;
+}
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.primary:hover { background: var(--blue-h); border-color: var(--blue-h); }
+.btn:disabled { opacity: .45; cursor: default; }
+.input, select.input {
+  padding: 7px 10px; border: 1px solid var(--line-input); border-radius: 4px; background: var(--surface);
+}
+.input:focus, select.input:focus { outline: none; border-color: var(--blue); }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toolbar .note { color: var(--ter); font-size: 11px; }
+
+/* ── 그리드 (엑셀형 입력) ── */
+.grid-wrap { overflow-x: auto; }
+table.grid { border-collapse: collapse; width: 100%; background: var(--surface); }
+.grid th, .grid td { border: 1px solid var(--line); padding: 0; }
+.grid th {
+  background: var(--canvas); font-size: 11px; color: var(--sub); font-weight: 600;
+  padding: 7px 8px; text-align: left; white-space: nowrap; position: sticky; top: 0;
+}
+.grid td { min-width: 64px; }
+.grid td[contenteditable] { padding: 6px 8px; white-space: nowrap; cursor: cell; }
+.grid td[contenteditable]:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--blue-bg); }
+.grid td.ro { padding: 6px 8px; color: var(--ter); background: var(--canvas); }
+.grid tr.dirty td:first-child { box-shadow: inset 3px 0 0 var(--cyan); }
+.grid .num { text-align: right; font-variant-numeric: tabular-nums; }
+.grid tfoot td { padding: 7px 8px; font-weight: 800; background: var(--canvas); }
+
+/* ── 배지·집계 타일 ── */
+.stat-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.stat { padding: 12px 16px; border-left: 1px solid var(--line); }
+.stat:first-child { border-left: 0; }
+.stat b { display: block; font-size: 27px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--sub); }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.badge.blue { background: var(--blue-bg); color: var(--blue); }
+.badge.green { background: var(--green-bg); color: var(--green); }
+.badge.gray { background: var(--canvas); color: var(--sub); border: 1px solid var(--line); }
+
+/* ── 로그인 게이트 ── */
+.gate { max-width: 420px; margin: 12vh auto; }
+.gate .card-pad { padding: 28px; }
+
+/* ── 목록 (명단) ── */
+.roster-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line); }
+.roster-row:first-child { border-top: 0; }
+.roster-row .name { font-weight: 600; min-width: 90px; }
+.roster-row .meta { color: var(--sub); font-size: 12px; flex: 1; }
+
+@media (max-width: 900px) {
+  .shell { display: block; }
+  .sidebar { width: 100%; border-top-width: 3px; }
+  .nav { display: flex; overflow-x: auto; padding: 0; }
+  .nav a { border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; }
+  .nav a.active { border-left: 0; border-bottom-color: var(--cyan); }
+  .main { padding: 16px 14px; }
+}

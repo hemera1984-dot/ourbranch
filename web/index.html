@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>하랑지점</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="assets/app.css">
+<script src="assets/grid.js"></script>
+</head>
+<body>
+
+<div id="gate" class="gate" hidden>
+  <div class="card"><div class="card-pad">
+    <p class="eyebrow">지점 팀 관리</p>
+    <h1 id="gate-title">로그인</h1>
+    <p class="page-desc">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
+    <div class="toolbar">
+      <input id="gate-token" class="input" style="flex:1" type="password" placeholder="세션 토큰 (마이가디언 로그인 연동 전 임시)">
+      <button id="gate-enter" class="btn primary">들어가기</button>
+    </div>
+    <p class="note" style="color:var(--ter);font-size:11px;margin-top:10px">마이가디언 로그인 연동은 배포 단계에서 붙습니다.</p>
+  </div></div>
+</div>
+
+<div id="app" class="shell" hidden>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></div>
+    <nav class="nav" id="nav">
+      <a href="#ta" data-screen="ta">TA 일지</a>
+      <a href="#perf" data-screen="perf">업적현황</a>
+      <a href="#roster" data-screen="roster">팀원 명단</a>
+    </nav>
+    <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span></div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
+      <select id="team-pick" class="input" hidden></select>
+      <button class="btn" id="month-prev">이전 달</button>
+      <strong id="month-label" style="font-variant-numeric:tabular-nums"></strong>
+      <button class="btn" id="month-next">다음 달</button>
+    </div>
+
+    <section id="screen-ta" hidden>
+      <p class="eyebrow">도입 활동</p>
+      <h1>TA 일지</h1>
+      <p class="page-desc">한 줄이 통화 한 건입니다. 엑셀에서 범위를 복사해 그대로 붙여넣을 수 있습니다. 마지막 줄에서 Enter를 누르면 새 줄이 생깁니다.</p>
+      <div class="stat-row" id="ta-stats" hidden></div>
+      <div class="section">
+        <div class="section-head">
+          <h2>이번 달 기록</h2>
+          <div class="toolbar">
+            <button class="btn" id="ta-add">줄 추가</button>
+            <button class="btn primary" id="ta-save">저장</button>
+          </div>
+        </div>
+        <div id="ta-grid" class="card"></div>
+      </div>
+    </section>
+
+    <section id="screen-perf" hidden>
+      <p class="eyebrow">실적</p>
+      <h1>업적현황</h1>
+      <p class="page-desc">팀원 명단에 있는 사람이 그대로 나열됩니다. 본인 칸에 계약을 넣으면 합계는 자동입니다. 목표 입력은 부지점장 몫입니다.</p>
+      <div id="perf-body"></div>
+    </section>
+
+    <section id="screen-roster" hidden>
+      <p class="eyebrow">조직</p>
+      <h1>팀원 명단</h1>
+      <p class="page-desc">부지점장이 명단을 넣으면 일지·업적 화면에 팀원이 나열됩니다.</p>
+      <div id="roster-admin" class="card card-pad" hidden style="margin-bottom:14px">
+        <div class="toolbar">
+          <input id="ro-name" class="input" placeholder="이름" style="width:110px">
+          <input id="ro-email" class="input" placeholder="이메일 (없으면 비워두기)" style="width:220px">
+          <select id="ro-role" class="input">
+            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option><option>지점장</option>
+          </select>
+          <button class="btn primary" id="ro-add">추가</button>
+          <span class="note">이메일이 있어야 본인 로그인·본인 입력이 열립니다.</span>
+        </div>
+        <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
+          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑2팀)" style="width:180px">
+          <button class="btn" id="ro-team-add">팀 추가</button>
+        </div>
+      </div>
+      <div id="roster-list"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // 배포(GitHub Pages)에서는 API 절대주소, 개발(서버가 web/을 직접 서빙)에서는 같은 출처
+  var API = window.OB_API || (/insurguard\.life$/.test(location.hostname)
+    ? "https://api.insurguard.life/branch" : "");
+
+  var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
+  var screen = (location.hash || "#ta").slice(1);
+  var taGrid = null, perfGrids = [];
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    return fetch(API + path, {
+      method: opts.method || "GET",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function (r) {
+      if (r.status === 401) { showGate(); throw new Error("로그인 필요"); }
+      return r.json().then(function (j) {
+        if (!r.ok) { alert(j.error || "요청 실패"); throw new Error(j.error || r.status); }
+        return j;
+      });
+    });
+  }
+
+  // ── 로그인 게이트 ──
+  function showGate() { $("gate").hidden = false; $("app").hidden = true; }
+  function tryEnter(t) {
+    token = t;
+    api("/bootstrap").then(function (b) {
+      BOOT = b;
+      localStorage.setItem("ob_token", t);
+      $("gate").hidden = true; $("app").hidden = false;
+      renderShell();
+      show(screen);
+    }).catch(function () { localStorage.removeItem("ob_token"); });
+  }
+  $("gate-enter").addEventListener("click", function () {
+    var t = $("gate-token").value.trim();
+    if (t) tryEnter(t);
+  });
+
+  // ── 셸 ──
+  function myTeamId() {
+    if (!BOOT.me.seesAll) return BOOT.me.teamId;
+    var v = Number($("team-pick").value);
+    return isNaN(v) || !v ? (BOOT.teams[0] ? BOOT.teams[0].id : null) : v;
+  }
+  function renderShell() {
+    document.title = BOOT.branchName || "지점";
+    $("brand-name").textContent = BOOT.branchName || "지점";
+    $("me-name").textContent = BOOT.me.name;
+    $("me-role").textContent = (BOOT.me.isSuper ? "총관리자" : BOOT.me.isManager ? "관리자" : "팀원");
+    var pick = $("team-pick");
+    if (BOOT.me.seesAll && BOOT.teams.length) {
+      pick.hidden = false;
+      pick.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
+    }
+  }
+
+  function show(name) {
+    screen = name;
+    ["ta", "perf", "roster"].forEach(function (s) {
+      $("screen-" + s).hidden = s !== name;
+    });
+    document.querySelectorAll("#nav a").forEach(function (a) {
+      a.classList.toggle("active", a.dataset.screen === name);
+    });
+    $("ctx-bar").style.display = name === "roster" ? "none" : "";
+    if (name === "ta") loadTa();
+    if (name === "perf") loadPerf();
+    if (name === "roster") renderRoster();
+  }
+  $("nav").addEventListener("click", function (e) {
+    var a = e.target.closest("a"); if (!a) return;
+    e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
+  });
+  $("team-pick").addEventListener("change", function () { show(screen); });
+  $("month-prev").addEventListener("click", function () { moveMonth(-1); });
+  $("month-next").addEventListener("click", function () { moveMonth(1); });
+  function moveMonth(d) {
+    var p = month.split("-");
+    var dt = new Date(Number(p[0]), Number(p[1]) - 1 + d, 1);
+    month = dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0");
+    show(screen);
+  }
+  function monthLabel() { var p = month.split("-"); return Number(p[0]) + "년 " + Number(p[1]) + "월"; }
+
+  function rosterOf(teamId) {
+    return BOOT.members.filter(function (m) { return m.team_id === teamId; });
+  }
+  function canWriteAs(name) { return BOOT.me.isManager || name === BOOT.me.name; }
+
+  // ── TA 일지 ──
+  var TA_COLS = [
+    { key: "author", label: "담당자", width: 70 },
+    { key: "date", label: "날짜", width: 90 },
+    { key: "cand_name", label: "이름", width: 70 },
+    { key: "gender", label: "성별", width: 40 },
+    { key: "age", label: "나이", width: 40 },
+    { key: "region", label: "거주지", width: 130 },
+    { key: "safe_phone", label: "안심번호", width: 110 },
+    { key: "real_phone", label: "실제번호", width: 110 },
+    { key: "result", label: "통화내용", width: 200 },
+    { key: "reject_sms", label: "거절 문자", width: 90 },
+    { key: "cis_sms", label: "CIS 약속문자", width: 120 },
+    { key: "note", label: "특이사항", width: 140 }
+  ];
+
+  function loadTa() {
+    $("month-label").textContent = monthLabel();
+    var teamId = myTeamId();
+    api("/ta?month=" + month).then(function (rows) {
+      rows = rows.filter(function (r) { return r.team_id === teamId; })
+        .map(function (r) { r._id = r.id; return r; });
+      renderTaStats(rows);
+      taGrid = makeGrid($("ta-grid"), {
+        cols: TA_COLS,
+        rows: rows,
+        fixed: { author: BOOT.me.name, date: new Date().toISOString().slice(0, 10) },
+        canEditRow: function (r) { return canWriteAs(r.author); },
+        onDeleteRow: function (r, done) { api("/ta/" + r._id, { method: "DELETE" }).then(done); }
+      });
+      if (!rows.length) taGrid.addRow();
+    });
+  }
+  function renderTaStats(rows) {
+    var byAuthor = {};
+    rows.forEach(function (r) { if (r._id) byAuthor[r.author] = (byAuthor[r.author] || 0) + 1; });
+    var names = Object.keys(byAuthor);
+    var el = $("ta-stats");
+    if (!names.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = '<div class="stat"><b>' + rows.filter(function (r) { return r._id; }).length + '</b><span>이번 달 전체</span></div>'
+      + names.map(function (n) { return '<div class="stat"><b>' + byAuthor[n] + "</b><span>" + esc(n) + "</span></div>"; }).join("");
+  }
+  $("ta-add").addEventListener("click", function () { if (taGrid) taGrid.addRow(); });
+  $("ta-save").addEventListener("click", function () {
+    if (!taGrid || !taGrid.hasChanges()) return;
+    var teamId = myTeamId();
+    var news = taGrid.newRows().filter(function (r) { return r.date; });
+    var edits = taGrid.dirtyRows();
+    var jobs = [];
+    if (news.length) jobs.push(api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }));
+    edits.forEach(function (r) { jobs.push(api("/ta/" + r._id, { method: "POST", body: r })); });
+    Promise.all(jobs).then(loadTa);
+  });
+
+  // ── 업적현황 ──
+  var PERF_COLS = [
+    { key: "contract_date", label: "계약일", width: 100 },
+    { key: "premium", label: "월납", width: 90, num: true },
+    { key: "canp", label: "CANP", width: 80, num: true },
+    { key: "note", label: "비고", width: 160 }
+  ];
+  function fmtNum(n) { return Number(n || 0).toLocaleString("ko-KR"); }
+
+  function loadPerf() {
+    $("month-label").textContent = monthLabel();
+    var teamId = myTeamId();
+    api("/perf?month=" + month).then(function (data) {
+      var rows = data.rows.filter(function (r) { return r.team_id === teamId; });
+      var goals = {};
+      data.goals.filter(function (g) { return g.team_id === teamId; })
+        .forEach(function (g) { goals[g.member] = g.goal; });
+      var roster = rosterOf(teamId);
+      var names = roster.map(function (m) { return m.name; });
+      rows.forEach(function (r) { if (names.indexOf(r.member) < 0) names.push(r.member); });
+
+      perfGrids = [];
+      var body = $("perf-body");
+      if (!names.length) {
+        body.innerHTML = '<div class="card"><div class="empty">팀원 명단이 비어 있습니다. 팀원 명단 화면에서 먼저 등록합니다.</div></div>';
+        return;
+      }
+      body.innerHTML = names.map(function (n, i) {
+        return '<div class="section"><div class="section-head">'
+          + "<h2>" + esc(n)
+          + (goals[n] ? ' <span class="badge blue">목표 ' + esc(goals[n]) + "</span>" : "")
+          + '</h2><div class="toolbar">'
+          + (BOOT.me.isManager
+            ? '<input class="input goal-input" data-member="' + esc(n) + '" placeholder="목표 (예: 1,000(100))" value="' + esc(goals[n] || "") + '" style="width:160px">'
+            : "")
+          + (canWriteAs(n) ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
+          + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
+          + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
+      }).join("")
+        + '<div class="toolbar" style="margin-top:14px"><button class="btn primary" id="perf-save">저장</button></div>';
+
+      names.forEach(function (n, i) {
+        var mine = rows.filter(function (r) { return r.member === n; })
+          .map(function (r) { r._id = r.id; return r; });
+        var g = makeGrid($("perf-grid-" + i), {
+          cols: PERF_COLS,
+          rows: mine,
+          fixed: { member: n },
+          canEditRow: function () { return canWriteAs(n); },
+          onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(done); }
+        });
+        perfGrids.push({ member: n, grid: g, sumEl: $("perf-sum-" + i) });
+        updateSum(perfGrids[perfGrids.length - 1]);
+      });
+
+      body.addEventListener("click", function (e) {
+        var b = e.target.closest(".add-row");
+        if (b) perfGrids[Number(b.dataset.i)].grid.addRow();
+        if (e.target.id === "perf-save") savePerf(teamId);
+      });
+    });
+  }
+  function updateSum(pg) {
+    var rs = pg.grid.rows().filter(function (r) { return r.contract_date || r.premium || r.canp; });
+    var prem = 0, canp = 0;
+    rs.forEach(function (r) { prem += Number(r.premium) || 0; canp += Number(r.canp) || 0; });
+    pg.sumEl.textContent = "합계 " + rs.length + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp);
+  }
+  function savePerf(teamId) {
+    var jobs = [];
+    perfGrids.forEach(function (pg) {
+      var news = pg.grid.newRows().filter(function (r) { return r.contract_date || r.premium || r.canp; })
+        .map(function (r) { return Object.assign({}, r, { member: pg.member }); });
+      if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: teamId, month: month, rows: news } }));
+      pg.grid.dirtyRows().forEach(function (r) { jobs.push(api("/perf/" + r._id, { method: "POST", body: r })); });
+    });
+    if (BOOT.me.isManager) {
+      var goals = [];
+      document.querySelectorAll(".goal-input").forEach(function (inp) {
+        goals.push({ member: inp.dataset.member, goal: inp.value.trim() });
+      });
+      if (goals.length) jobs.push(api("/perf/goals", { method: "POST", body: { teamId: teamId, month: month, goals: goals } }));
+    }
+    Promise.all(jobs).then(loadPerf);
+  }
+
+  // ── 팀원 명단 ──
+  function renderRoster() {
+    var admin = $("roster-admin");
+    admin.hidden = !BOOT.me.isManager;
+    $("ro-team-tools").hidden = !BOOT.me.isSuper;
+    var byTeam = {};
+    BOOT.members.forEach(function (m) { (byTeam[m.team_id] = byTeam[m.team_id] || []).push(m); });
+    var html = BOOT.teams.map(function (t) {
+      var list = byTeam[t.id] || [];
+      return '<div class="section"><div class="section-head"><h2>' + esc(t.name)
+        + ' <span class="badge gray">' + list.length + "명</span></h2></div><div class=\"card\">"
+        + (list.length ? list.map(function (m) {
+          return '<div class="roster-row"><span class="name">' + esc(m.name) + "</span>"
+            + '<span class="badge ' + (m.is_manager ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
+            + '<span class="meta">' + esc(m.email || "이메일 미등록") + (m.can_view_all ? ' · 전체열람' : "") + "</span>"
+            + (BOOT.me.isManager ? '<button class="btn ro-del" data-email="' + esc(m.email) + '">삭제</button>' : "")
+            + "</div>";
+        }).join("") : '<div class="empty">이 팀에 등록된 팀원이 없습니다.</div>')
+        + "</div></div>";
+    }).join("");
+    $("roster-list").innerHTML = html || '<div class="card"><div class="empty">팀이 아직 없습니다.</div></div>';
+  }
+  $("ro-add").addEventListener("click", function () {
+    var name = $("ro-name").value.trim();
+    if (!name) return;
+    var email = $("ro-email").value.trim() || (name + "@미등록.local");
+    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id), role: $("ro-role").value } })
+      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; renderRoster(); });
+  });
+  $("ro-team-add").addEventListener("click", function () {
+    var name = $("ro-team-name").value.trim();
+    if (!name) return;
+    api("/admin/teams", { method: "POST", body: { name: name } })
+      .then(refreshBoot).then(function () { $("ro-team-name").value = ""; renderRoster(); renderShell(); });
+  });
+  $("roster-list").addEventListener("click", function (e) {
+    var b = e.target.closest(".ro-del"); if (!b) return;
+    if (!confirm("명단에서 삭제할까?")) return;
+    api("/admin/members/" + encodeURIComponent(b.dataset.email), { method: "DELETE" })
+      .then(refreshBoot).then(renderRoster);
+  });
+  function refreshBoot() {
+    return api("/bootstrap").then(function (b) { BOOT = b; });
+  }
+
+  // ── 시작 ──
+  var urlToken = new URLSearchParams(location.search).get("token");
+  if (urlToken) { history.replaceState(null, "", location.pathname + location.hash); tryEnter(urlToken); }
+  else if (localStorage.getItem("ob_token")) tryEnter(localStorage.getItem("ob_token"));
+  else showGate();
+})();
+</script>
+</body>
+</html>

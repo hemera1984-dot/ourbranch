@@ -7,6 +7,8 @@
 // 외부 패키지를 쓰지 않는다 (Node 22+ 내장 http·sqlite).
 
 import { createServer } from "node:http";
+import { readFileSync, existsSync } from "node:fs";
+import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken } from "./auth.js";
 
@@ -14,6 +16,7 @@ const PORT = Number(process.env.PORT || 8788);
 const DB_FILE = process.env.DB_FILE || "./ourbranch.db";
 const AUTH_DB_FILE = process.env.AUTH_DB_FILE || "../myguardian-server/myguardian.db";
 const ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
+const WEB_DIR = process.env.WEB_DIR || "";   // 개발용: web/을 같은 출처로 서빙
 
 const db = openDb(DB_FILE);
 const authDb = openAuthDb(AUTH_DB_FILE);
@@ -293,6 +296,17 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   send(res, 200, { ids });
 });
 
+route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
+  const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
+  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (row.member !== user.name && !user.isManager) return send(res, 403, { error: "본인 업적만" });
+  const b = await readJson(req);
+  db.prepare("UPDATE perf SET contract_date = ?, premium = ?, canp = ?, note = ? WHERE id = ?")
+    .run(b.contract_date ?? row.contract_date, Number(b.premium ?? row.premium) || 0,
+         Number(b.canp ?? row.canp) || 0, b.note ?? row.note, row.id);
+  send(res, 200, { ok: true });
+});
+
 route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
@@ -363,6 +377,21 @@ const server = createServer(async (req, res) => {
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const path = new URL(req.url, "http://x").pathname;
   if (path === "/health") return send(res, 200, { ok: true });
+
+  // 개발용 정적 서빙 — API 경로와 겹치지 않는 GET만
+  if (WEB_DIR && req.method === "GET") {
+    const rel = path === "/" ? "index.html" : path.slice(1);
+    const file = normalize(join(WEB_DIR, rel));
+    if (file.startsWith(normalize(WEB_DIR)) && existsSync(file) && extname(file)) {
+      const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
+      res.writeHead(200, { "Content-Type": (types[extname(file)] || "application/octet-stream") + "; charset=utf-8" });
+      return res.end(readFileSync(file));
+    }
+    if (path === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end(readFileSync(normalize(join(WEB_DIR, "index.html"))));
+    }
+  }
 
   const user = userFor(req);
   if (!user) return send(res, 401, { error: "로그인이 필요합니다" });
