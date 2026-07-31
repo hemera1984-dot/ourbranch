@@ -237,7 +237,10 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   const ids = [];
   for (const r of b.rows) {
     if (!r.date) continue;
-    ids.push(Number(ins.run(teamId, r.author || user.name, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
+    // 일지는 각 팀원이 본인 이름으로 넣는다. 남 이름으로 넣는 건 부지점장(관리자)만.
+    const author = r.author || user.name;
+    if (!user.isManager && author !== user.name) return send(res, 403, { error: "본인 일지만 입력할 수 있습니다" });
+    ids.push(Number(ins.run(teamId, author, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
   }
   send(res, 200, { ids });
 });
@@ -245,6 +248,7 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
 route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (row.author !== user.name && !user.isManager) return send(res, 403, { error: "본인 기록만" });
   const b = await readJson(req);
   const sets = TA_FIELDS.filter(f => b[f] != null);
   if (b.author != null) sets.push("author");
@@ -282,6 +286,8 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   const ids = [];
   for (const r of b.rows) {
     if (!r.member) continue;
+    // 팀원은 자기 업적만, 부지점장(관리자)은 팀 전체 입력 가능
+    if (!user.isManager && r.member !== user.name) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
     ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", Number(r.premium) || 0, Number(r.canp) || 0, r.note || "").lastInsertRowid));
   }
   send(res, 200, { ids });
@@ -290,6 +296,7 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
 route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (row.member !== user.name && !user.isManager) return send(res, 403, { error: "본인 업적만" });
   db.prepare("DELETE FROM perf WHERE id = ?").run(row.id);
   send(res, 200, { ok: true });
 });

@@ -134,7 +134,13 @@ async function main() {
   assert.equal(perf.goals[0].goal, "1,000(100)");
   assert.equal((await (await api("t-fc2", "GET", "/perf?month=2026-08")).json()).rows.length, 0);
 
-  console.log("전체 통과 — 인증·팀 분리·관리자·총관리자·TA일지·업적 경계 확인 완료");
+  // 11) 본인 것만: 팀원이 남 이름으로 일지·업적 입력 불가, 부지점장은 가능
+  assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "부지점장1" }] })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "팀원1" }] })).status, 200);
+  assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-08", rows: [{ member: "다른사람" }] })).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-08", rows: [{ member: "팀원1", contract_date: "2026-08-20", premium: 30000, canp: 40 }] })).status, 200);
+
+  console.log("전체 통과 — 인증·팀 분리·관리자·총관리자·TA일지·업적·본인기록 경계 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
