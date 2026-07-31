@@ -15,11 +15,11 @@
     <p class="eyebrow">지점 팀 관리</p>
     <h1>로그인</h1>
     <p class="page-desc">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
-    <div class="toolbar">
-      <input id="gate-token" class="input" style="flex:1" type="password" placeholder="세션 토큰 (마이가디언 로그인 연동 전 임시)">
+    <div id="g-signin" style="margin-bottom:12px"></div>
+    <div class="toolbar" id="gate-dev" hidden>
+      <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 세션 토큰">
       <button id="gate-enter" class="btn primary">들어가기</button>
     </div>
-    <p class="note" style="color:var(--ter);font-size:11px;margin-top:10px">마이가디언 로그인 연동은 배포 단계에서 붙습니다.</p>
   </div></div>
 </div>
 
@@ -197,7 +197,40 @@
   }
 
   // ── 로그인 게이트 ──
-  function showGate() { $("gate").hidden = false; $("app").hidden = true; }
+  // 구글 로그인은 마이가디언 인증 서버를 그대로 쓴다 — 별도 가입·승인 없음.
+  // 로컬 개발에서는 구글 원본 확인이 안 되므로 dev 토큰 입력으로 대신한다.
+  var AUTH_API = "https://api.insurguard.life";
+  var GOOGLE_CLIENT_ID = "370923160679-3h1hn1flheb4d01bq1amtutr992kldj1.apps.googleusercontent.com";
+  var IS_PROD = /insurguard\.life$/.test(location.hostname);
+
+  function renderGoogle() {
+    if (!IS_PROD) { $("gate-dev").hidden = false; return; }
+    if (!(window.google && window.google.accounts)) {
+      var s = document.createElement("script");
+      s.src = "https://accounts.google.com/gsi/client";
+      s.onload = renderGoogle;
+      s.onerror = function () { $("gate-dev").hidden = false; };
+      document.head.appendChild(s);
+      return;
+    }
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: function (resp) {
+        fetch(AUTH_API + "/auth/google", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: resp.credential })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data["토큰"]) tryEnter(data["토큰"]);
+          else alert(data.error || "로그인에 실패했습니다. 마이가디언 승인 상태를 확인해 주세요.");
+        }).catch(function () { alert("인증 서버에 연결하지 못했습니다."); });
+      }
+    });
+    window.google.accounts.id.renderButton($("g-signin"), {
+      theme: "outline", size: "large", shape: "rectangular", text: "signin_with", locale: "ko", width: 280
+    });
+  }
+
+  function showGate() { $("gate").hidden = false; $("app").hidden = true; renderGoogle(); }
   function tryEnter(t) {
     token = t;
     api("/bootstrap").then(function (b) {
