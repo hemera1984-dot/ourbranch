@@ -159,6 +159,27 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
+// 마이가디언 고객미팅 연동 — docs/myguardian-schedule-interop.md 계약 구현.
+// 멱등키(출처키)로 upsert. 소유자 = 요청 세션 계정. 취소는 삭제가 아니라 상태 갱신.
+route("POST", /^\/events\/upsert$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  if (b["출처"] !== "myguardian" || !b["출처키"] || !b["일시"])
+    return send(res, 400, { error: "출처·출처키·일시가 필요합니다" });
+  const iso = String(b["일시"]);
+  const date = iso.slice(0, 10), start = iso.slice(11, 16) || null;
+  const code = String(b["고객코드"] || "");
+  const title = code + (b["차수"] ? " · " + b["차수"] + "차" : "");
+  const status = ["예정", "완료", "취소"].includes(b["상태"]) ? b["상태"] : "예정";
+  db.prepare(
+    `INSERT INTO events (team_id, member_email, date, start, kind, title, source, source_key, status, customer_code)
+     VALUES (?, ?, ?, ?, ?, ?, 'myguardian', ?, ?, ?)
+     ON CONFLICT(source_key) DO UPDATE SET
+       date = excluded.date, start = excluded.start, status = excluded.status,
+       title = excluded.title, customer_code = excluded.customer_code`
+  ).run(user.teamId, user.email, date, start, b["종류"] || "고객미팅", title, b["출처키"], status, code);
+  send(res, 200, { ok: true });
+});
+
 route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
   if (!e || !canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });

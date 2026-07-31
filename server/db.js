@@ -53,16 +53,23 @@ export function openDb(file) {
       created   TEXT NOT NULL
     );
 
-    -- member_email이 NULL이면 팀 공유 일정, 있으면 개인 일정 칸
+    -- member_email이 NULL이면 팀 공유 일정, 있으면 개인 일정 칸.
+    -- team_id NULL은 지점 직속(지점장 등 팀 무소속)의 일정 — 전원 열람.
+    -- source/source_key/status/customer_code: 마이가디언 고객미팅 연동
+    -- (docs/myguardian-schedule-interop.md 계약. 고객은 코드만, 실명 금지.)
     CREATE TABLE IF NOT EXISTS events (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      team_id      INTEGER NOT NULL REFERENCES teams(id),
-      member_email TEXT,
-      date         TEXT NOT NULL,
-      start        TEXT,
-      end          TEXT,
-      kind         TEXT NOT NULL DEFAULT '기타',
-      title        TEXT NOT NULL DEFAULT ''
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id       INTEGER REFERENCES teams(id),
+      member_email  TEXT,
+      date          TEXT NOT NULL,
+      start         TEXT,
+      end           TEXT,
+      kind          TEXT NOT NULL DEFAULT '기타',
+      title         TEXT NOT NULL DEFAULT '',
+      source        TEXT,
+      source_key    TEXT UNIQUE,
+      status        TEXT NOT NULL DEFAULT '예정',
+      customer_code TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 

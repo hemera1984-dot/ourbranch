@@ -343,7 +343,8 @@
       + (days[4].getMonth() + 1) + "월 " + days[4].getDate() + "일" + (weekOffset === 0 ? " (이번 주)" : "");
     var teamId = myTeamId();
     api("/events?from=" + from + "&to=" + to).then(function (evs) {
-      evs = evs.filter(function (e) { return e.team_id === teamId; });
+      // 자기 팀 + 지점 직속(team_id 없음, 지점장 등). 취소된 고객미팅은 숨긴다.
+      evs = evs.filter(function (e) { return (e.team_id === teamId || e.team_id == null) && e.status !== "취소"; });
       renderWeekView(evs, days);
       var rows = evs.map(function (e) {
         return { _id: e.id, member: e.member_email ? nameOf(e.member_email) : "", date: e.date,
@@ -361,12 +362,17 @@
   }
 
   function slotHtml(e) {
-    var kindCls = "k-" + (KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+    var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+    // 고객미팅(마이가디언 연동)은 고객 코드만 표시하고 마이가디언 고객 상세로 연결
+    var title = e.title
+      ? (e.kind === "고객미팅" && e.customer_code
+        ? '<a class="slot-title" target="_blank" href="https://app.insurguard.life/web/customers/?code=' + encodeURIComponent(e.customer_code) + '">' + esc(e.title) + "</a>"
+        : '<span class="slot-title">' + esc(e.title) + "</span>")
+      : "";
     return '<div class="slot">'
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
-      + '<span class="chip ' + kindCls + '">' + esc(e.kind) + "</span>"
-      + (e.title ? '<span class="slot-title">' + esc(e.title) + "</span>" : "")
-      + "</div>";
+      + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
+      + title + "</div>";
   }
   function renderWeekView(evs, days) {
     var todayStr = fmtDate(new Date());

@@ -98,6 +98,20 @@ async function main() {
   assert.equal((await api("t-fc1", "POST", "/events/" + teamEv.id, { title: "침범" })).status, 403);
   assert.equal((await api("t-esl1", "POST", "/events/" + teamEv.id, { title: "팀회의(변경)" })).status, 200);
 
+  // 6-2) 마이가디언 고객미팅 upsert: 멱등키 갱신, 취소는 상태만
+  const meet = { "출처": "myguardian", "출처키": "mg:C-2026-014:3", "종류": "고객미팅", "고객코드": "C-2026-014", "차수": 3, "일시": "2026-08-05T14:00:00+09:00", "상태": "예정" };
+  assert.equal((await api("t-fc1", "POST", "/events/upsert", meet)).status, 200);
+  assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "일시": "2026-08-06T15:00:00+09:00" })).status, 200);
+  let mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
+  const mine2 = mEvs.filter(e => e.source_key === "mg:C-2026-014:3");
+  assert.equal(mine2.length, 1);                       // 멱등 — 한 건으로 유지
+  assert.equal(mine2[0].date, "2026-08-06");
+  assert.equal(mine2[0].start, "15:00");
+  assert.equal(mine2[0].customer_code, "C-2026-014");
+  assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "상태": "취소" })).status, 200);
+  mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
+  assert.equal(mEvs.filter(e => e.source_key === "mg:C-2026-014:3")[0].status, "취소");
+
   // 7) 출근 자가 보고 + upsert
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: true })).status, 200);
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: false })).status, 200);
