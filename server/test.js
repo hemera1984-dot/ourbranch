@@ -136,11 +136,17 @@ async function main() {
   assert.equal(lecAfter.attendees[0].name, "팀원2");
   assert.deepEqual(await (await api("t-fc2", "POST", "/events/" + lec.id + "/attend")).json(), { attending: false });
 
-  // 7) 출근 자가 보고 + upsert
+  // 7) 출석 체크 + 부분 갱신 (점심만 고쳐도 출석·체크시각 유지)
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: true })).status, 200);
-  assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: false })).status, 200);
-  const att = await (await api("t-esl1", "GET", "/attendance?date=2026-08-01")).json();
+  let att = await (await api("t-esl1", "GET", "/attendance?date=2026-08-01")).json();
+  const checkedAt = att[0].checked_at;
+  assert.ok(checkedAt);
+  assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", work: "10시 출근", lunch: "동반 점심", aitom: false })).status, 200);
+  att = await (await api("t-esl1", "GET", "/attendance?date=2026-08-01")).json();
   assert.equal(att.length, 1); assert.equal(att[0].aitom, 0);
+  assert.equal(att[0].present, 1);                       // 출석 유지
+  assert.equal(att[0].checked_at, checkedAt);            // 체크 시각 유지
+  assert.equal(att[0].lunch, "동반 점심");
 
   // 8) 총관리자 전용: 관리자 임명·전체열람은 부지점장이 못 건드림
   assert.equal((await api("t-esl1", "POST", "/admin/members", { email: "fc1@x.com", isManager: true })).status, 403);

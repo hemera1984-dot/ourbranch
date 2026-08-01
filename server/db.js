@@ -95,14 +95,18 @@ export function openDb(file) {
       PRIMARY KEY (event_id, email)
     );
 
-    -- 출근·Aitom 자가 보고 (하루 한 줄)
+    -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸을 승계.
+    -- checked_at: 출석 체크를 누른 시각 (한 번 찍히면 유지)
     CREATE TABLE IF NOT EXISTS attendance (
-      id      INTEGER PRIMARY KEY AUTOINCREMENT,
-      email   TEXT NOT NULL,
-      date    TEXT NOT NULL,
-      present INTEGER NOT NULL DEFAULT 0,
-      reason  TEXT NOT NULL DEFAULT '',
-      aitom   INTEGER NOT NULL DEFAULT 0,
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      email      TEXT NOT NULL,
+      date       TEXT NOT NULL,
+      present    INTEGER NOT NULL DEFAULT 0,
+      reason     TEXT NOT NULL DEFAULT '',
+      aitom      INTEGER NOT NULL DEFAULT 0,
+      work       TEXT NOT NULL DEFAULT '',
+      lunch      TEXT NOT NULL DEFAULT '',
+      checked_at TEXT,
       UNIQUE(email, date)
     );
 
@@ -175,7 +179,10 @@ export function openDb(file) {
   for (const sql of [
     "ALTER TABLE members ADD COLUMN recruiter_email TEXT",
     "ALTER TABLE events ADD COLUMN place TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE perf_goals ADD COLUMN intro INTEGER NOT NULL DEFAULT 0"
+    "ALTER TABLE perf_goals ADD COLUMN intro INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE attendance ADD COLUMN work TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE attendance ADD COLUMN lunch TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE attendance ADD COLUMN checked_at TEXT"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   return db;

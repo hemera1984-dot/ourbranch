@@ -247,10 +247,24 @@ route("GET", /^\/attendance$/, false, (req, res, user) => {
 
 route("POST", /^\/attendance$/, false, async (req, res, user) => {
   const b = await readJson(req);
+  const date = b.date || today();
+  const prev = db.prepare("SELECT * FROM attendance WHERE email = ? AND date = ?").get(user.email, date) || {};
+  // 보낸 값만 갱신 — 출근일정만 고쳐도 출석 체크가 풀리지 않는다
+  const present = b.present != null ? (b.present ? 1 : 0) : (prev.present || 0);
+  // 출석 체크 시각은 처음 체크될 때 한 번 찍고 유지한다
+  const checkedAt = present && !prev.checked_at ? now() : (present ? prev.checked_at : null);
   db.prepare(
-    `INSERT INTO attendance (email, date, present, reason, aitom) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(email, date) DO UPDATE SET present = excluded.present, reason = excluded.reason, aitom = excluded.aitom`
-  ).run(user.email, b.date || today(), b.present ? 1 : 0, b.reason || "", b.aitom ? 1 : 0);
+    `INSERT INTO attendance (email, date, present, reason, aitom, work, lunch, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(email, date) DO UPDATE SET present = excluded.present, reason = excluded.reason,
+       aitom = excluded.aitom, work = excluded.work, lunch = excluded.lunch, checked_at = excluded.checked_at`
+  ).run(
+    user.email, date, present,
+    b.reason != null ? b.reason : (prev.reason || ""),
+    b.aitom != null ? (b.aitom ? 1 : 0) : (prev.aitom || 0),
+    b.work != null ? b.work : (prev.work || ""),
+    b.lunch != null ? b.lunch : (prev.lunch || ""),
+    checkedAt
+  );
   send(res, 200, { ok: true });
 });
 
