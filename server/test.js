@@ -126,6 +126,16 @@ async function main() {
   const otherView = await (await api("t-esl1", "GET", "/events?from=2026-08-04&to=2026-08-04")).json();
   assert.equal(otherView.filter(e => e.member_email === "fc2@x.com").length, 0); // 도입자 아닌 1팀 부지점장에겐 안 보인다
 
+  // 6-4) 강의: 누구나 등록(지점 전체), 다른 팀도 신청 가능, 토글
+  const lec = await (await api("t-fc1", "POST", "/events", { date: "2026-08-07", memberEmail: "fc1@x.com", kind: "강의", title: "화법 강의", place: "회의실" })).json();
+  const lecSeen = await (await api("t-fc2", "GET", "/events?from=2026-08-07&to=2026-08-07")).json();
+  assert.equal(lecSeen.filter(e => e.id === lec.id).length, 1);          // 2팀 팀원에게도 보임
+  assert.deepEqual(await (await api("t-fc2", "POST", "/events/" + lec.id + "/attend")).json(), { attending: true });
+  const lecAfter = (await (await api("t-fc1", "GET", "/events?from=2026-08-07&to=2026-08-07")).json()).find(e => e.id === lec.id);
+  assert.equal(lecAfter.attendees.length, 1);
+  assert.equal(lecAfter.attendees[0].name, "팀원2");
+  assert.deepEqual(await (await api("t-fc2", "POST", "/events/" + lec.id + "/attend")).json(), { attending: false });
+
   // 7) 출근 자가 보고 + upsert
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: true })).status, 200);
   assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", present: true, aitom: false })).status, 200);

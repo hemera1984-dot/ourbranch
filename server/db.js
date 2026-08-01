@@ -86,6 +86,15 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 
+    -- 강의 신청 — 지점 전체 일정(강의)에 팀 무관 신청 (2026-08-01)
+    CREATE TABLE IF NOT EXISTS event_attendees (
+      event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      email    TEXT NOT NULL,
+      name     TEXT NOT NULL DEFAULT '',
+      created  TEXT NOT NULL,
+      PRIMARY KEY (event_id, email)
+    );
+
     -- 출근·Aitom 자가 보고 (하루 한 줄)
     CREATE TABLE IF NOT EXISTS attendance (
       id      INTEGER PRIMARY KEY AUTOINCREMENT,

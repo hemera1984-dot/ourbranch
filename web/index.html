@@ -99,11 +99,32 @@
 
       <div class="desktop-only">
       <div class="toolbar" style="margin-bottom:10px">
-        <button class="btn" id="week-prev">이전 주</button>
-        <button class="btn" id="week-today">이번 주</button>
-        <button class="btn" id="week-next">다음 주</button>
-        <strong id="week-label" style="font-variant-numeric:tabular-nums"></strong>
+        <span class="seg">
+          <button class="btn seg-btn active" id="view-cal">달력</button>
+          <button class="btn seg-btn" id="view-week">주간 확인표</button>
+        </span>
+        <span id="cal-controls">
+          <span class="seg">
+            <button class="btn seg-btn active" id="scope-team">팀 일정</button>
+            <button class="btn seg-btn" id="scope-mine">내 일정</button>
+          </span>
+          <button class="btn" id="cal-prev">이전 달</button>
+          <button class="btn" id="cal-today">이번 달</button>
+          <button class="btn" id="cal-next">다음 달</button>
+          <strong id="cal-label" style="font-variant-numeric:tabular-nums"></strong>
+        </span>
+        <span id="week-controls" hidden>
+          <button class="btn" id="week-prev">이전 주</button>
+          <button class="btn" id="week-today">이번 주</button>
+          <button class="btn" id="week-next">다음 주</button>
+          <strong id="week-label" style="font-variant-numeric:tabular-nums"></strong>
+        </span>
       </div>
+      <div id="cal-wrap" class="cal-layout">
+        <div class="card"><div id="cal-view"></div></div>
+        <div class="card" id="cal-day"></div>
+      </div>
+      <div id="week-wrap" hidden>
       <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
       <div class="section">
         <div class="section-head">
@@ -116,7 +137,8 @@
         </div>
         <div id="ev-grid" class="card"></div>
       </div>
-      </div>
+      </div><!-- /week-wrap -->
+      </div><!-- /desktop-only -->
     </section>
 
     <section id="screen-board" hidden>
@@ -206,7 +228,7 @@
   })());
   var taGrid = null, perfGrids = [], evGrid = null;
   var ROLE_RANK = { "지점장": 0, "부지점장": 1, "팀장": 2, "부팀장": 3, "팀원": 4 };
-  var KINDS = ["상담", "외근", "내근", "교육", "면접", "회의", "휴가", "마감", "기타"];
+  var KINDS = ["상담", "외근", "내근", "교육", "강의", "면접", "회의", "휴가", "마감", "기타"];
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -315,7 +337,7 @@
     $("month-nav").hidden = !(name === "ta" || name === "perf");
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
-    if (name === "sched") { if (isMobile()) loadDay(); else loadWeek(); }
+    if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
     if (name === "board") loadBoard();
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
@@ -597,12 +619,54 @@
         ? '<a class="slot-title" target="_blank" href="https://app.insurguard.life/web/customers/?code=' + encodeURIComponent(e.customer_code) + '">' + esc(e.title) + "</a>"
         : '<span class="slot-title">' + esc(e.title) + "</span>")
       : "";
+    // 강의: 지점 전체 대상 — 신청 인원과 원탭 신청 버튼
+    var lecture = "";
+    if (e.kind === "강의") {
+      var att = e.attendees || [];
+      var meIn = att.some(function (a) { return a.email === BOOT.me.email; });
+      var isOwner = e.member_email === BOOT.me.email;
+      lecture = '<span class="slot-place">신청 ' + att.length + "명"
+        + (isOwner && att.length ? " (" + esc(att.map(function (a) { return a.name; }).join(", ")) + ")" : "") + "</span>"
+        + (!isOwner ? '<button class="btn att-btn' + (meIn ? "" : " primary") + '" data-eid="' + e.id + '" style="padding:1px 8px;font-size:12px">' + (meIn ? "신청 취소" : "신청") + "</button>" : "");
+    }
     return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '">'
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
       + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
       + title
       + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "")
+      + lecture
       + "</div>";
+  }
+
+  // 하루 상세 목록 — 모바일 하루 보기와 달력 우측 패널이 같이 쓴다
+  function dayGroupsHtml(evs, teamId) {
+    var groups = [{ em: "", name: "팀 공유", sub: "" }];
+    rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: m.name, sub: m.role }); });
+    evs.forEach(function (e) {
+      if (e.member_email && !groups.some(function (g) { return g.em === e.member_email; }))
+        groups.push({ em: e.member_email, name: nameOf(e.member_email), sub: BOOT.me.recruits.indexOf(e.member_email) >= 0 ? "내 도입" : "명단 외" });
+    });
+    return groups.map(function (g) {
+      var items = evs.filter(function (e) { return (e.member_email || "") === g.em; });
+      if (!items.length && g.em !== BOOT.me.email && g.em !== "") return "";
+      return '<div class="day-group"><div class="day-name">' + esc(g.name)
+        + (g.sub ? '<span class="sub">' + esc(g.sub) + "</span>" : "") + "</div>"
+        + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">일정 없음</span>')
+        + "</div>";
+    }).join("");
+  }
+  // 목록 컨테이너 공통 클릭: 강의 신청 → 일정 수정 순으로 판정
+  function dayListClick(e, refresh) {
+    var att = e.target.closest(".att-btn");
+    if (att) { api("/events/" + att.dataset.eid + "/attend", { method: "POST" }).then(refresh); return; }
+    var slot = e.target.closest(".slot");
+    if (!slot || !slot.dataset.eid) return;
+    if (e.target.closest("a.slot-title")) return;
+    var ev = evsById[slot.dataset.eid];
+    if (!ev || ev.source === "myguardian") return;
+    var em = ev.member_email || "";
+    if (!canWriteCell(em)) return;
+    openPop(null, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: refresh });
   }
   function renderWeekView(evs, days) {
     var todayStr = fmtDate(new Date());
@@ -754,20 +818,7 @@
       evsById = {};
       evs.forEach(function (e) { evsById[e.id] = e; });
 
-      var groups = [{ em: "", name: "팀 공유", sub: "" }];
-      rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: m.name, sub: m.role }); });
-      evs.forEach(function (e) {
-        if (e.member_email && !groups.some(function (g) { return g.em === e.member_email; }))
-          groups.push({ em: e.member_email, name: nameOf(e.member_email), sub: "명단 외" });
-      });
-      var h = groups.map(function (g) {
-        var items = evs.filter(function (e) { return (e.member_email || "") === g.em; });
-        if (!items.length && g.em !== BOOT.me.email && g.em !== "") return "";
-        return '<div class="day-group"><div class="day-name">' + esc(g.name)
-          + (g.sub ? '<span class="sub">' + esc(g.sub) + "</span>" : "") + "</div>"
-          + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">일정 없음</span>')
-          + "</div>";
-      }).join("");
+      var h = dayGroupsHtml(evs, teamId);
       $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
     });
   }
@@ -781,16 +832,113 @@
   $("day-add").addEventListener("click", function () {
     openPop(null, { em: BOOT.me.email, date: fmtDate(dayBase), kind: "상담", pickMember: true, onDone: loadDay });
   });
-  $("day-view").addEventListener("click", function (e) {
-    var slot = e.target.closest(".slot");
-    if (!slot || !slot.dataset.eid) return;
-    if (e.target.closest("a.slot-title")) return;
-    var ev = evsById[slot.dataset.eid];
-    if (!ev || ev.source === "myguardian") return;
-    var em = ev.member_email || "";
-    if (!canWriteCell(em)) return;
-    openPop(null, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: loadDay });
+  $("day-view").addEventListener("click", function (e) { dayListClick(e, loadDay); });
+
+  // ── 데스크톱: 달력 보기 (기본) ↔ 주간 확인표 전환 ──
+  var schedView = (function () { try { return localStorage.getItem("ob_sched_view") || "cal"; } catch (e) { return "cal"; } })();
+  var calBase = new Date();
+  var calScope = "team";          // team = 팀 일정 / mine = 내 일정
+  var selDate = fmtDate(new Date());
+  var calEvs = [];
+
+  function setSchedView(v) {
+    schedView = v;
+    try { localStorage.setItem("ob_sched_view", v); } catch (e) {}
+    $("view-cal").classList.toggle("active", v === "cal");
+    $("view-week").classList.toggle("active", v === "week");
+    $("cal-controls").hidden = v !== "cal";
+    $("week-controls").hidden = v !== "week";
+    $("cal-wrap").style.display = v === "cal" ? "" : "none";
+    $("week-wrap").hidden = v !== "week";
+    if (v === "cal") loadCal(); else loadWeek();
+  }
+  function scopePass(e) {
+    if (calScope === "team") return true;
+    return e.member_email === BOOT.me.email || !e.member_email;   // 내 일정 + 팀 공유·지점 공통
+  }
+  function loadCal() {
+    var y = calBase.getFullYear(), mo = calBase.getMonth();
+    $("cal-label").textContent = y + "년 " + (mo + 1) + "월";
+    var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
+    var teamId = myTeamId();
+    api("/events?from=" + from + "&to=" + to).then(function (evs) {
+      calEvs = evs.filter(function (e) {
+        var visible = e.team_id === teamId || e.team_id == null
+          || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
+        return visible && e.status !== "취소";
+      });
+      evsById = {};
+      calEvs.forEach(function (e) { evsById[e.id] = e; });
+      renderCalGrid();
+      renderCalDay();
+    });
+  }
+  function renderCalGrid() {
+    var y = calBase.getFullYear(), mo = calBase.getMonth();
+    var todayStr = fmtDate(new Date());
+    var pad = (new Date(y, mo, 1).getDay() + 6) % 7;
+    var days = new Date(y, mo + 1, 0).getDate();
+    var h = ['<div class="cal-grid">'];
+    ["월", "화", "수", "목", "금", "토", "일"].forEach(function (n, i) {
+      h.push('<div class="cal-dow' + (i >= 5 ? " weekend" : "") + '">' + n + "</div>");
+    });
+    for (var p = 0; p < pad; p++) h.push('<div class="cal-cell pad"></div>');
+    for (var d = 1; d <= days; d++) {
+      var ds = fmtDate(new Date(y, mo, d));
+      var items = calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
+        .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      var cell = ['<div class="cal-cell' + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
+      cell.push('<span class="cal-daynum">' + d + "</span>");
+      items.slice(0, 3).forEach(function (e) {
+        var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+        cell.push('<div class="cal-ev"><span class="dot ' + kindCls + '"></span>'
+          + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
+          + "<span>" + esc(e.title || e.kind) + "</span></div>");
+      });
+      if (items.length > 3) cell.push('<div class="cal-more">+' + (items.length - 3) + "건</div>");
+      cell.push("</div>");
+      h.push(cell.join(""));
+    }
+    h.push("</div>");
+    $("cal-view").innerHTML = h.join("");
+  }
+  function renderCalDay() {
+    var d = new Date(selDate + "T00:00:00");
+    var items = calEvs.filter(function (e) { return e.date === selDate && scopePass(e); });
+    $("cal-day").innerHTML = '<div class="cal-day-head"><strong>'
+      + (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()] + "</strong>"
+      + '<button class="btn primary" id="cal-day-add">일정 추가</button></div>'
+      + (dayGroupsHtml(items, myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>');
+  }
+  $("cal-view").addEventListener("click", function (e) {
+    var cell = e.target.closest(".cal-cell");
+    if (!cell || !cell.dataset.date) return;
+    selDate = cell.dataset.date;
+    renderCalGrid();
+    renderCalDay();
   });
+  $("cal-day").addEventListener("click", function (e) {
+    if (e.target.id === "cal-day-add") {
+      openPop(e.target, { em: BOOT.me.email, date: selDate, kind: "상담", pickMember: true, onDone: loadCal });
+      return;
+    }
+    dayListClick(e, loadCal);
+  });
+  $("view-cal").addEventListener("click", function () { setSchedView("cal"); });
+  $("view-week").addEventListener("click", function () { setSchedView("week"); });
+  $("scope-team").addEventListener("click", function () {
+    calScope = "team";
+    $("scope-team").classList.add("active"); $("scope-mine").classList.remove("active");
+    renderCalGrid(); renderCalDay();
+  });
+  $("scope-mine").addEventListener("click", function () {
+    calScope = "mine";
+    $("scope-mine").classList.add("active"); $("scope-team").classList.remove("active");
+    renderCalGrid(); renderCalDay();
+  });
+  $("cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadCal(); });
+  $("cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadCal(); });
+  $("cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadCal(); });
 
   $("week-prev").addEventListener("click", function () { weekOffset--; loadWeek(); });
   $("week-today").addEventListener("click", function () { weekOffset = 0; loadWeek(); });

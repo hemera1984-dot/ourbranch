@@ -7,6 +7,7 @@
   --navy: #102a4e; --cyan: #00a6c7;
   --green: #0d7a3f; --green-bg: #e8f5ee; --red: #b42318; --red-bg: #fdecea; --amber: #93540a; --amber-bg: #fdf3e0;
   --k-meet-bg: #eceff4; --k-meet-fg: #102a4e; --k-int-bg: #efe9fb; --k-int-fg: #5b3fa8;
+  --k-lec-bg: #e0f4f8; --k-lec-fg: #0b6f85;
 }
 
 /* 다크모드 — 같은 문법(선 구분·신호색), 명도만 뒤집는다.
@@ -17,6 +18,7 @@
   --navy: #101114; --cyan: #00a6c7;
   --green: #58c68b; --green-bg: #16291e; --red: #ef7f74; --red-bg: #331a17; --amber: #e0aa50; --amber-bg: #2e2510;
   --k-meet-bg: #26282e; --k-meet-fg: #c3c8d2; --k-int-bg: #29243a; --k-int-fg: #b9a8e8;
+  --k-lec-bg: #10333c; --k-lec-fg: #6fd0e6;
   --today-bg: #1e2023;
 }
 :root { --today-bg: #f2f7fd; }
@@ -149,6 +151,17 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .k-휴가 { background: var(--red-bg); color: var(--red); }
 .k-내근, .k-기타 { background: var(--canvas); color: var(--sub); border: 1px solid var(--line); }
 .k-면접 { background: var(--k-int-bg); color: var(--k-int-fg); }
+.k-강의 { background: var(--k-lec-bg); color: var(--k-lec-fg); }
+
+/* 월간 달력 점 색 — 구분별 원색 */
+.dot.k-상담, .dot.k-고객미팅 { background: var(--blue); }
+.dot.k-외근 { background: var(--green); }
+.dot.k-교육 { background: var(--amber); }
+.dot.k-강의 { background: var(--cyan); }
+.dot.k-면접 { background: #8a63d2; }
+.dot.k-회의 { background: var(--sub); }
+.dot.k-휴가, .dot.k-마감 { background: var(--red); }
+.dot.k-내근, .dot.k-기타 { background: var(--ter); }
 .k-고객미팅 { background: var(--blue-bg); color: var(--blue); }
 a.slot-title { color: var(--blue); text-decoration: none; }
 a.slot-title:hover { text-decoration: underline; }
@@ -209,6 +222,37 @@ a.slot-title:hover { text-decoration: underline; }
 .roster-row:first-child { border-top: 0; }
 .roster-row .name { font-weight: 600; min-width: 90px; }
 .roster-row .meta { color: var(--sub); font-size: 12px; flex: 1; }
+
+/* ── 월간 달력 + 우측 하루 상세 ── */
+.seg { display: inline-flex; }
+.seg .seg-btn { border-radius: 0; margin-left: -1px; }
+.seg .seg-btn:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.seg .seg-btn:last-child { border-radius: 0 4px 4px 0; }
+.seg .seg-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.cal-layout { display: grid; grid-template-columns: 1fr 340px; gap: 12px; align-items: start; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-dow { padding: 7px 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--sub); background: var(--canvas); border-bottom: 1px solid var(--line); }
+.cal-dow.weekend { color: var(--red); }
+.cal-cell {
+  min-height: 92px; padding: 6px 7px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background .14s; min-width: 0;
+}
+.cal-grid > :nth-child(7n) { border-right: 0; }
+.cal-cell:hover { background: var(--blue-bg); }
+.cal-cell.pad { cursor: default; background: var(--canvas); }
+.cal-cell.pad:hover { background: var(--canvas); }
+.cal-cell.today .cal-daynum { color: #fff; background: var(--blue); }
+.cal-cell.sel { box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-daynum {
+  display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center;
+  border-radius: 3px; font-size: 12px; font-weight: 700; margin-bottom: 3px;
+}
+.cal-ev { display: flex; align-items: baseline; gap: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ev .dot { flex: none; width: 7px; height: 7px; border-radius: 2px; }
+.cal-more { font-size: 11px; color: var(--ter); }
+.cal-day-head { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.cal-day-head strong { flex: 1; font-size: 15px; }
+@media (max-width: 1200px) { .cal-layout { grid-template-columns: 1fr 300px; } }
 
 /* 미션 달성률 — 상태 표시 진행바 (0.3초 허용 항목) */
 .progress { position: relative; flex: none; width: 120px; height: 8px; border-radius: 3px; background: var(--canvas); border: 1px solid var(--line); overflow: hidden; }

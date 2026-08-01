@@ -155,14 +155,30 @@ route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
-    .filter(e => canSeeTeam(user, e.team_id) || (e.member_email && user.recruits.includes(e.member_email)));
+    .filter(e => canSeeTeam(user, e.team_id) || (e.member_email && user.recruits.includes(e.member_email)))
+    .map(e => e.kind === "강의"
+      ? { ...e, attendees: db.prepare("SELECT email, name FROM event_attendees WHERE event_id = ? ORDER BY created").all(e.id) }
+      : e);
   send(res, 200, list);
+});
+
+// 강의 신청 — 팀이 달라도 지점 전체 강의에 신청할 수 있다. 다시 누르면 취소.
+route("POST", /^\/events\/(\d+)\/attend$/, false, async (req, res, user, m) => {
+  const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
+  if (!e || e.kind !== "강의") return send(res, 404, { error: "강의가 아닙니다" });
+  if (!canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
+  const has = db.prepare("SELECT 1 FROM event_attendees WHERE event_id = ? AND email = ?").get(e.id, user.email);
+  if (has) db.prepare("DELETE FROM event_attendees WHERE event_id = ? AND email = ?").run(e.id, user.email);
+  else db.prepare("INSERT INTO event_attendees (event_id, email, name, created) VALUES (?, ?, ?, ?)")
+    .run(e.id, user.email, user.name, now());
+  send(res, 200, { attending: !has });
 });
 
 route("POST", /^\/events$/, false, async (req, res, user) => {
   const b = await readJson(req);
-  const teamId = b.teamId ?? user.teamId;
-  if (teamId == null || !b.date) return send(res, 400, { error: "팀·날짜가 없습니다" });
+  // 강의는 지점 전체 일정(team_id NULL) — 등록자 누구나, 강사 = 본인
+  const teamId = b.kind === "강의" ? null : (b.teamId ?? user.teamId);
+  if ((teamId == null && b.kind !== "강의") || !b.date) return send(res, 400, { error: "팀·날짜가 없습니다" });
   if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   // 팀 공유 일정(개인 지정 없음)은 관리자만, 개인 일정은 본인 것만 (관리자는 팀원 것도)
   const memberEmail = b.memberEmail ? b.memberEmail.toLowerCase() : null;
