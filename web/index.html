@@ -67,9 +67,7 @@
         <div class="toolbar">
           <strong style="font-size:15px">팀원 초대</strong>
           <select id="inv-team" class="input" hidden></select>
-          <select id="inv-role" class="input">
-            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option>
-          </select>
+          <select id="inv-role" class="input"></select>
           <button class="btn primary" id="inv-make">초대 문구 만들기</button>
           <span class="note">누구나 초대할 수 있고, 들어온 사람은 승인 후에 열립니다.</span>
         </div>
@@ -86,9 +84,7 @@
         <div class="toolbar">
           <input id="ro-name" class="input" placeholder="이름" style="width:110px">
           <input id="ro-email" class="input" placeholder="이메일 (없으면 비워두기)" style="width:220px">
-          <select id="ro-role" class="input">
-            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option><option>지점장</option>
-          </select>
+          <select id="ro-role" class="input"></select>
           <select id="ro-recruiter" class="input"><option value="">도입자 없음</option></select>
           <button class="btn primary" id="ro-add">추가</button>
           <button class="btn" id="ro-cancel" hidden>취소</button>
@@ -311,7 +307,21 @@
     try { return localStorage.getItem("ob_theme") || "light"; } catch (e) { return "light"; }
   })());
   var taGrid = null, perfGrids = [], evGrid = null;
-  var ROLE_RANK = { "지점장": 0, "부지점장": 1, "팀장": 2, "부팀장": 3, "팀원": 4 };
+  // 직급 — 마이가디언 서버의 GRADES와 같은 코드·순서를 쓴다 (한 곳에서만 관리)
+  // BM 지점장 > ESL 부지점장 > SSL 팀장 > GSL 부팀장 > FC 팀원
+  var GRADES = [
+    { code: "BM", name: "지점장" },
+    { code: "ESL", name: "부지점장" },
+    { code: "SSL", name: "팀장" },
+    { code: "GSL", name: "부팀장" },
+    { code: "FC", name: "팀원" }
+  ];
+  var ROLE_RANK = {};
+  GRADES.forEach(function (g, i) { ROLE_RANK[g.name] = i; });
+  function gradeCode(name) {
+    var g = GRADES.filter(function (x) { return x.name === name; })[0];
+    return g ? g.code : "";
+  }
   var KINDS = ["상담", "외근", "내근", "교육", "강의", "면접", "회의", "휴가", "마감", "기타"];
 
   function $(id) { return document.getElementById(id); }
@@ -442,7 +452,20 @@
     var v = Number($("team-pick").value);
     return isNaN(v) || !v ? (BOOT.teams[0] ? BOOT.teams[0].id : null) : v;
   }
+  function fillRoleSelects() {
+    var asc = GRADES.slice().reverse();               // 팀원 → 지점장 순
+    var opts = function (list) {
+      return list.map(function (g) {
+        return '<option value="' + g.name + '">' + g.name + " (" + g.code + ")</option>";
+      }).join("");
+    };
+    $("ro-role").innerHTML = opts(asc);
+    // 초대로는 지점장을 만들지 않는다 (조직도에서 직접 지정)
+    $("inv-role").innerHTML = opts(asc.filter(function (g) { return g.code !== "BM"; }));
+  }
+
   function renderShell() {
+    fillRoleSelects();
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
     $("me-name").textContent = BOOT.me.name;
@@ -459,6 +482,34 @@
     return api("/bootstrap").then(function (b) { BOOT = b; renderShell(); });
   }
 
+  // 미확인 공지·미달성 미션을 탭에 점으로 — 홈을 건너뛰어도 놓치지 않게 (앱 내 알림)
+  function refreshBadges() {
+    Promise.all([
+      api("/notices").catch(function () { return []; }),
+      api("/tasks").catch(function () { return []; })
+    ]).then(function (r) {
+      var teamId = myTeamId();
+      var unread = r[0].filter(function (n) {
+        return (n.team_id == null || n.team_id === teamId)
+          && !(n.reads || []).some(function (x) { return x.email === BOOT.me.email; });
+      }).length;
+      var undone = r[1].filter(function (t) {
+        return t.team_id === teamId && isMyTask(t) && !myDone(t);
+      }).length;
+      var link = document.querySelector('#nav a[data-screen="board"]');
+      if (!link) return;
+      var n = unread + undone;
+      link.textContent = "미션·공지";
+      if (n > 0) {
+        var b = document.createElement("span");
+        b.className = "nav-badge";
+        b.textContent = n > 9 ? "9+" : String(n);
+        b.title = "안 읽은 공지 " + unread + "건 · 미달성 미션 " + undone + "건";
+        link.appendChild(b);
+      }
+    });
+  }
+
   function show(name) {
     screen = name;
     SCREENS.forEach(function (s) { $("screen-" + s).hidden = s !== name; });
@@ -467,6 +518,7 @@
     });
     $("month-nav").hidden = !(name === "ta" || name === "perf");
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
+    refreshBadges();
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
@@ -716,7 +768,7 @@
       }
       var recName = m.recruiter_email ? nameOf(m.recruiter_email) : "";
       return '<div class="org-row' + (m.role === "팀원" || m.role === "부팀장" || m.role === "팀장" ? " depth-1" : "") + '">'
-        + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
+        + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '" title="' + esc(gradeCode(m.role)) + '">' + esc(m.role) + "</span>"
         + '<span class="name">' + esc(memberLabel(m)) + "</span>"
         + '<span class="meta">' + esc(m.email && m.email.indexOf("@미등록.local") < 0 ? m.email : "이메일 미등록")
         + (recName ? " · 도입 " + esc(recName) : "")
@@ -1651,6 +1703,7 @@
     Promise.all([api("/tasks"), api("/notices")]).then(function (res) {
       renderTasks(res[0].filter(function (t) { return t.team_id === teamId; }));
       renderNotices(res[1].filter(function (n) { return n.team_id == null || n.team_id === teamId; }));
+      refreshBadges();          // 확인·달성 직후 탭 배지도 함께 줄어들게
     });
   }
 

@@ -320,3 +320,10 @@ a.slot-title:hover { text-decoration: underline; }
   flex: none; width: 6px; height: 6px; border-radius: 50%;
   background: var(--blue); display: inline-block;
 }
+
+/* 탭 배지 — 미확인 공지·미달성 미션 (앱 내 알림) */
+.nav-badge {
+  display: inline-block; margin-left: 6px; min-width: 18px; padding: 0 5px;
+  background: var(--red); color: #fff; border-radius: 9px;
+  font-size: 11px; font-weight: 700; text-align: center; line-height: 18px;
+}
