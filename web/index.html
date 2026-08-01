@@ -6,6 +6,11 @@
 <title>하랑지점</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <link rel="stylesheet" href="assets/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#102a4e">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="하랑지점">
 <script src="assets/grid.js"></script>
 </head>
 <body>
@@ -37,6 +42,7 @@
       <p class="nav-group-label">관리</p>
       <a href="#org" data-screen="org">조직도</a>
       <a href="#invite" data-screen="invite">초대·승인</a>
+      <a href="#install" data-screen="install">앱 설치</a>
     </nav>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
       <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
@@ -101,6 +107,60 @@
       <div class="section">
         <div class="section-head"><h2>계정 연결 현황</h2><p>로그인할 수 있는 사람과 아직 자리만 있는 사람입니다.</p></div>
         <div class="card"><div id="link-list"></div></div>
+      </div>
+    </section>
+
+    <section id="screen-install" hidden>
+      <p class="eyebrow">설치</p>
+      <h1>앱 설치</h1>
+      <p class="page-desc">홈 화면에 추가하면 앱처럼 아이콘으로 열립니다. 주소를 매번 찾지 않아도 되고,
+        주소창 없이 화면을 넓게 씁니다. 설치해도 용량을 거의 쓰지 않습니다.</p>
+
+      <div class="card card-pad" id="ins-state" style="margin-bottom:14px"></div>
+
+      <div class="section">
+        <div class="section-head"><h2>휴대폰·태블릿에서 열기</h2></div>
+        <div class="card card-pad">
+          <p style="margin:0 0 10px">아래 주소를 카톡으로 보내고, 받은 사람이 휴대폰에서 그 링크를 누르면 됩니다.</p>
+          <div class="toolbar">
+            <input class="input" id="ins-url" readonly style="flex:1;min-width:200px">
+            <button class="btn primary" id="ins-copy">주소 복사</button>
+            <button class="btn" id="ins-copy-guide">설치 안내 문구 복사</button>
+            <span class="note" id="ins-msg"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h2>기기별 설치 방법</h2></div>
+        <div class="ins-grid">
+          <div class="card card-pad">
+            <strong>아이폰·아이패드 (사파리)</strong>
+            <ol class="ins-steps">
+              <li>사파리로 이 주소를 엽니다. (크롬이 아니라 사파리여야 합니다)</li>
+              <li>아래쪽 가운데 <b>공유</b> 단추를 누릅니다.</li>
+              <li>목록을 내려 <b>홈 화면에 추가</b>를 누릅니다.</li>
+              <li>오른쪽 위 <b>추가</b>를 누르면 끝입니다.</li>
+            </ol>
+          </div>
+          <div class="card card-pad">
+            <strong>안드로이드 (크롬)</strong>
+            <ol class="ins-steps">
+              <li>크롬으로 이 주소를 엽니다.</li>
+              <li>오른쪽 위 <b>점 세 개</b>를 누릅니다.</li>
+              <li><b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 누릅니다.</li>
+              <li><b>설치</b>를 누르면 끝입니다.</li>
+            </ol>
+          </div>
+          <div class="card card-pad">
+            <strong>컴퓨터 (크롬·엣지)</strong>
+            <ol class="ins-steps">
+              <li>주소창 오른쪽 끝의 <b>설치 아이콘</b>을 누릅니다.</li>
+              <li>안 보이면 오른쪽 위 <b>점 세 개 → 캐스트·저장 및 공유 → 페이지를 앱으로 설치</b>.</li>
+              <li>바탕화면 아이콘으로 열립니다.</li>
+            </ol>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -297,7 +357,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "invite", "sched", "att", "board", "ta", "perf"];
+  var SCREENS = ["home", "org", "invite", "install", "sched", "att", "board", "ta", "perf"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -526,6 +586,7 @@
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
     if (name === "invite") renderInvite();
+    if (name === "install") renderInstall();
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
     if (name === "att") loadAtt();
     if (name === "board") loadBoard();
@@ -755,6 +816,59 @@
       : "";
     renderOrgChart();
   }
+
+  // ── 앱 설치 ──
+  var deferredInstall = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferredInstall = e;            // 크롬·엣지에서만 온다
+    if (!$("screen-install").hidden) renderInstall();
+  });
+  function isStandalone() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+  function appUrl() {
+    return location.origin + location.pathname.replace(/[^/]*$/, "");
+  }
+  function renderInstall() {
+    $("ins-url").value = appUrl();
+    var box = $("ins-state");
+    if (isStandalone()) {
+      box.innerHTML = '<strong style="color:var(--green)">이미 설치된 앱으로 열고 있습니다.</strong>'
+        + '<p class="tile-sub" style="margin:6px 0 0">홈 화면 아이콘으로 잘 열리고 있습니다. 더 할 일이 없습니다.</p>';
+      return;
+    }
+    if (deferredInstall) {
+      box.innerHTML = '<div class="toolbar"><button class="btn primary" id="ins-now">지금 설치</button>'
+        + '<span class="note">이 기기에 바로 설치할 수 있습니다.</span></div>';
+      $("ins-now").addEventListener("click", function () {
+        deferredInstall.prompt();
+        deferredInstall.userChoice.then(function () { deferredInstall = null; renderInstall(); });
+      });
+      return;
+    }
+    var ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    box.innerHTML = '<strong>' + (ios ? "사파리 공유 단추 → 홈 화면에 추가" : "브라우저 메뉴에서 홈 화면에 추가")
+      + "</strong>" + '<p class="tile-sub" style="margin:6px 0 0">아래 기기별 방법을 그대로 따라 하시면 됩니다.</p>';
+  }
+  function installGuideText() {
+    return [
+      "[" + (BOOT.branchName || "지점") + " 팀 관리 앱 설치]",
+      "",
+      "아래 주소를 휴대폰에서 열어 주세요.",
+      appUrl(),
+      "",
+      "회사 구글 계정으로 로그인하면 됩니다.",
+      "",
+      "홈 화면에 아이콘으로 두는 방법",
+      "· 아이폰(사파리): 아래 공유 단추 → 홈 화면에 추가",
+      "· 안드로이드(크롬): 오른쪽 위 점 세 개 → 홈 화면에 추가",
+      "",
+      "일정·일일보고·미션·공지·업적을 한 곳에서 봅니다."
+    ].join("\n");
+  }
+  $("ins-copy").addEventListener("click", function () { copyText(appUrl(), "ins-msg"); });
+  $("ins-copy-guide").addEventListener("click", function () { copyText(installGuideText(), "ins-msg"); });
 
   // 초대·승인 화면 — 계정 연결만 다룬다 (조직 구조는 조직도에서)
   function renderInvite() {

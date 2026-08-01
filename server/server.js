@@ -776,8 +776,14 @@ const server = createServer(async (req, res) => {
     const file = normalize(join(WEB_DIR, rel));
     try {
       if (file.startsWith(normalize(WEB_DIR)) && existsSync(file) && extname(file)) {
-        const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
-        res.writeHead(200, { "Content-Type": (types[extname(file)] || "application/octet-stream") + "; charset=utf-8" });
+        const types = {
+          ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
+          ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
+          ".webmanifest": "application/manifest+json", ".json": "application/json"
+        };
+        const ct = types[extname(file)] || "application/octet-stream";
+        const binary = /^(image|font)\//.test(ct) || ct === "application/octet-stream";
+        res.writeHead(200, { "Content-Type": ct + (binary ? "" : "; charset=utf-8") });
         return res.end(readFileSync(file));
       }
       if (path === "/") {

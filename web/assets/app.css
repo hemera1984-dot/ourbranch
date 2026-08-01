@@ -415,3 +415,11 @@ a.slot-title:hover { text-decoration: underline; }
   background: var(--canvas); border: 1px solid var(--line);
   font-size: 11px; color: var(--ter); flex: none;
 }
+
+/* 앱 설치 안내 */
+.ins-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.ins-grid strong { display: block; margin-bottom: 8px; font-size: 14px; }
+.ins-steps { margin: 0; padding-left: 18px; }
+.ins-steps li { margin: 5px 0; color: var(--sub); }
+.ins-steps b { color: var(--ink); }
+@media (max-width: 900px) { .ins-grid { grid-template-columns: 1fr; } }
