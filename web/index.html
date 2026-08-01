@@ -63,6 +63,12 @@
       <p class="page-desc">지점장 아래 부지점장이 팀의 단위입니다. 여기서 넣은 명단이 일정·일지·업적 화면에 그대로 나열됩니다.</p>
       <div id="pending-box" class="card" hidden style="margin-bottom:14px"></div>
 
+      <div class="toolbar" id="org-tools" style="margin-bottom:10px">
+        <button class="btn" id="ro-team-add-btn" hidden>팀 추가</button>
+        <span class="note" id="org-hint"></span>
+      </div>
+      <div class="card"><div class="oc-wrap"><div id="org-chart"></div></div></div>
+
       <div class="card card-pad" style="margin-bottom:14px">
         <div class="toolbar">
           <strong style="font-size:15px">팀원 초대</strong>
@@ -80,23 +86,6 @@
         </div>
       </div>
 
-      <div id="org-admin" class="card card-pad" hidden style="margin-bottom:14px">
-        <div class="toolbar">
-          <input id="ro-name" class="input" placeholder="이름" style="width:110px">
-          <input id="ro-email" class="input" placeholder="이메일 (없으면 비워두기)" style="width:220px">
-          <select id="ro-role" class="input"></select>
-          <select id="ro-recruiter" class="input"><option value="">도입자 없음</option></select>
-          <button class="btn primary" id="ro-add">추가</button>
-          <button class="btn" id="ro-cancel" hidden>취소</button>
-          <span class="note">지점장은 팀 소속 없이 지점 직속으로 들어갑니다. 도입자는 팀이 달라도 이 사람의 일정을 볼 수 있습니다.</span>
-        </div>
-        <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
-          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑4팀)" style="width:180px">
-          <button class="btn" id="ro-team-add">팀 추가</button>
-          <span class="note">팀 이름 변경·삭제는 각 팀 제목 옆에서 합니다.</span>
-        </div>
-      </div>
-      <div id="org-list"></div>
     </section>
 
     <section id="screen-sched" hidden>
@@ -459,7 +448,6 @@
         return '<option value="' + g.name + '">' + g.name + " (" + g.code + ")</option>";
       }).join("");
     };
-    $("ro-role").innerHTML = opts(asc);
     // 초대로는 지점장을 만들지 않는다 (조직도에서 직접 지정)
     $("inv-role").innerHTML = opts(asc.filter(function (g) { return g.code !== "BM"; }));
   }
@@ -739,62 +727,229 @@
   });
 
   // ── 조직도 ──
+  // ── 조직도 = 편집기 ──
+  // 명단을 따로 관리하지 않는다. 차트 위에서 바로 추가·수정·이동한다.
+  var TEAM_COLORS = ["#2f6f9f", "#3f8f7a", "#8a6a3f", "#6a5a9a", "#9a5a6a", "#4a7a4a"];
+
   function renderOrg() {
-    $("org-admin").hidden = !BOOT.me.isManager;
-    $("ro-team-tools").hidden = !BOOT.me.isBranchHead;
     renderPending();
+    $("ro-team-add-btn").hidden = !BOOT.me.isBranchHead;
+    $("org-hint").textContent = BOOT.me.isManager
+      ? "칸을 눌러 바로 고칩니다 — 팀 이름·팀원을 누르면 수정, 「+ 팀원」으로 추가."
+      : "";
     var it = $("inv-team");
     if (BOOT.me.seesAll && BOOT.teams.length > 1) {
       it.hidden = false;
       it.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
     }
-    var rec = $("ro-recruiter");
-    var cur = rec.value;
-    rec.innerHTML = '<option value="">도입자 없음</option>' + BOOT.members.map(function (m) {
-      return '<option value="' + esc(m.email) + '">도입자: ' + esc(m.name) + "</option>";
-    }).join("");
-    rec.value = cur;
-
-    function rowHtml(m) {
-      var tools = "";
-      if (BOOT.me.isManager) tools += '<button class="btn ro-edit" data-email="' + esc(m.email) + '">수정</button>';
-      if (BOOT.me.isManager) tools += '<button class="btn ro-del" data-email="' + esc(m.email) + '">삭제</button>';
-      if (BOOT.me.isSuper) {
-        tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="isManager" data-on="' + (m.is_manager ? 1 : 0) + '">'
-          + (m.is_manager ? "관리자 해제" : "관리자 지정") + "</button>";
-        if (m.role === "부지점장")
-          tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="canViewAll" data-on="' + (m.can_view_all ? 1 : 0) + '">'
-            + (m.can_view_all ? "전체열람 회수" : "전체열람 부여") + "</button>";
-      }
-      var recName = m.recruiter_email ? nameOf(m.recruiter_email) : "";
-      return '<div class="org-row' + (m.role === "팀원" || m.role === "부팀장" || m.role === "팀장" ? " depth-1" : "") + '">'
-        + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '" title="' + esc(gradeCode(m.role)) + '">' + esc(m.role) + "</span>"
-        + '<span class="name">' + esc(memberLabel(m)) + "</span>"
-        + '<span class="meta">' + esc(m.email && m.email.indexOf("@미등록.local") < 0 ? m.email : "이메일 미등록")
-        + (recName ? " · 도입 " + esc(recName) : "")
-        + (m.can_view_all ? " · 전체열람" : "") + "</span>" + tools + "</div>";
-    }
-
-    var html = "";
-    var direct = BOOT.members.filter(function (m) { return m.team_id == null; })
-      .sort(function (a, b) { return (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9); });
-    if (direct.length) {
-      html += '<div class="section"><div class="section-head"><h2>' + esc(BOOT.branchName || "지점") + '</h2></div><div class="card">'
-        + direct.map(rowHtml).join("") + "</div></div>";
-    }
-    html += BOOT.teams.map(function (t) {
-      var list = rosterOf(t.id);
-      var teamTools = BOOT.me.isBranchHead
-        ? '<button class="btn tm-rename" data-id="' + t.id + '" data-name="' + esc(t.name) + '">이름 변경</button>'
-          + '<button class="btn tm-del" data-id="' + t.id + '" data-name="' + esc(t.name) + '">팀 삭제</button>'
-        : "";
-      return '<div class="section"><div class="section-head"><div class="org-team-head"><h2>' + esc(t.name) + "</h2>"
-        + '<span class="badge gray">' + list.length + "명</span>" + teamTools + "</div></div><div class=\"card\">"
-        + (list.length ? list.map(rowHtml).join("") : '<div class="empty">이 팀에 등록된 팀원이 없습니다.</div>')
-        + "</div></div>";
-    }).join("");
-    $("org-list").innerHTML = html || '<div class="card"><div class="empty">팀이 아직 없습니다. 팀부터 추가합니다.</div></div>';
+    renderOrgChart();
   }
+
+  function renderOrgChart() {
+    var mg = BOOT.me.isManager;
+    var teams = BOOT.teams;
+    var direct = BOOT.members.filter(function (m) { return m.team_id == null; })
+      .sort(function (a, b) { return (ROLE_RANK[a.role] == null ? 9 : ROLE_RANK[a.role]) - (ROLE_RANK[b.role] == null ? 9 : ROLE_RANK[b.role]); });
+    var head = direct.filter(function (m) { return m.role === "지점장"; })[0];
+
+    var h = ['<div class="orgchart">'];
+    h.push('<div class="oc-branch"><strong>' + esc(BOOT.branchName || "지점") + "</strong>"
+      + '<span>' + (head ? esc(memberLabel(head)) + " 지점장" : "구성원 " + BOOT.members.length + "명") + "</span></div>");
+
+    if (!teams.length) {
+      h.push('<div class="oc-empty" style="margin-top:14px">팀이 아직 없습니다.'
+        + (BOOT.me.isBranchHead ? " 위 「팀 추가」로 시작합니다." : "") + "</div></div>");
+      $("org-chart").innerHTML = h.join("");
+      return;
+    }
+
+    h.push('<div class="oc-stem"></div>');
+    h.push('<div class="oc-teams' + (teams.length === 1 ? " one" : "") + '" style="--n:' + teams.length + '">');
+    teams.forEach(function (t, i) {
+      var list = rosterOf(t.id);
+      var lead = list.filter(function (m) { return m.role === "부지점장"; })[0];
+      var rest = list.filter(function (m) { return m !== lead; });
+      h.push('<div class="oc-team">');
+      h.push('<div class="oc-team-head' + (BOOT.me.isBranchHead ? " editable" : "") + '"'
+        + ' style="--tc:' + TEAM_COLORS[i % TEAM_COLORS.length] + '"'
+        + ' data-team="' + t.id + '" data-name="' + esc(t.name) + '">'
+        + "<strong>" + esc(t.name) + "</strong>"
+        + '<span>' + (lead ? esc(memberLabel(lead)) + " 부지점장" : "부지점장 미지정") + "</span></div>");
+      h.push('<div class="oc-members">');
+      var shown = (lead ? [lead] : []).concat(rest);
+      if (shown.length) {
+        shown.forEach(function (m) {
+          h.push('<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
+            + ' data-email="' + esc(m.email) + '">'
+            + '<span class="r">' + esc(m.role) + "</span>"
+            + "<span>" + esc(memberLabel(m)) + "</span></div>");
+        });
+      } else h.push('<div class="oc-empty">팀원 없음</div>');
+      if (mg) h.push('<div class="oc-add" data-team="' + t.id + '">+ 팀원</div>');
+      h.push("</div></div>");
+    });
+    h.push("</div>");
+
+    var others = direct.filter(function (m) { return m !== head; });
+    if (head || others.length || mg) {
+      h.push('<div class="oc-direct">'
+        + (head ? '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(head.email) + '">'
+            + esc(memberLabel(head)) + '<span class="r">지점장</span></span>' : "")
+        + others.map(function (m) {
+          return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
+            + esc(memberLabel(m)) + '<span class="r">' + esc(m.role) + "</span></span>";
+        }).join("")
+        + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
+        + "</div>");
+    }
+    h.push("</div>");
+    $("org-chart").innerHTML = h.join("");
+  }
+
+  function placePop(p, anchor) {
+    if (anchor && !isMobile()) {
+      var r = anchor.getBoundingClientRect();
+      var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 290);
+      p.style.left = Math.max(8, left) + "px";
+      p.style.top = (r.bottom + window.scrollY + 4) + "px";
+    }
+  }
+
+  function placeholderEmail(nm) {
+    var base = nm + "@미등록.local";
+    if (!BOOT.members.some(function (m) { return m.email === base; })) return base;
+    for (var i = 2; i < 100; i++) {
+      var cand = nm + i + "@미등록.local";
+      if (!BOOT.members.some(function (m) { return m.email === cand; })) return cand;
+    }
+    return nm + Date.now() + "@미등록.local";
+  }
+
+  // 팀원 추가·수정 — 차트에서 바로 연다
+  function openMemberPop(anchor, opts) {
+    closePop(); closeSheet();
+    var m = opts.email ? BOOT.members.filter(function (x) { return x.email === opts.email; })[0] : null;
+    var isNew = !m;
+    var teamId = m ? m.team_id : (opts.teamId !== undefined ? opts.teamId : null);
+    var p = document.createElement("div");
+    p.className = "pop";
+    p.innerHTML = '<div class="pop-title">' + (isNew ? "팀원 추가" : esc(m.name) + " 수정") + "</div>"
+      + '<div class="pop-row"><input type="text" class="input" id="mp-name" placeholder="이름" value="' + esc(m ? m.name : "") + '"></div>'
+      + '<div class="pop-row"><select class="input" id="mp-role"></select></div>'
+      + '<div class="pop-row"><select class="input" id="mp-team"></select></div>'
+      + '<div class="pop-row"><input type="text" class="input" id="mp-email" placeholder="이메일 (없으면 비워두기)" value="'
+        + esc(m && String(m.email).indexOf("@미등록.local") < 0 ? m.email : "") + '"></div>'
+      + '<div class="pop-row"><select class="input" id="mp-recruiter"></select></div>'
+      + (BOOT.me.isSuper && !isNew
+        ? '<div class="pop-row" style="gap:12px">'
+          + '<label style="cursor:pointer;font-size:13px"><input type="checkbox" id="mp-mgr"'
+          + (m.is_manager ? " checked" : "") + '> 관리자</label>'
+          + '<label style="cursor:pointer;font-size:13px"><input type="checkbox" id="mp-all"'
+          + (m.can_view_all ? " checked" : "") + '> 전체열람</label></div>'
+        : "")
+      + '<div class="pop-row"><button class="btn primary" id="mp-save">저장</button>'
+      + (isNew ? "" : '<button class="btn" id="mp-del">삭제</button>')
+      + '<button class="btn" id="mp-close">닫기</button></div>';
+    document.body.appendChild(p);
+    placePop(p, anchor);
+
+    var asc = GRADES.slice().reverse();
+    $("mp-role").innerHTML = asc.map(function (g) {
+      return '<option value="' + g.name + '"' + (m && m.role === g.name ? " selected" : "") + ">" + g.name + " (" + g.code + ")</option>";
+    }).join("");
+    $("mp-team").innerHTML = '<option value="">지점 직속 (팀 없음)</option>'
+      + BOOT.teams.map(function (t) {
+        return '<option value="' + t.id + '"' + (teamId === t.id ? " selected" : "") + ">" + esc(t.name) + "</option>";
+      }).join("");
+    $("mp-recruiter").innerHTML = '<option value="">도입자 없음</option>'
+      + BOOT.members.filter(function (x) { return !m || x.email !== m.email; }).map(function (x) {
+        return '<option value="' + esc(x.email) + '"' + (m && m.recruiter_email === x.email ? " selected" : "")
+          + ">도입자: " + esc(memberLabel(x)) + "</option>";
+      }).join("");
+
+    p.querySelector("#mp-close").addEventListener("click", closePop);
+    p.querySelector("#mp-save").addEventListener("click", function () {
+      var name = $("mp-name").value.trim();
+      if (!name) { alert("이름을 넣어 주세요."); return; }
+      var tv = $("mp-team").value;
+      var body = {
+        name: name,
+        role: $("mp-role").value,
+        teamId: tv === "" ? null : Number(tv),
+        recruiterEmail: $("mp-recruiter").value || ""
+      };
+      if (BOOT.me.isSuper && !isNew) {
+        body.isManager = $("mp-mgr").checked;
+        body.canViewAll = $("mp-all").checked;
+      }
+      var typed = $("mp-email").value.trim();
+      var job;
+      if (isNew) {
+        body.email = typed || placeholderEmail(name);
+        job = api("/admin/members", { method: "POST", body: body });
+      } else if (typed && typed !== m.email) {
+        job = api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: m.email }) })
+          .then(function () { return api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: typed }) }); })
+          .then(function () { return api("/admin/members/" + encodeURIComponent(m.email), { method: "DELETE" }); });
+      } else {
+        body.email = m.email;
+        job = api("/admin/members", { method: "POST", body: body });
+      }
+      job.then(refreshBoot).then(function () { closePop(); renderOrg(); });
+    });
+    if (!isNew) p.querySelector("#mp-del").addEventListener("click", function () {
+      if (!confirm(m.name + " 님을 명단에서 삭제할까요?\n\n지난 일정·일지·업적 기록은 남습니다.")) return;
+      api("/admin/members/" + encodeURIComponent(m.email), { method: "DELETE" })
+        .then(refreshBoot).then(function () { closePop(); renderOrg(); });
+    });
+    $("mp-name").focus();
+  }
+
+  // 팀 이름 변경·삭제
+  function openTeamPop(anchor) {
+    closePop();
+    var id = anchor.dataset.team, name = anchor.dataset.name;
+    var p = document.createElement("div");
+    p.className = "pop";
+    p.innerHTML = '<div class="pop-title">팀 수정</div>'
+      + '<div class="pop-row"><input type="text" class="input" id="tp-name" value="' + esc(name) + '"></div>'
+      + '<div class="pop-row"><button class="btn primary" id="tp-save">저장</button>'
+      + '<button class="btn" id="tp-del">팀 삭제</button>'
+      + '<button class="btn" id="tp-close">닫기</button></div>';
+    document.body.appendChild(p);
+    placePop(p, anchor);
+    p.querySelector("#tp-close").addEventListener("click", closePop);
+    p.querySelector("#tp-save").addEventListener("click", function () {
+      var v = $("tp-name").value.trim();
+      if (!v || v === name) { closePop(); return; }
+      api("/admin/teams/" + id, { method: "POST", body: { name: v } })
+        .then(refreshBoot).then(function () { closePop(); renderOrg(); });
+    });
+    p.querySelector("#tp-del").addEventListener("click", function () {
+      if (!confirm("「" + name + "」 팀을 삭제할까요?\n\n소속 인원이 있으면 삭제되지 않습니다.")) return;
+      api("/admin/teams/" + id, { method: "DELETE" })
+        .then(refreshBoot).then(function () { closePop(); renderOrg(); });
+    });
+    $("tp-name").focus();
+  }
+
+  // 차트 클릭 — 팀 헤더 / 팀원 / 추가
+  $("org-chart").addEventListener("click", function (e) {
+    var add = e.target.closest(".oc-add");
+    if (add) { openMemberPop(add, { teamId: Number(add.dataset.team) }); return; }
+    if (e.target.closest(".oc-add-direct")) { openMemberPop(e.target, { teamId: null }); return; }
+    var mem = e.target.closest(".oc-member.editable, .oc-chip.editable");
+    if (mem) { openMemberPop(mem, { email: mem.dataset.email }); return; }
+    var th = e.target.closest(".oc-team-head.editable");
+    if (th) { openTeamPop(th); return; }
+  });
+
+  $("ro-team-add-btn").addEventListener("click", function () {
+    var name = prompt("새 팀 이름 (예: 하랑4팀)");
+    if (!name || !name.trim()) return;
+    api("/admin/teams", { method: "POST", body: { name: name.trim() } })
+      .then(refreshBoot).then(renderOrg);
+  });
 
   // 승인 대기 — 승인권자(지점장·부지점장·총관리자)에게만 보인다
   function renderPending() {
@@ -857,106 +1012,6 @@
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
     else { fallbackCopy(text); done(); }
-  });
-
-  var editingEmail = null;
-  function resetMemberForm() {
-    editingEmail = null;
-    $("ro-name").value = ""; $("ro-email").value = ""; $("ro-recruiter").value = "";
-    $("ro-add").textContent = "추가";
-    $("ro-cancel").hidden = true;
-  }
-  $("ro-cancel").addEventListener("click", resetMemberForm);
-  $("ro-add").addEventListener("click", function () {
-    var name = $("ro-name").value.trim();
-    if (!name) return;
-    var role = $("ro-role").value;
-    // 수정 중이면 원래 계정을 유지한다 (이메일을 바꾸면 다른 사람이 된다)
-    // 이메일 없이 등록할 때 동명이인이 서로를 덮어쓰지 않게 고유 값을 만든다
-    // (이메일이 열쇠라서 같은 값이면 두 번째 등록이 첫 번째를 지운다)
-    function placeholderEmail(nm) {
-      var base = nm + "@미등록.local";
-      if (!BOOT.members.some(function (m) { return m.email === base; })) return base;
-      for (var i = 2; i < 100; i++) {
-        var cand = nm + i + "@미등록.local";
-        if (!BOOT.members.some(function (m) { return m.email === cand; })) return cand;
-      }
-      return nm + Date.now() + "@미등록.local";
-    }
-    var email = editingEmail || $("ro-email").value.trim() || placeholderEmail(name);
-    var newEmail = $("ro-email").value.trim();
-    var teamId = role === "지점장" ? null : (myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id));
-    var body = { email: email, name: name, teamId: teamId, role: role,
-                 recruiterEmail: $("ro-recruiter").value || "" };
-    var job = api("/admin/members", { method: "POST", body: body });
-    // 수정하면서 이메일을 새로 넣었으면 계정을 옮겨 준다 (기존 줄은 정리)
-    if (editingEmail && newEmail && newEmail !== editingEmail) {
-      job = job
-        .then(function () {
-          return api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: newEmail }) });
-        })
-        .then(function () {
-          return api("/admin/members/" + encodeURIComponent(editingEmail), { method: "DELETE" });
-        });
-    }
-    job.then(refreshBoot).then(function () { resetMemberForm(); renderOrg(); });
-  });
-  $("ro-team-add").addEventListener("click", function () {
-    var name = $("ro-team-name").value.trim();
-    if (!name) return;
-    api("/admin/teams", { method: "POST", body: { name: name } })
-      .then(refreshBoot).then(function () { $("ro-team-name").value = ""; renderOrg(); });
-  });
-  $("org-list").addEventListener("click", function (e) {
-    // 팀 이름 변경·삭제 (총관리자·지점장)
-    var rn = e.target.closest(".tm-rename");
-    if (rn) {
-      var nn = prompt("새 팀 이름", rn.dataset.name);
-      if (nn && nn.trim() && nn.trim() !== rn.dataset.name)
-        api("/admin/teams/" + rn.dataset.id, { method: "POST", body: { name: nn.trim() } })
-          .then(refreshBoot).then(renderOrg);
-      return;
-    }
-    var tdel = e.target.closest(".tm-del");
-    if (tdel) {
-      if (confirm("「" + tdel.dataset.name + "」 팀을 삭제할까? (소속 인원이 있으면 삭제되지 않습니다)"))
-        api("/admin/teams/" + tdel.dataset.id, { method: "DELETE" })
-          .then(refreshBoot).then(renderOrg);
-      return;
-    }
-    // 구성원 수정 — 위 등록 폼에 값을 채워 그대로 고쳐 저장한다
-    var ed = e.target.closest(".ro-edit");
-    if (ed) {
-      var m = BOOT.members.filter(function (x) { return x.email === ed.dataset.email; })[0];
-      if (!m) return;
-      $("ro-name").value = m.name || "";
-      $("ro-email").value = m.email.indexOf("@미등록.local") >= 0 ? "" : m.email;
-      $("ro-role").value = m.role || "팀원";
-      $("ro-recruiter").value = m.recruiter_email || "";
-      if (!$("team-pick").hidden && m.team_id) $("team-pick").value = m.team_id;
-      editingEmail = m.email;
-      $("ro-add").textContent = "수정 저장";
-      $("ro-cancel").hidden = false;
-      $("org-admin").scrollIntoView({ block: "center" });
-      $("ro-name").focus();
-      return;
-    }
-    var del = e.target.closest(".ro-del");
-    if (del) {
-      var who = (BOOT.members.filter(function (x) { return x.email === del.dataset.email; })[0] || {}).name || del.dataset.email;
-      if (!confirm(who + " 님을 명단에서 삭제할까요?" + "\n\n지난 일정·일지·업적 기록은 남습니다.")) return;
-      api("/admin/members/" + encodeURIComponent(del.dataset.email), { method: "DELETE" })
-        .then(refreshBoot).then(renderOrg);
-      return;
-    }
-    var flag = e.target.closest(".ro-flag");
-    if (flag) {
-      var m = BOOT.members.filter(function (x) { return x.email === flag.dataset.email; })[0];
-      if (!m) return;
-      var body = { email: m.email, name: m.name, teamId: m.team_id, role: m.role };
-      body[flag.dataset.flag] = flag.dataset.on !== "1";
-      api("/admin/members", { method: "POST", body: body }).then(refreshBoot).then(renderOrg);
-    }
   });
 
   // ── 일정 (주간 확인표 + 입력) ──

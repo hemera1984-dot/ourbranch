@@ -327,3 +327,78 @@ a.slot-title:hover { text-decoration: underline; }
   background: var(--red); color: #fff; border-radius: 9px;
   font-size: 11px; font-weight: 700; text-align: center; line-height: 18px;
 }
+
+/* ── 조직도 차트 (지점 → 팀 → 팀원) ── */
+.oc-wrap { overflow-x: auto; padding: 8px 2px 4px; }
+.orgchart { display: inline-block; min-width: 100%; }
+
+.oc-branch {
+  max-width: 340px; margin: 0 auto 0; padding: 12px 20px; text-align: center;
+  background: var(--navy); color: #fff; border-radius: 6px;
+}
+.oc-branch strong { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.03em; }
+.oc-branch span { font-size: 12px; color: #9fb2ca; }
+
+/* 지점 → 팀 연결선 */
+.oc-stem { width: 1px; height: 18px; margin: 0 auto; background: var(--line-input); }
+.oc-teams {
+  display: flex; gap: 14px; justify-content: center; align-items: flex-start;
+  position: relative; padding-top: 18px;
+}
+/* 팀들을 잇는 가로선 */
+.oc-teams::before {
+  content: ""; position: absolute; top: 0; height: 1px; background: var(--line-input);
+  left: calc(50% / var(--n)); right: calc(50% / var(--n));
+}
+.oc-teams.one::before { display: none; }
+.oc-team { flex: 1 1 0; min-width: 168px; max-width: 240px; position: relative; }
+/* 가로선 → 각 팀 상자 연결 */
+.oc-team::before {
+  content: ""; position: absolute; top: -18px; left: 50%; width: 1px; height: 18px;
+  background: var(--line-input);
+}
+
+.oc-team-head {
+  padding: 9px 12px; border-radius: 6px 6px 0 0; text-align: center;
+  background: var(--tc, var(--navy)); color: #fff;
+}
+.oc-team-head strong { display: block; font-size: 14px; font-weight: 800; }
+.oc-team-head span { font-size: 12px; opacity: .85; }
+.oc-members {
+  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 6px 6px;
+  background: var(--surface); overflow: hidden;
+}
+.oc-member {
+  padding: 8px 10px; border-top: 1px solid var(--line); font-size: 13px;
+  display: flex; align-items: baseline; gap: 6px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.oc-member:first-child { border-top: 0; }
+.oc-member .r { font-size: 11px; color: var(--ter); flex: none; }
+.oc-member.me { background: var(--blue-bg); font-weight: 700; }
+.oc-empty { padding: 14px 10px; text-align: center; color: var(--ter); font-size: 12px; }
+
+/* 지점 직속(지점장 등) */
+.oc-direct { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.oc-direct .oc-chip {
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); font-size: 13px; font-weight: 600;
+}
+.oc-direct .oc-chip .r { font-size: 11px; color: var(--ter); margin-left: 5px; font-weight: 400; }
+
+@media (max-width: 900px) {
+  .oc-teams { gap: 10px; }
+  .oc-team { min-width: 150px; }
+}
+
+/* 조직도 직접 편집 */
+.oc-team-head.editable, .oc-member.editable, .oc-chip.editable { cursor: pointer; }
+.oc-team-head.editable:hover { filter: brightness(1.12); }
+.oc-member.editable:hover, .oc-chip.editable:hover { background: var(--blue-bg); }
+.oc-add {
+  padding: 8px 10px; border-top: 1px dashed var(--line-input); text-align: center;
+  font-size: 12px; font-weight: 600; color: var(--blue); cursor: pointer;
+  transition: background .14s;
+}
+.oc-add:hover { background: var(--blue-bg); }
+.oc-chip.oc-add-direct { color: var(--blue); border-style: dashed; cursor: pointer; }
