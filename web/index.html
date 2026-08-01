@@ -30,7 +30,7 @@
       <a href="#home" data-screen="home">홈</a>
       <a href="#org" data-screen="org">조직도</a>
       <a href="#sched" data-screen="sched">일정</a>
-      <a href="#att" data-screen="att">출석</a>
+      <a href="#att" data-screen="att">일일보고</a>
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
@@ -152,15 +152,43 @@
 
     <section id="screen-att" hidden>
       <p class="eyebrow">하루 상태</p>
-      <h1>출석</h1>
-      <p class="page-desc">출근하면 출석 체크를 누릅니다. 출근일정·점심일정은 실물 스케줄표의 그 칸입니다 — 본인 줄에 자유롭게 적으면 팀 전체가 봅니다.</p>
+      <h1>일일보고</h1>
+      <p class="page-desc">한 번 적으면 출석·스케줄에 함께 반영되고, 카톡으로 보낼 문구는 버튼 한 번으로 복사됩니다.</p>
       <div class="toolbar" style="margin-bottom:10px">
         <button class="btn" id="att-prev">이전 날</button>
         <button class="btn" id="att-today">오늘</button>
+        <button class="btn" id="att-tomorrow">내일</button>
         <button class="btn" id="att-next">다음 날</button>
         <strong id="att-label" style="font-variant-numeric:tabular-nums"></strong>
         <span class="note" id="att-summary"></span>
       </div>
+
+      <div class="card card-pad" id="report-box" style="margin-bottom:14px">
+        <div class="toolbar" style="margin-bottom:10px">
+          <strong style="font-size:15px">내 보고</strong>
+          <span class="note" id="report-goal"></span>
+        </div>
+        <div class="rep-grid">
+          <label class="rep-row"><span>출근 상태</span>
+            <span class="toolbar">
+              <label style="cursor:pointer"><input type="radio" name="rep-present" id="rep-yes" value="1"> 출근</label>
+              <label style="cursor:pointer"><input type="radio" name="rep-present" id="rep-no" value="0"> 미출근</label>
+              <input class="input" id="rep-reason" placeholder="미출근 사유 (선택)" style="flex:1;min-width:120px">
+            </span>
+          </label>
+          <label class="rep-row"><span>오전 활동</span><input class="input" id="rep-work" placeholder="예: 이사 / 고객 상담"></label>
+          <label class="rep-row"><span>점심 일정</span><input class="input" id="rep-lunch" placeholder="예: 팀 점심 / 고객 식사"></label>
+          <label class="rep-row"><span>오후 활동</span><input class="input" id="rep-afternoon" placeholder="예: 저녁 약속 / 교육"></label>
+          <label class="rep-row"><span>특이사항</span><textarea class="input" id="rep-note" rows="2" placeholder="줄바꿈으로 여러 줄. 현재 CANP는 자동으로 붙습니다"></textarea></label>
+        </div>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn primary" id="rep-save">저장</button>
+          <button class="btn" id="rep-copy">카톡 문구 복사</button>
+          <span class="note" id="rep-msg"></span>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-bottom:8px"><h2>팀 현황</h2></div>
       <div class="card"><div class="grid-wrap"><table class="grid" id="att-table"></table></div></div>
     </section>
 
@@ -465,7 +493,7 @@
             + '<p class="tile-sub">팀 출석 ' + attCount + "/" + rosterEmails.length + "명</p>"
           : '<button class="btn primary att-check" style="margin:4px 0 6px">출석 체크</button>'
             + '<p class="tile-sub">팀 출석 ' + attCount + "/" + rosterEmails.length + "명</p>")
-        + '<p style="margin:6px 0 0"><a class="tile-more" href="#att">출석표 보기</a></p></div>');
+        + '<p style="margin:6px 0 0"><a class="tile-more" href="#att">일일보고 쓰기</a></p></div>');
       // 내 오늘 일정 — 항상 놓는다 (비어 있어도 오늘을 확인하는 자리)
       tiles.push('<div class="tile w2"><p class="tile-label">내 오늘 일정</p>'
         + (mine.length ? mine.map(evLine).join("") : '<p class="tile-sub">오늘 일정이 없습니다.</p>')
@@ -1107,14 +1135,125 @@
       .catch(function () { loadWeek(); });   // 일부 실패해도 화면을 새로 읽어 중복 저장을 막는다
   });
 
-  // ── 출석 (일자별 팀 표 — 실물 스케줄표의 출근일정·점심일정 칸 승계) ──
-  var attBase = new Date();
+  // ── 일일보고 (하루 한 줄: 출석 + 오전·점심·오후·특이사항) ──
+  // 저녁이면 내일 보고를 쓰는 습관을 그대로 받는다 (카톡 일일보고는 전날 저녁에 보낸다)
+  var attBase = (function () {
+    var d = new Date();
+    if (d.getHours() >= 18) d.setDate(d.getDate() + 1);
+    return d;
+  })();
+  var myRep = {};
+
   function loadAtt() {
     var ds = fmtDate(attBase);
     var todayStr = fmtDate(new Date());
+    var tomorrow = fmtDate(new Date(Date.now() + 86400e3));
     $("att-label").textContent = (attBase.getMonth() + 1) + "월 " + attBase.getDate() + "일 "
-      + DOW_FULL[attBase.getDay()] + (ds === todayStr ? " (오늘)" : "");
+      + DOW_FULL[attBase.getDay()] + (ds === todayStr ? " (오늘)" : ds === tomorrow ? " (내일)" : "");
+    loadReportGoal();
     var teamId = myTeamId();
+    api("/attendance?date=" + ds).then(function (list) {
+      myRep = list.filter(function (a) { return a.email === BOOT.me.email; })[0] || {};
+      $("rep-yes").checked = !!myRep.present;
+      $("rep-no").checked = myRep.id != null && !myRep.present;
+      $("rep-reason").value = myRep.reason || "";
+      $("rep-work").value = myRep.work || "";
+      $("rep-lunch").value = myRep.lunch || "";
+      $("rep-afternoon").value = myRep.afternoon || "";
+      $("rep-note").value = myRep.note || "";
+    });
+    loadAttTable(ds, teamId);
+  }
+
+  // 이번 달 목표·현재 실적 — 보고 문구에 자동으로 들어간다
+  var repGoal = { goal: "", intro: 0, canp: 0 };
+  function loadReportGoal() {
+    var m = fmtDate(attBase).slice(0, 7);
+    api("/perf?month=" + m).then(function (data) {
+      var g = data.goals.filter(function (x) { return x.member === BOOT.me.name; })[0] || {};
+      var canp = 0;
+      data.rows.filter(function (r) { return r.member === BOOT.me.name; })
+        .forEach(function (r) { canp += Number(r.canp) || 0; });
+      repGoal = { goal: g.goal || "", intro: g.intro || 0, canp: canp };
+      $("report-goal").textContent = "이번 달 목표 " + (g.goal || "미설정")
+        + " · 도입 " + (g.intro || 0) + " · 현재 CANP " + canp.toLocaleString("ko-KR");
+    });
+  }
+
+  function saveReport() {
+    return api("/attendance", { method: "POST", body: {
+      date: fmtDate(attBase),
+      present: $("rep-yes").checked,
+      reason: $("rep-reason").value.trim(),
+      work: $("rep-work").value.trim(),
+      lunch: $("rep-lunch").value.trim(),
+      afternoon: $("rep-afternoon").value.trim(),
+      note: $("rep-note").value.trim()
+    } });
+  }
+  $("rep-save").addEventListener("click", function () {
+    saveReport().then(function () { loadAtt(); $("rep-msg").textContent = "저장했습니다."; });
+  });
+
+  // 카톡에 붙여넣을 문구 — 팀에서 쓰던 형식 그대로 만든다
+  function reportText() {
+    var d = attBase;
+    var lines = [];
+    function bullet(v) {
+      var t = (v || "").trim();
+      if (!t) return "- ";                       // 빈 항목도 줄은 남긴다 (카톡에서 쓰던 모양)
+      return t.split("\n").map(function (s) { return "-  " + s.trim(); }).join("\n");
+    }
+    lines.push("[" + BOOT.me.name + " " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
+      + DOW_FULL[d.getDay()] + " 일일보고]");
+    lines.push("");
+    lines.push("이번 달 영업 목표 CANP: " + (repGoal.goal || "-"));
+    lines.push("이번 달 도입 목표: " + (repGoal.intro || 0));
+    lines.push("");
+    var bar = "━━━━━━━━━━━━━";
+    lines.push(bar);
+    lines.push("1️⃣ 출근 상태");
+    lines.push($("rep-yes").checked ? "☑ 출근"
+      : "☐ 미출근" + ($("rep-reason").value.trim() ? " · " + $("rep-reason").value.trim() : ""));
+    lines.push(bar);
+    lines.push("2️⃣ 오전 활동 ");
+    lines.push(bullet($("rep-work").value));
+    lines.push(bar);
+    lines.push("3️⃣ 점심 일정");
+    lines.push(bullet($("rep-lunch").value));
+    lines.push("");
+    lines.push(bar);
+    lines.push("4️⃣ 오후 활동");
+    lines.push(bullet($("rep-afternoon").value));
+    lines.push("");
+    lines.push(bar);
+    lines.push("5️⃣ 특이사항 / 요청사항");
+    lines.push("-  현재 canp : " + repGoal.canp);
+    var note = $("rep-note").value.trim();
+    if (note) lines.push(bullet(note));
+    return lines.join("\n");
+  }
+  $("rep-copy").addEventListener("click", function () {
+    var text = reportText();
+    saveReport().then(function () {
+      function done() { loadAtt(); $("rep-msg").textContent = "복사했습니다. 카톡에 붙여넣으세요."; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+      } else { fallbackCopy(text); done(); }
+    });
+  });
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+
+  function loadAttTable(ds, teamId) {
+    var todayStr = fmtDate(new Date());
     api("/attendance?date=" + ds).then(function (list) {
       var byEmail = {};
       list.forEach(function (a) { byEmail[a.email] = a; });
@@ -1123,24 +1262,24 @@
       if (!roster.some(function (m) { return m.email === BOOT.me.email; }))
         roster = roster.concat([{ email: BOOT.me.email, name: BOOT.me.name, role: "명단 외" }]);
       var checked = roster.filter(function (m) { return byEmail[m.email] && byEmail[m.email].present; }).length;
-      $("att-summary").textContent = "출석 " + checked + "/" + roster.length + "명";
-      var h = ["<thead><tr><th>팀원</th><th>출석</th><th style='min-width:180px'>출근일정</th><th style='min-width:180px'>점심일정</th><th>Aitom</th></tr></thead><tbody>"];
+      var reported = roster.filter(function (m) { return byEmail[m.email] && byEmail[m.email].id != null; }).length;
+      $("att-summary").textContent = "출석 " + checked + "명 · 보고 " + reported + "/" + roster.length + "명";
+      var h = ["<thead><tr><th>팀원</th><th>출근</th><th style='min-width:150px'>오전</th>"
+        + "<th style='min-width:130px'>점심</th><th style='min-width:150px'>오후</th>"
+        + "<th style='min-width:170px'>특이사항</th></tr></thead><tbody>"];
       roster.forEach(function (m) {
         var a = byEmail[m.email] || {};
-        var mine = m.email === BOOT.me.email;
-        var checkedCell = a.present
-          ? '<span class="badge green">출석 ' + esc((a.checked_at || "").slice(11, 16)) + "</span>"
-          : (mine && ds === todayStr ? '<button class="btn primary att-check">출석 체크</button>' : '<span class="cell-empty">-</span>');
+        var state = a.present
+          ? '<span class="badge green">출근' + (a.checked_at ? " " + esc(a.checked_at.slice(11, 16)) : "") + "</span>"
+          : (a.id != null ? '<span class="badge gray">미출근' + (a.reason ? " · " + esc(a.reason) : "") + "</span>"
+            : '<span class="cell-empty">미보고</span>');
         h.push("<tr>"
           + '<td class="ro"><strong>' + esc(m.name) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(m.role) + "</span></td>"
-          + '<td class="ro">' + checkedCell + "</td>"
-          + (mine
-            ? '<td class="ro"><input class="input att-inp" id="att-work" value="' + esc(a.work || "") + '" placeholder="예: 10시 출근 / 재택"></td>'
-              + '<td class="ro"><input class="input att-inp" id="att-lunch" value="' + esc(a.lunch || "") + '" placeholder="예: 팀 점심 / 고객 식사"></td>'
-              + '<td class="ro"><label style="cursor:pointer"><input type="checkbox" id="att-aitom"' + (a.aitom ? " checked" : "") + "> 입력함</label>"
-              + ' <button class="btn att-save" style="margin-left:6px">저장</button></td>'
-            : '<td class="ro">' + esc(a.work || "") + '</td><td class="ro">' + esc(a.lunch || "") + "</td>"
-              + '<td class="ro">' + (a.aitom ? '<span class="badge green">입력</span>' : '<span class="cell-empty">-</span>') + "</td>")
+          + '<td class="ro">' + state + "</td>"
+          + '<td class="ro">' + esc(a.work || "") + "</td>"
+          + '<td class="ro">' + esc(a.lunch || "") + "</td>"
+          + '<td class="ro">' + esc(a.afternoon || "") + "</td>"
+          + '<td class="ro">' + esc((a.note || "").replace(/\n/g, " · ")) + "</td>"
           + "</tr>");
       });
       h.push("</tbody>");
@@ -1150,20 +1289,7 @@
   $("att-prev").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() - 1); loadAtt(); });
   $("att-next").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() + 1); loadAtt(); });
   $("att-today").addEventListener("click", function () { attBase = new Date(); loadAtt(); });
-  $("att-table").addEventListener("click", function (e) {
-    if (e.target.closest(".att-check")) {
-      api("/attendance", { method: "POST", body: { date: fmtDate(attBase), present: true } }).then(loadAtt);
-      return;
-    }
-    if (e.target.closest(".att-save")) {
-      api("/attendance", { method: "POST", body: {
-        date: fmtDate(attBase),
-        work: $("att-work").value.trim(),
-        lunch: $("att-lunch").value.trim(),
-        aitom: $("att-aitom").checked
-      } }).then(loadAtt);
-    }
-  });
+  $("att-tomorrow").addEventListener("click", function () { attBase = new Date(Date.now() + 86400e3); loadAtt(); });
 
   // ── 미션·공지 ──
   function loadBoard() {

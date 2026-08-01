@@ -147,6 +147,13 @@ async function main() {
   assert.equal(att[0].present, 1);                       // 출석 유지
   assert.equal(att[0].checked_at, checkedAt);            // 체크 시각 유지
   assert.equal(att[0].lunch, "동반 점심");
+  // 일일보고 항목(오전·점심·오후·특이사항) 왕복 + 부분 갱신 유지
+  assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-08-01", afternoon: "저녁 약속", note: "도입 노력하겠습니다" })).status, 200);
+  att = await (await api("t-fc1", "GET", "/attendance?date=2026-08-01")).json();
+  assert.equal(att[0].afternoon, "저녁 약속");
+  assert.equal(att[0].note, "도입 노력하겠습니다");
+  assert.equal(att[0].lunch, "동반 점심");            // 앞서 넣은 값 유지
+  assert.equal(att[0].present, 1);
 
   // 8) 총관리자 전용: 관리자 임명·전체열람은 부지점장이 못 건드림
   assert.equal((await api("t-esl1", "POST", "/admin/members", { email: "fc1@x.com", isManager: true })).status, 403);

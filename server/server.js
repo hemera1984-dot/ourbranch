@@ -305,15 +305,19 @@ route("POST", /^\/attendance$/, false, async (req, res, user) => {
   // 출석 체크 시각은 처음 체크될 때 한 번 찍고 유지한다
   const checkedAt = present && !prev.checked_at ? now() : (present ? prev.checked_at : null);
   db.prepare(
-    `INSERT INTO attendance (email, date, present, reason, aitom, work, lunch, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO attendance (email, date, present, reason, aitom, work, lunch, afternoon, note, checked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email, date) DO UPDATE SET present = excluded.present, reason = excluded.reason,
-       aitom = excluded.aitom, work = excluded.work, lunch = excluded.lunch, checked_at = excluded.checked_at`
+       aitom = excluded.aitom, work = excluded.work, lunch = excluded.lunch,
+       afternoon = excluded.afternoon, note = excluded.note, checked_at = excluded.checked_at`
   ).run(
     user.email, date, present,
     b.reason != null ? b.reason : (prev.reason || ""),
     b.aitom != null ? (b.aitom ? 1 : 0) : (prev.aitom || 0),
     b.work != null ? b.work : (prev.work || ""),
     b.lunch != null ? b.lunch : (prev.lunch || ""),
+    b.afternoon != null ? b.afternoon : (prev.afternoon || ""),
+    b.note != null ? b.note : (prev.note || ""),
     checkedAt
   );
   send(res, 200, { ok: true });

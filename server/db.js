@@ -95,7 +95,9 @@ export function openDb(file) {
       PRIMARY KEY (event_id, email)
     );
 
-    -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸을 승계.
+    -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
+    -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
+    -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항
     -- checked_at: 출석 체크를 누른 시각 (한 번 찍히면 유지)
     CREATE TABLE IF NOT EXISTS attendance (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +108,8 @@ export function openDb(file) {
       aitom      INTEGER NOT NULL DEFAULT 0,
       work       TEXT NOT NULL DEFAULT '',
       lunch      TEXT NOT NULL DEFAULT '',
+      afternoon  TEXT NOT NULL DEFAULT '',
+      note       TEXT NOT NULL DEFAULT '',
       checked_at TEXT,
       UNIQUE(email, date)
     );
@@ -182,7 +186,9 @@ export function openDb(file) {
     "ALTER TABLE perf_goals ADD COLUMN intro INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE attendance ADD COLUMN work TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE attendance ADD COLUMN lunch TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE attendance ADD COLUMN checked_at TEXT"
+    "ALTER TABLE attendance ADD COLUMN checked_at TEXT",
+    "ALTER TABLE attendance ADD COLUMN afternoon TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE attendance ADD COLUMN note TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   return db;

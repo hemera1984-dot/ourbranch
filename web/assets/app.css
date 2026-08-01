@@ -272,6 +272,15 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .sheet-head strong { flex: 1; font-size: 16px; }
 
+/* 일일보고 입력 */
+.rep-grid { display: grid; gap: 8px; }
+.rep-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; gap: 10px; }
+.rep-row > span:first-child { font-size: 13px; font-weight: 600; color: var(--sub); }
+.rep-row textarea.input { resize: vertical; font-family: inherit; }
+@media (max-width: 900px) {
+  .rep-row { grid-template-columns: 1fr; gap: 4px; }
+}
+
 /* 미션 달성률 — 상태 표시 진행바 (0.3초 허용 항목) */
 .progress { position: relative; flex: none; width: 120px; height: 8px; border-radius: 3px; background: var(--canvas); border: 1px solid var(--line); overflow: hidden; }
 .progress span { position: absolute; inset: 0; width: 0; background: var(--green); transition: width .3s; }
