@@ -27,6 +27,24 @@ function makeGrid(root, opts) {
     });
   }
 
+  // 날짜 정규화 — 시트에서 복사하면 8/1, 2026. 8. 1, 8월 1일 같은 모양으로 들어온다.
+  // 그대로 두면 저장은 되지만 월 조회에서 빠져 "저장했는데 사라졌다"가 된다.
+  function normDate(v) {
+    var s = String(v == null ? "" : v).trim();
+    if (!s) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var nums = s.match(/\d+/g);
+    if (!nums) return s;                                   // 숫자가 없으면 손대지 않는다
+    var y, mo, d;
+    if (nums.length >= 3) { y = +nums[0]; mo = +nums[1]; d = +nums[2]; }
+    else if (nums.length === 2) {                          // 8/1 — 연도는 그리드가 보는 연도로
+      y = opts.year || new Date().getFullYear(); mo = +nums[0]; d = +nums[1];
+    } else return s;
+    if (y < 100) y += 2000;
+    if (!(mo >= 1 && mo <= 12) || !(d >= 1 && d <= 31)) return s;
+    return y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+  }
+
   function render() {
     var h = ['<div class="grid-wrap"><table class="grid"><thead><tr>'];
     cols.forEach(function (c) { h.push("<th" + (c.width ? ' style="min-width:' + c.width + 'px"' : "") + ">" + esc(c.label) + "</th>"); });
@@ -54,6 +72,7 @@ function makeGrid(root, opts) {
     var ri = Number(td.parentNode.dataset.ri), ci = Number(td.dataset.ci);
     var r = rows[ri], key = cols[ci].key;
     var v = td.innerText.replace(/\n/g, " ").trim();
+    if (cols[ci].date) { v = normDate(v); td.innerText = v; }   // 눈앞에서 바로 고쳐 보여준다
     if (String(r[key] == null ? "" : r[key]) === v) return;
     r[key] = v;
     if (r._id != null) dirty.add(r._id); else added.add(r);
@@ -110,7 +129,7 @@ function makeGrid(root, opts) {
       line.split("\t").forEach(function (val, vi) {
         var c = cols[startCi + vi];
         if (!c) return;
-        r[c.key] = val.trim();
+        r[c.key] = c.date ? normDate(val) : val.trim();
       });
       if (r._id != null) dirty.add(r._id); else added.add(r);
     });

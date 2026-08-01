@@ -116,6 +116,7 @@
           <button class="btn" id="m-cal-today">오늘</button>
           <button class="btn" id="m-cal-next">다음 달</button>
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
+          <button class="btn" id="m-cal-copy">지난달 가져오기</button>
         </div>
         <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
           <button class="btn seg-btn" data-scope="esl" hidden>부지점장만</button>
@@ -144,6 +145,7 @@
           <button class="btn" id="cal-today">이번 달</button>
           <button class="btn" id="cal-next">다음 달</button>
           <strong id="cal-label" style="font-variant-numeric:tabular-nums"></strong>
+          <button class="btn" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
         </span>
         <span id="week-controls" hidden>
           <button class="btn" id="week-prev">이전 주</button>
@@ -211,7 +213,15 @@
         </div>
       </div>
 
-      <div class="section-head" style="margin-bottom:8px"><h2>팀 현황</h2></div>
+      <div class="section-head" style="margin-bottom:8px">
+        <h2>팀 현황</h2>
+        <div class="toolbar">
+          <button class="btn" id="att-copy-all">팀 전체 보고 복사</button>
+          <button class="btn" id="att-copy-missing">미보고자 복사</button>
+          <span class="note" id="att-copy-msg"></span>
+        </div>
+      </div>
+      <div id="att-missing" hidden style="margin-bottom:8px"></div>
       <div class="card"><div class="grid-wrap"><table class="grid" id="att-table"></table></div></div>
     </section>
 
@@ -539,6 +549,27 @@
       }
 
       var tiles = [];
+      // 오늘 할 일 — 아침에 3초로 끝내는 체크리스트 (안 한 것만 남는다)
+      var todos = [];
+      if (!(myAtt && myAtt.present))
+        todos.push({ t: "출석 체크", a: "att-check", cls: "att-check" });
+      if (!(myAtt && myAtt.id != null))
+        todos.push({ t: "일일보고 작성", href: "#att" });
+      var unread = notices.filter(function (n) {
+        return !(n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
+      });
+      if (unread.length) todos.push({ t: "안 읽은 공지 " + unread.length + "건", href: "#board" });
+      if (myTasks.length) todos.push({ t: "미달성 미션 " + myTasks.length + "건", href: "#board" });
+      tiles.push('<div class="tile w2"><p class="tile-label">오늘 할 일</p>'
+        + (todos.length
+          ? todos.map(function (x) {
+            return '<div class="tile-row"><span class="todo-dot"></span>'
+              + (x.cls
+                ? '<button class="btn primary ' + x.cls + '" style="padding:2px 10px;font-size:12px">' + esc(x.t) + "</button>"
+                : '<a class="slot-title tile-more" href="' + x.href + '">' + esc(x.t) + "</a>") + "</div>";
+          }).join("")
+          : '<p class="tile-sub" style="color:var(--green)">오늘 할 일을 모두 마쳤습니다.</p>')
+        + "</div>");
       // 출석 — 아침의 첫 행동. 체크 전이면 버튼, 후면 시각과 팀 현황
       var attList = res[5];
       var myAtt = attList.filter(function (a) { return a.email === BOOT.me.email; })[0];
@@ -834,7 +865,7 @@
   }
   var EV_COLS = [
     { key: "member", label: "팀원 (비우면 팀 공유)", width: 110 },
-    { key: "date", label: "날짜", width: 95 },
+    { key: "date", label: "날짜", width: 95, date: true },
     { key: "start", label: "시작", width: 55 },
     { key: "end", label: "종료", width: 55 },
     { key: "kind", label: "구분", width: 55 },
@@ -862,6 +893,7 @@
       });
       evGrid = makeGrid($("ev-grid"), {
         cols: EV_COLS,
+        year: days[0].getFullYear(),
         rows: rows,
         fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "상담" },
         canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.isManager; },
@@ -1202,6 +1234,7 @@
     initScope();
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     $("cal-label").textContent = y + "년 " + (mo + 1) + "월";
+    $("cal-copy-month").hidden = false;
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
     api("/events?from=" + from + "&to=" + to).then(function (evs) {
@@ -1279,6 +1312,21 @@
   });
   $("view-cal").addEventListener("click", function () { setSchedView("cal"); });
   $("view-week").addEventListener("click", function () { setSchedView("week"); });
+  // 지난달 일정 가져오기 — 반복 일정을 매달 다시 넣지 않게
+  function copyPrevMonth() {
+    var to = fmtDate(calBase).slice(0, 7);
+    var prev = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1);
+    var from = fmtDate(prev).slice(0, 7);
+    var onlyTeam = BOOT.me.isManager
+      && confirm("팀 공유 일정만 가져올까?\n\n확인 = 팀 공유 일정만\n취소 = 팀원 개인 일정까지 전부");
+    api("/events/copy-month", { method: "POST", body: { from: from, to: to, teamId: myTeamId(), onlyTeam: onlyTeam } })
+      .then(function (r) {
+        alert(from + " → " + to + "\n가져옴 " + r.copied + "건" + (r.skipped ? " · 건너뜀 " + r.skipped + "건(이미 있음)" : ""));
+        if (isMobile()) loadDay(); else loadCal();
+      });
+  }
+  $("cal-copy-month").addEventListener("click", copyPrevMonth);
+  $("m-cal-copy").addEventListener("click", copyPrevMonth);
   $("cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadCal(); });
   $("cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadCal(); });
   $("cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadCal(); });
@@ -1445,8 +1493,18 @@
       if (!roster.some(function (m) { return m.email === BOOT.me.email; }))
         roster = roster.concat([{ email: BOOT.me.email, name: BOOT.me.name, role: "명단 외" }]);
       var checked = roster.filter(function (m) { return byEmail[m.email] && byEmail[m.email].present; }).length;
-      var reported = roster.filter(function (m) { return byEmail[m.email] && byEmail[m.email].id != null; }).length;
+      var missing = roster.filter(function (m) { return !(byEmail[m.email] && byEmail[m.email].id != null); });
+      var reported = roster.length - missing.length;
       $("att-summary").textContent = "출석 " + checked + "명 · 보고 " + reported + "/" + roster.length + "명";
+      // 미보고자를 눈에 띄게 — 부지점장이 누구를 재촉할지 바로 안다
+      attSnapshot = { ds: ds, roster: roster, byEmail: byEmail, missing: missing };
+      var mb = $("att-missing");
+      if (missing.length && BOOT.me.isManager) {
+        mb.hidden = false;
+        mb.innerHTML = '<div class="card card-pad" style="border-left:3px solid var(--red)">'
+          + '<strong style="color:var(--red)">미보고 ' + missing.length + '명</strong> '
+          + '<span class="meta">' + missing.map(function (m) { return esc(m.name); }).join(", ") + "</span></div>";
+      } else mb.hidden = true;
       var h = ["<thead><tr><th>팀원</th><th>출근</th><th style='min-width:150px'>오전</th>"
         + "<th style='min-width:130px'>점심</th><th style='min-width:150px'>오후</th>"
         + "<th style='min-width:170px'>특이사항</th></tr></thead><tbody>"];
@@ -1469,6 +1527,48 @@
       $("att-table").innerHTML = h.join("");
     });
   }
+
+  // 팀 전체 보고 / 미보고자 — 카톡으로 그대로 옮긴다
+  var attSnapshot = null;
+  function teamReportText() {
+    if (!attSnapshot) return "";
+    var d = new Date(attSnapshot.ds + "T00:00:00");
+    var lines = ["[" + (BOOT.branchName || "지점") + " " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
+      + DOW_FULL[d.getDay()] + " 팀 일일보고]", ""];
+    attSnapshot.roster.forEach(function (m) {
+      var a = attSnapshot.byEmail[m.email];
+      if (!a || a.id == null) return;
+      var parts = [];
+      parts.push(a.present ? "출근" : "미출근" + (a.reason ? "(" + a.reason + ")" : ""));
+      if (a.work) parts.push("오전 " + a.work);
+      if (a.lunch) parts.push("점심 " + a.lunch);
+      if (a.afternoon) parts.push("오후 " + a.afternoon);
+      lines.push("· " + m.name + " — " + parts.join(" / "));
+      if (a.note) a.note.split("\n").forEach(function (t) { if (t.trim()) lines.push("   " + t.trim()); });
+    });
+    if (attSnapshot.missing.length) {
+      lines.push("");
+      lines.push("미보고 " + attSnapshot.missing.length + "명: "
+        + attSnapshot.missing.map(function (m) { return m.name; }).join(", "));
+    }
+    return lines.join("\n");
+  }
+  function copyText(text, msgId) {
+    function done() { $(msgId).textContent = "복사했습니다."; }
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    else { fallbackCopy(text); done(); }
+  }
+  $("att-copy-all").addEventListener("click", function () { copyText(teamReportText(), "att-copy-msg"); });
+  $("att-copy-missing").addEventListener("click", function () {
+    if (!attSnapshot) return;
+    var d = new Date(attSnapshot.ds + "T00:00:00");
+    var names = attSnapshot.missing.map(function (m) { return m.name; });
+    copyText(names.length
+      ? (d.getMonth() + 1) + "/" + d.getDate() + " 일일보고 미제출: " + names.join(", ")
+        + "\n오늘 안에 올려 주세요."
+      : (d.getMonth() + 1) + "/" + d.getDate() + " 일일보고 전원 제출 완료", "att-copy-msg");
+  });
   $("att-prev").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() - 1); loadAtt(); });
   $("att-next").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() + 1); loadAtt(); });
   $("att-today").addEventListener("click", function () { attBase = new Date(); loadAtt(); });
@@ -1530,10 +1630,22 @@
     }).join("") + "</div>";
   }
 
+  var noticeHistoryOpen = false;
   function renderNotices(list) {
     var el = $("notice-list");
     if (!list.length) { el.innerHTML = '<div class="card"><div class="empty">등록된 공지가 없습니다.</div></div>'; return; }
-    el.innerHTML = list.map(function (n) {
+    // 최신 공지가 항상 위. 오래된 것은 히스토리로 접는다 (쌓여도 화면이 안 밀리게)
+    var RECENT = 3;
+    var recent = list.slice(0, RECENT), older = list.slice(RECENT);
+    el.innerHTML = noticeCards(recent)
+      + (older.length
+        ? '<div class="toolbar" style="margin:6px 0 10px"><button class="btn" id="notice-more">'
+          + (noticeHistoryOpen ? "지난 공지 접기" : "지난 공지 " + older.length + "건 보기") + "</button></div>"
+          + (noticeHistoryOpen ? noticeCards(older) : "")
+        : "");
+  }
+  function noticeCards(list) {
+    return list.map(function (n) {
       var readByMe = (n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
       var readNames = (n.reads || []).map(function (r) { return r.name; }).join(", ");
       return '<div class="card" style="margin-bottom:10px"><div class="card-pad">'
@@ -1580,6 +1692,7 @@
     } }).then(function () { $("notice-title").value = ""; $("notice-body").value = ""; loadBoard(); });
   });
   $("notice-list").addEventListener("click", function (e) {
+    if (e.target.id === "notice-more") { noticeHistoryOpen = !noticeHistoryOpen; loadBoard(); return; }
     var rd = e.target.closest(".notice-read");
     if (rd) { api("/notices/" + rd.dataset.id + "/read", { method: "POST" }).then(loadBoard); return; }
     var add = e.target.closest(".cmt-add");
@@ -1596,7 +1709,7 @@
   // ── TA 일지 ──
   var TA_COLS = [
     { key: "author", label: "담당자", width: 70 },
-    { key: "date", label: "날짜", width: 90 },
+    { key: "date", label: "날짜", width: 90, date: true },
     { key: "cand_name", label: "이름", width: 70 },
     { key: "gender", label: "성별", width: 40 },
     { key: "age", label: "나이", width: 40 },
@@ -1618,6 +1731,7 @@
       renderTaStats(rows);
       taGrid = makeGrid($("ta-grid"), {
         cols: TA_COLS,
+        year: Number(month.slice(0, 4)),
         rows: rows,
         fixed: { author: BOOT.me.name, date: fmtDate(new Date()) },
         canEditRow: function (r) { return canWriteAs(r.author); },
@@ -1656,7 +1770,7 @@
 
   // ── 업적현황 ──
   var PERF_COLS = [
-    { key: "contract_date", label: "계약일", width: 100 },
+    { key: "contract_date", label: "계약일", width: 100, date: true },
     { key: "premium", label: "월납", width: 90, num: true },
     { key: "canp", label: "CANP", width: 80, num: true },
     { key: "note", label: "비고", width: 160 }
@@ -1723,6 +1837,7 @@
         var mine = s.rows.map(function (r) { r._id = r.id; return r; });
         var g = makeGrid($("perf-grid-" + i), {
           cols: PERF_COLS,
+          year: Number(month.slice(0, 4)),
           rows: mine,
           fixed: { member: s.member },
           canEditRow: function () { return canWriteAs(s.member); },

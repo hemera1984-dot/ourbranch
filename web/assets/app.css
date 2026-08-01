@@ -314,3 +314,9 @@ a.slot-title:hover { text-decoration: underline; }
   .btn { padding: 9px 16px; }
   .input, select.input { padding: 9px 12px; }
 }
+
+/* 홈 오늘 할 일 — 남은 항목 표시 점 */
+.todo-dot {
+  flex: none; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue); display: inline-block;
+}

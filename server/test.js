@@ -343,7 +343,26 @@ async function main() {
   // 14-4) 팀원은 조직도를 못 고친다
   assert.equal((await api("t-fc1", "POST", "/admin/members", { email: "fc1@x.com", role: "지점장" })).status, 403);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정 경계 확인 완료");
+  // 15) 날짜 형식 — 시트에서 온 "8/1" 같은 값은 400으로 거절 (조용히 사라지지 않게)
+  assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "8/1", cand_name: "홍길동" }] })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/events", { date: "2026.9.1", memberEmail: "fc1@x.com", kind: "상담" })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-09", rows: [{ member: "팀원1", contract_date: "9/2" }] })).status, 400);
+
+  // 16) 지난달 일정 복사 — 같은 날짜 위치로, 중복은 건너뛴다
+  await api("t-esl1", "POST", "/events", { date: "2026-10-05", kind: "회의", title: "월간 조회", teamId: 1 });
+  await api("t-esl1", "POST", "/events", { date: "2026-10-12", kind: "교육", title: "정기 교육", teamId: 1 });
+  let cp = await (await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 1 })).json();
+  assert.equal(cp.copied, 2);
+  const nov = await (await api("t-esl1", "GET", "/events?from=2026-11-01&to=2026-11-30")).json();
+  assert.ok(nov.some(e => e.date === "2026-11-05" && e.title === "월간 조회"));
+  assert.ok(nov.some(e => e.date === "2026-11-12" && e.title === "정기 교육"));
+  // 다시 실행하면 전부 건너뛴다 (중복 생성 없음)
+  cp = await (await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 1 })).json();
+  assert.equal(cp.copied, 0); assert.equal(cp.skipped, 2);
+  // 다른 팀으로는 복사 못 한다
+  assert.equal((await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 2 })).status, 403);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

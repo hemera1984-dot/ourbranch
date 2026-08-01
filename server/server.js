@@ -54,6 +54,10 @@ function readJson(req) {
   });
 }
 
+// 날짜는 YYYY-MM-DD만 받는다. 다른 모양을 그대로 저장하면 월 조회에서 빠져
+// "저장은 됐는데 화면에서 사라진" 것처럼 보인다 (조용한 데이터 유실).
+const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+
 // 엑셀에서 붙여넣은 "1,000"·"1,000원"도 숫자로 받는다 (Number()는 NaN → 0이 되어 금액이 사라진다)
 function num(v) {
   if (typeof v === "number") return isFinite(v) ? v : 0;
@@ -223,6 +227,7 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   // 강의는 지점 전체 일정(team_id NULL) — 등록자 누구나, 강사 = 본인
   const teamId = b.kind === "강의" ? null : (b.teamId ?? user.teamId);
   if ((teamId == null && b.kind !== "강의") || !b.date) return send(res, 400, { error: "팀·날짜가 없습니다" });
+  if (!isDate(b.date)) return send(res, 400, { error: "날짜 형식이 올바르지 않습니다: " + b.date });
   if (!canWriteTeam(user, teamId) && !(b.kind === "강의" && teamId == null)) return send(res, 403, { error: "권한 없음" });
   // 팀 공유 일정(개인 지정 없음)은 관리자만, 개인 일정은 본인 것만 (관리자는 팀원 것도)
   const memberEmail = b.memberEmail ? b.memberEmail.toLowerCase() : null;
@@ -423,6 +428,7 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   const ids = [];
   for (const r of b.rows) {
     if (!r.date) continue;
+    if (!isDate(r.date)) return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + r.date });
     // 일지는 각 팀원이 본인 이름으로 넣는다. 남 이름으로 넣는 건 부지점장(관리자)만.
     const author = r.author || user.name;
     if (!user.isManager && author !== user.name) return send(res, 403, { error: "본인 일지만 입력할 수 있습니다" });
@@ -476,6 +482,8 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   const ids = [];
   for (const r of b.rows) {
     if (!r.member) continue;
+    if (r.contract_date && !isDate(r.contract_date))
+      return send(res, 400, { error: "계약일은 2026-08-01 형식으로 넣어 주세요: " + r.contract_date });
     // 팀원은 자기 업적만, 부지점장(관리자)은 팀 전체 입력 가능
     if (!user.isManager && r.member !== user.name) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
     ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", num(r.premium), num(r.canp), r.note || "").lastInsertRowid));
@@ -521,6 +529,40 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
       g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
   }
   send(res, 200, { ok: true });
+});
+
+// 지난달 일정 복사 — 반복 일정(조회·스터디·교육)을 매달 다시 넣지 않게.
+// 같은 날짜 위치(같은 일수)로 옮기고, 이미 있는 건 건너뛴다.
+route("POST", /^\/events\/copy-month$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  const from = String(b.from || ""), to = String(b.to || "");
+  if (!/^\d{4}-\d{2}$/.test(from) || !/^\d{4}-\d{2}$/.test(to))
+    return send(res, 400, { error: "월 형식이 올바르지 않습니다" });
+  const teamId = b.teamId ?? user.teamId;
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+
+  const onlyTeam = !!b.onlyTeam;          // 팀 공유 일정만 복사할지
+  const src = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? AND team_id = ? AND source IS NULL")
+    .all(from + "-00", from + "-99", teamId)
+    .filter(e => onlyTeam ? !e.member_email : true)
+    // 관리자가 아니면 자기 일정만 옮긴다
+    .filter(e => user.isManager || e.member_email === user.email);
+
+  const lastDay = new Date(Number(to.slice(0, 4)), Number(to.slice(5, 7)), 0).getDate();
+  const exists = db.prepare(
+    "SELECT 1 FROM events WHERE date = ? AND team_id = ? AND kind = ? AND title = ? AND IFNULL(member_email,'') = IFNULL(?,'')"
+  );
+  const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  let copied = 0, skipped = 0;
+  for (const e of src) {
+    const day = Number(e.date.slice(8, 10));
+    if (day > lastDay) { skipped++; continue; }            // 31일 → 30일뿐인 달
+    const nd = to + "-" + String(day).padStart(2, "0");
+    if (exists.get(nd, teamId, e.kind, e.title, e.member_email)) { skipped++; continue; }
+    ins.run(teamId, e.member_email, nd, e.start, e.end, e.kind, e.title, e.place);
+    copied++;
+  }
+  send(res, 200, { copied, skipped, total: src.length });
 });
 
 // ---- 초대·승인 ----
