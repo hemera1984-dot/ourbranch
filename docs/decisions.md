@@ -59,7 +59,22 @@
 구현 상태: 1·2·4 완료(셀 클릭 팝오버 + 장소 필드 + 주간 확인표), 3 완료(도입자 지정·
 교차 팀 열람·"내 도입" 줄 표시). 전부 서버 테스트·브라우저 검증 통과.
 
+## 배포 (2026-08-01 완료)
+
+- 주소: **https://api.insurguard.life/branch/** (DNS 추가 없이 경로로 개통.
+  branch.insurguard.life 정식 도메인은 추후 선택).
+- NCP 서버(49.50.136.14)에 `server/setup.sh`로 설치 — systemd 서비스 `ourbranch`(8788),
+  마이가디언과 같은 계정으로 실행, myguardian.db 세션 검증, 데이터는
+  /var/lib/ourbranch/ourbranch.db. Caddy에 /branch 경로 추가.
+- SSH: `C:\projects\keys\mg-ssh` (마이가디언 때 등록된 키, 비밀번호 불필요).
+- 저장소: github.com/hemera1984-dot/ourbranch (공개 — 마이가디언과 동일 방침, 2026-08-01
+  사용자 승인. 재배포는 서버에서 `git -C /opt/ourbranch pull && systemctl restart ourbranch`).
+- 구글 OAuth: MyguardianV2 클라이언트의 승인된 자바스크립트 원본에
+  https://api.insurguard.life 추가 (구글 반영에 최대 수십 분 걸릴 수 있음).
+- 지점명 설정값 「하랑지점」 서버 DB에 입력 완료.
+
 ## 미결
 
-- branch.insurguard.life DNS 추가, Caddy 라우팅, 서버 배포 시점
-- 웹 화면 전체 (오늘/공지/캘린더/조직 + TA 일지 그리드 + 업적현황) 미착수
+- branch.insurguard.life 정식 도메인 전환 여부
+- 마이가디언 쪽 일정 연동 활성화 (BRANCH_API 상수 채우기 — 마이가디언 세션에서 수행 예정,
+  주소는 https://api.insurguard.life/branch)
