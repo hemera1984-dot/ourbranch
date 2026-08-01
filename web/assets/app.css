@@ -423,3 +423,7 @@ a.slot-title:hover { text-decoration: underline; }
 .ins-steps li { margin: 5px 0; color: var(--sub); }
 .ins-steps b { color: var(--ink); }
 @media (max-width: 900px) { .ins-grid { grid-template-columns: 1fr; } }
+
+/* 빠른 입력(찍기) 모드 */
+#stamp-bar .kpicks, #m-stamp-kinds { gap: 5px; }
+.cal-cell.stampable { cursor: copy; }
