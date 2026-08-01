@@ -27,13 +27,16 @@
   <aside class="sidebar">
     <div class="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></div>
     <nav class="nav" id="nav">
+      <a href="#home" data-screen="home">홈</a>
       <a href="#org" data-screen="org">조직도</a>
       <a href="#sched" data-screen="sched">일정</a>
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
     </nav>
-    <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span></div>
+    <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
+      <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
+    </div>
   </aside>
 
   <main class="main">
@@ -45,6 +48,13 @@
         <button class="btn" id="month-next">다음 달</button>
       </span>
     </div>
+
+    <section id="screen-home" hidden>
+      <p class="eyebrow" id="home-date"></p>
+      <h1 id="home-greet"></h1>
+      <p class="page-desc">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
+      <div class="bento" id="home-bento"></div>
+    </section>
 
     <section id="screen-org" hidden>
       <p class="eyebrow">조직</p>
@@ -164,9 +174,20 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["org", "sched", "board", "ta", "perf"];
-  var screen = (location.hash || "#org").slice(1);
-  if (SCREENS.indexOf(screen) < 0) screen = "org";
+  var SCREENS = ["home", "org", "sched", "board", "ta", "perf"];
+  var screen = (location.hash || "#home").slice(1);
+  if (SCREENS.indexOf(screen) < 0) screen = "home";
+
+  // 다크모드 — 변수만 갈아끼운다. 선택은 기기별로 기억.
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    var btn = document.getElementById("theme-toggle");
+    if (btn) btn.textContent = t === "dark" ? "라이트모드" : "다크모드";
+    try { localStorage.setItem("ob_theme", t); } catch (e) {}
+  }
+  applyTheme((function () {
+    try { return localStorage.getItem("ob_theme") || "light"; } catch (e) { return "light"; }
+  })());
   var taGrid = null, perfGrids = [], evGrid = null;
   var ROLE_RANK = { "지점장": 0, "부지점장": 1, "팀장": 2, "부팀장": 3, "팀원": 4 };
   var KINDS = ["상담", "외근", "내근", "교육", "면접", "회의", "휴가", "마감", "기타"];
@@ -276,6 +297,7 @@
       a.classList.toggle("active", a.dataset.screen === name);
     });
     $("month-nav").hidden = !(name === "ta" || name === "perf");
+    if (name === "home") loadHome();
     if (name === "org") renderOrg();
     if (name === "sched") loadWeek();
     if (name === "board") loadBoard();
@@ -287,6 +309,9 @@
     e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
   });
   $("team-pick").addEventListener("change", function () { show(screen); });
+  $("theme-toggle").addEventListener("click", function () {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  });
   $("month-prev").addEventListener("click", function () { moveMonth(-1); });
   $("month-next").addEventListener("click", function () { moveMonth(1); });
   function moveMonth(d) {
@@ -312,6 +337,89 @@
     return email === BOOT.me.email ? BOOT.me.name : (email || "");
   }
   function canWriteAs(name) { return BOOT.me.isManager || name === BOOT.me.name; }
+
+  // ── 홈 대시보드 (벤토) — 실데이터가 있는 타일만 놓는다 ──
+  function loadHome() {
+    var teamId = myTeamId();
+    var todayStr = fmtDate(new Date());
+    var DOW = ["일", "월", "화", "수", "목", "금", "토"];
+    var d = new Date();
+    $("home-date").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW[d.getDay()] + "요일";
+    var title = BOOT.me.isSuper ? " 총관리자" : BOOT.me.isManager ? " 관리자" : "";
+    $("home-greet").textContent = BOOT.me.name + title + "님의 오늘";
+    Promise.all([
+      api("/events?from=" + todayStr + "&to=" + todayStr),
+      api("/tasks"), api("/notices"),
+      api("/ta?month=" + month), api("/perf?month=" + month)
+    ]).then(function (res) {
+      var evs = res[0].filter(function (e) {
+        return (e.team_id === teamId || e.team_id == null || BOOT.me.recruits.indexOf(e.member_email) >= 0) && e.status !== "취소";
+      });
+      var mine = evs.filter(function (e) { return e.member_email === BOOT.me.email; })
+        .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      var team = evs.filter(function (e) { return e.member_email !== BOOT.me.email; })
+        .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      var tasks = res[1].filter(function (t) { return t.team_id === teamId && t.status !== "완료"; });
+      var myTasks = tasks.filter(isMyTask);
+      var notices = res[2].filter(function (n) { return n.team_id == null || n.team_id === teamId; });
+      var taRows = res[3].filter(function (r) { return r.team_id === teamId; });
+      var myTa = taRows.filter(function (r) { return r.author === BOOT.me.name; });
+      var perfRows = res[4].rows.filter(function (r) { return r.team_id === teamId; });
+      var myPerf = perfRows.filter(function (r) { return r.member === BOOT.me.name; });
+
+      function evLine(e) {
+        return '<div class="tile-row">'
+          + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
+          + '<span class="chip k-' + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타") + '">' + esc(e.kind) + "</span>"
+          + '<span class="slot-title">' + esc((e.member_email && e.member_email !== BOOT.me.email ? nameOf(e.member_email) + " · " : "") + (e.title || "")) + "</span>"
+          + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "") + "</div>";
+      }
+
+      var tiles = [];
+      // 내 오늘 일정 — 항상 놓는다 (비어 있어도 오늘을 확인하는 자리)
+      tiles.push('<div class="tile w2 tile-accent"><p class="tile-label">내 오늘 일정</p>'
+        + (mine.length ? mine.map(evLine).join("") : '<p class="tile-sub">오늘 일정이 없습니다.</p>')
+        + '<p style="margin:8px 0 0"><a class="tile-more" href="#sched">주간 확인표에서 입력</a></p></div>');
+      if (team.length)
+        tiles.push('<div class="tile w2"><p class="tile-label">오늘 팀 일정 ' + team.length + "건</p>"
+          + team.slice(0, 5).map(evLine).join("")
+          + (team.length > 5 ? '<p style="margin:6px 0 0"><a class="tile-more" href="#sched">전체 보기</a></p>' : "") + "</div>");
+      if (myTasks.length)
+        tiles.push('<div class="tile w2"><p class="tile-label">내 미션 ' + myTasks.length + "건</p>"
+          + myTasks.slice(0, 4).map(function (t) {
+            return '<div class="tile-row"><span class="badge ' + (t.status === "진행중" ? "blue" : "gray") + '">' + esc(t.status) + "</span>"
+              + '<span class="slot-title">' + esc(t.title) + "</span>"
+              + (t.due ? '<span class="slot-place">기한 ' + esc(t.due) + "</span>" : "") + "</div>";
+          }).join("") + '<p style="margin:8px 0 0"><a class="tile-more" href="#board">미션·공지로</a></p></div>');
+      if (notices.length)
+        tiles.push('<div class="tile w2"><p class="tile-label">최신 공지</p>'
+          + '<div class="tile-row"><span class="badge ' + (notices[0].team_id == null ? "blue" : "gray") + '">' + (notices[0].team_id == null ? "지점" : "팀") + "</span>"
+          + '<span class="slot-title">' + esc(notices[0].title) + '</span><span class="slot-place">' + esc((notices[0].created || "").slice(5, 10)) + "</span></div>"
+          + (notices[0].body && notices[0].body[0] ? '<p class="tile-sub">' + esc(notices[0].body[0]) + "</p>" : "")
+          + '<p style="margin:8px 0 0"><a class="tile-more" href="#board">공지 전체</a></p></div>');
+      if (myTa.length || taRows.length)
+        tiles.push('<div class="tile"><p class="tile-label">이번 달 TA</p><div class="tile-num">' + myTa.length + "</div>"
+          + '<p class="tile-sub">내 활동 · 팀 전체 ' + taRows.length + "건</p></div>");
+      if (myPerf.length) {
+        var canp = 0; myPerf.forEach(function (r) { canp += Number(r.canp) || 0; });
+        tiles.push('<div class="tile"><p class="tile-label">이번 달 내 업적</p><div class="tile-num">' + myPerf.length + "건</div>"
+          + '<p class="tile-sub">CANP ' + Number(canp).toLocaleString("ko-KR") + "</p></div>");
+      }
+      if (BOOT.me.isManager && perfRows.length) {
+        var tCanp = 0; perfRows.forEach(function (r) { tCanp += Number(r.canp) || 0; });
+        tiles.push('<div class="tile"><p class="tile-label">이번 달 팀 업적</p><div class="tile-num">' + perfRows.length + "건</div>"
+          + '<p class="tile-sub">CANP ' + Number(tCanp).toLocaleString("ko-KR") + "</p></div>");
+      }
+      $("home-bento").innerHTML = tiles.join("");
+    });
+  }
+  $("home-bento").addEventListener("click", function (e) {
+    var a = e.target.closest("a.tile-more");
+    if (!a) return;
+    e.preventDefault();
+    var s = a.getAttribute("href").slice(1);
+    location.hash = s; show(s);
+  });
 
   // ── 조직도 ──
   function renderOrg() {
