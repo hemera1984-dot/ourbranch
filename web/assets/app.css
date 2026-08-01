@@ -23,6 +23,9 @@
 }
 :root { --today-bg: #f2f7fd; }
 * { box-sizing: border-box; }
+/* hidden 속성이 항상 이기게 한다 — .shell(flex)·.toolbar(flex) 같은 표시 규칙이
+   숨김을 덮어써서 로그인 화면에 사이드바가 남던 문제 */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
