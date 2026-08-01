@@ -109,11 +109,16 @@ function canSeeTeam(user, teamId) {
 }
 
 // 쓰기 가능한 team_id — 열람과 분리한다.
-// can_view_all(전체열람)은 "보는" 권한이지 "쓰는" 권한이 아니고,
-// 지점 공통(NULL) 자원은 총관리자만 건드린다.
+// 총관리자·지점장(BM)은 지점 전체에 쓴다. 부지점장은 자기 팀만.
+// can_view_all(전체열람)은 "보는" 권한이지 "쓰는" 권한이 아니다.
+// 지점 공통(NULL) 자원은 총관리자·지점장만 건드린다.
+function isBranchHead(user) {
+  return user.isSuper || user.grade === "BM";
+}
 function canWriteTeam(user, teamId) {
-  if (teamId == null) return user.isSuper;
-  return user.isSuper || user.teamId === teamId;
+  if (isBranchHead(user)) return true;
+  if (teamId == null) return false;
+  return user.teamId === teamId;
 }
 
 // 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
@@ -135,7 +140,7 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
     .filter(m => canSeeTeam(user, m.team_id) || user.recruits.includes(m.email));
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
-    me: { ...user, canApprove: canApprove(user) },
+    me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user) },
     teams: user.seesAll ? teams : teams.filter(t => t.id === user.teamId),
     members,
     pending: canApprove(user)
@@ -562,13 +567,31 @@ route("POST", /^\/pending\/reject$/, false, async (req, res, user) => {
 });
 
 // ---- 관리 (팀·구성원·설정) ----
-// 팀 신설은 지점 구조를 바꾸는 일이라 총관리자만 (화면도 총관리자에게만 보인다)
+// 팀 신설·이름 변경·삭제는 지점 구조를 바꾸는 일 — 총관리자·지점장만
 route("POST", /^\/admin\/teams$/, true, async (req, res, user) => {
-  if (!user.isSuper) return send(res, 403, { error: "총관리자만" });
+  if (!isBranchHead(user)) return send(res, 403, { error: "총관리자·지점장만" });
   const b = await readJson(req);
   if (!b.name) return send(res, 400, { error: "팀 이름이 없습니다" });
   const r = db.prepare("INSERT INTO teams (name) VALUES (?)").run(b.name);
   send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+
+route("POST", /^\/admin\/teams\/(\d+)$/, true, async (req, res, user, m) => {
+  if (!isBranchHead(user)) return send(res, 403, { error: "총관리자·지점장만" });
+  const b = await readJson(req);
+  if (!b.name) return send(res, 400, { error: "팀 이름이 없습니다" });
+  db.prepare("UPDATE teams SET name = ? WHERE id = ?").run(b.name, Number(m[1]));
+  send(res, 200, { ok: true });
+});
+
+// 삭제는 소속 인원이 없을 때만 — 팀을 지워 자료가 미아가 되는 일을 막는다
+route("DELETE", /^\/admin\/teams\/(\d+)$/, true, (req, res, user, m) => {
+  if (!isBranchHead(user)) return send(res, 403, { error: "총관리자·지점장만" });
+  const id = Number(m[1]);
+  const cnt = db.prepare("SELECT COUNT(*) n FROM members WHERE team_id = ?").get(id).n;
+  if (cnt) return send(res, 400, { error: "소속 인원 " + cnt + "명을 먼저 옮겨야 합니다" });
+  db.prepare("DELETE FROM teams WHERE id = ?").run(id);
+  send(res, 200, { ok: true });
 });
 
 route("POST", /^\/admin\/members$/, true, async (req, res, user) => {

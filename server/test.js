@@ -26,9 +26,11 @@ seed.run(3, "fc1@x.com", "팀원1", "승인", "FC", 0);        // 1팀
 seed.run(4, "fc2@x.com", "팀원2", "승인", "FC", 0);        // 2팀
 seed.run(5, "wait@x.com", "대기자", "대기", null, 0);
 seed.run(6, "new@x.com", "신입", "승인", "FC", 0);          // 승인됐지만 지점 명단엔 없음
+seed.run(7, "bm@x.com", "지점장", "승인", "BM", 0);         // 지점장 — 지점 전체 관리
 const tok = auth.prepare("INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)");
 tok.run("t-super", 1, far); tok.run("t-esl1", 2, far); tok.run("t-fc1", 3, far);
 tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far); tok.run("t-new", 6, far);
+tok.run("t-bm", 7, far);
 auth.close();
 
 const srv = spawn(process.execPath, ["server.js"], {
@@ -320,7 +322,28 @@ async function main() {
   bootA = await (await api("t-esl1", "GET", "/bootstrap")).json();
   assert.equal(bootA.pending.filter(p => p.email === "new@x.com").length, 0);   // 대기 목록에서 빠짐
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인 경계 확인 완료");
+  // 14) 조직도 수정 권한 — 총관리자·지점장은 전 팀, 부지점장은 자기 팀만
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "bm@x.com", name: "지점장", teamId: null, role: "지점장" })).status, 200);
+  // 14-1) 지점장은 팀 소속이 없어도 전 팀 구성원을 고칠 수 있다
+  assert.equal((await api("t-bm", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, role: "부팀장" })).status, 200);
+  let bootBm = await (await api("t-bm", "GET", "/bootstrap")).json();
+  assert.equal(bootBm.me.isBranchHead, true);
+  assert.equal(bootBm.members.find(m => m.email === "fc2@x.com").role, "부팀장");
+  // 14-2) 지점장은 팀 이름 변경·삭제 가능, 부지점장은 불가
+  assert.equal((await api("t-esl1", "POST", "/admin/teams/2", { name: "몰래 변경" })).status, 403);
+  assert.equal((await api("t-bm", "POST", "/admin/teams", { name: "3팀" })).status, 200);
+  const newTeam = (await (await api("t-bm", "GET", "/bootstrap")).json()).teams.find(t => t.name === "3팀");
+  assert.equal((await api("t-bm", "POST", "/admin/teams/" + newTeam.id, { name: "3팀(변경)" })).status, 200);
+  // 인원이 있는 팀은 삭제되지 않는다
+  assert.equal((await api("t-bm", "DELETE", "/admin/teams/1")).status, 400);
+  assert.equal((await api("t-bm", "DELETE", "/admin/teams/" + newTeam.id)).status, 200);
+  // 14-3) 부지점장은 여전히 자기 팀만
+  assert.equal((await api("t-esl1", "POST", "/admin/members", { email: "fc2@x.com", teamId: 1 })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, role: "부팀장" })).status, 200);
+  // 14-4) 팀원은 조직도를 못 고친다
+  assert.equal((await api("t-fc1", "POST", "/admin/members", { email: "fc1@x.com", role: "지점장" })).status, 403);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정 경계 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

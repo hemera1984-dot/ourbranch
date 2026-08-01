@@ -91,11 +91,13 @@
           </select>
           <select id="ro-recruiter" class="input"><option value="">도입자 없음</option></select>
           <button class="btn primary" id="ro-add">추가</button>
+          <button class="btn" id="ro-cancel" hidden>취소</button>
           <span class="note">지점장은 팀 소속 없이 지점 직속으로 들어갑니다. 도입자는 팀이 달라도 이 사람의 일정을 볼 수 있습니다.</span>
         </div>
         <div class="toolbar" id="ro-team-tools" hidden style="margin-top:10px">
-          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑2팀)" style="width:180px">
+          <input id="ro-team-name" class="input" placeholder="새 팀 이름 (예: 하랑4팀)" style="width:180px">
           <button class="btn" id="ro-team-add">팀 추가</button>
+          <span class="note">팀 이름 변경·삭제는 각 팀 제목 옆에서 합니다.</span>
         </div>
       </div>
       <div id="org-list"></div>
@@ -608,7 +610,7 @@
   // ── 조직도 ──
   function renderOrg() {
     $("org-admin").hidden = !BOOT.me.isManager;
-    $("ro-team-tools").hidden = !BOOT.me.isSuper;
+    $("ro-team-tools").hidden = !BOOT.me.isBranchHead;
     renderPending();
     var it = $("inv-team");
     if (BOOT.me.seesAll && BOOT.teams.length > 1) {
@@ -624,6 +626,7 @@
 
     function rowHtml(m) {
       var tools = "";
+      if (BOOT.me.isManager) tools += '<button class="btn ro-edit" data-email="' + esc(m.email) + '">수정</button>';
       if (BOOT.me.isManager) tools += '<button class="btn ro-del" data-email="' + esc(m.email) + '">삭제</button>';
       if (BOOT.me.isSuper) {
         tools += '<button class="btn ro-flag" data-email="' + esc(m.email) + '" data-flag="isManager" data-on="' + (m.is_manager ? 1 : 0) + '">'
@@ -650,8 +653,12 @@
     }
     html += BOOT.teams.map(function (t) {
       var list = rosterOf(t.id);
+      var teamTools = BOOT.me.isBranchHead
+        ? '<button class="btn tm-rename" data-id="' + t.id + '" data-name="' + esc(t.name) + '">이름 변경</button>'
+          + '<button class="btn tm-del" data-id="' + t.id + '" data-name="' + esc(t.name) + '">팀 삭제</button>'
+        : "";
       return '<div class="section"><div class="section-head"><div class="org-team-head"><h2>' + esc(t.name) + "</h2>"
-        + '<span class="badge gray">' + list.length + "명</span></div></div><div class=\"card\">"
+        + '<span class="badge gray">' + list.length + "명</span>" + teamTools + "</div></div><div class=\"card\">"
         + (list.length ? list.map(rowHtml).join("") : '<div class="empty">이 팀에 등록된 팀원이 없습니다.</div>')
         + "</div></div>";
     }).join("");
@@ -719,15 +726,36 @@
     else { fallbackCopy(text); done(); }
   });
 
+  var editingEmail = null;
+  function resetMemberForm() {
+    editingEmail = null;
+    $("ro-name").value = ""; $("ro-email").value = ""; $("ro-recruiter").value = "";
+    $("ro-add").textContent = "추가";
+    $("ro-cancel").hidden = true;
+  }
+  $("ro-cancel").addEventListener("click", resetMemberForm);
   $("ro-add").addEventListener("click", function () {
     var name = $("ro-name").value.trim();
     if (!name) return;
     var role = $("ro-role").value;
-    var email = $("ro-email").value.trim() || (name + "@미등록.local");
+    // 수정 중이면 원래 계정을 유지한다 (이메일을 바꾸면 다른 사람이 된다)
+    var email = editingEmail || $("ro-email").value.trim() || (name + "@미등록.local");
+    var newEmail = $("ro-email").value.trim();
     var teamId = role === "지점장" ? null : (myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id));
-    var recruiter = $("ro-recruiter").value || undefined;
-    api("/admin/members", { method: "POST", body: { email: email, name: name, teamId: teamId, role: role, recruiterEmail: recruiter } })
-      .then(refreshBoot).then(function () { $("ro-name").value = ""; $("ro-email").value = ""; $("ro-recruiter").value = ""; renderOrg(); });
+    var body = { email: email, name: name, teamId: teamId, role: role,
+                 recruiterEmail: $("ro-recruiter").value || "" };
+    var job = api("/admin/members", { method: "POST", body: body });
+    // 수정하면서 이메일을 새로 넣었으면 계정을 옮겨 준다 (기존 줄은 정리)
+    if (editingEmail && newEmail && newEmail !== editingEmail) {
+      job = job
+        .then(function () {
+          return api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: newEmail }) });
+        })
+        .then(function () {
+          return api("/admin/members/" + encodeURIComponent(editingEmail), { method: "DELETE" });
+        });
+    }
+    job.then(refreshBoot).then(function () { resetMemberForm(); renderOrg(); });
   });
   $("ro-team-add").addEventListener("click", function () {
     var name = $("ro-team-name").value.trim();
@@ -736,6 +764,39 @@
       .then(refreshBoot).then(function () { $("ro-team-name").value = ""; renderOrg(); });
   });
   $("org-list").addEventListener("click", function (e) {
+    // 팀 이름 변경·삭제 (총관리자·지점장)
+    var rn = e.target.closest(".tm-rename");
+    if (rn) {
+      var nn = prompt("새 팀 이름", rn.dataset.name);
+      if (nn && nn.trim() && nn.trim() !== rn.dataset.name)
+        api("/admin/teams/" + rn.dataset.id, { method: "POST", body: { name: nn.trim() } })
+          .then(refreshBoot).then(renderOrg);
+      return;
+    }
+    var tdel = e.target.closest(".tm-del");
+    if (tdel) {
+      if (confirm("「" + tdel.dataset.name + "」 팀을 삭제할까? (소속 인원이 있으면 삭제되지 않습니다)"))
+        api("/admin/teams/" + tdel.dataset.id, { method: "DELETE" })
+          .then(refreshBoot).then(renderOrg);
+      return;
+    }
+    // 구성원 수정 — 위 등록 폼에 값을 채워 그대로 고쳐 저장한다
+    var ed = e.target.closest(".ro-edit");
+    if (ed) {
+      var m = BOOT.members.filter(function (x) { return x.email === ed.dataset.email; })[0];
+      if (!m) return;
+      $("ro-name").value = m.name || "";
+      $("ro-email").value = m.email.indexOf("@미등록.local") >= 0 ? "" : m.email;
+      $("ro-role").value = m.role || "팀원";
+      $("ro-recruiter").value = m.recruiter_email || "";
+      if (!$("team-pick").hidden && m.team_id) $("team-pick").value = m.team_id;
+      editingEmail = m.email;
+      $("ro-add").textContent = "수정 저장";
+      $("ro-cancel").hidden = false;
+      $("org-admin").scrollIntoView({ block: "center" });
+      $("ro-name").focus();
+      return;
+    }
     var del = e.target.closest(".ro-del");
     if (del) {
       if (!confirm("명단에서 삭제할까?")) return;
