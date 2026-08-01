@@ -192,6 +192,10 @@ export function openDb(file) {
       due      TEXT
     );
 
+    -- 동명이인 대비: 소유권은 이름이 아니라 이메일로 판정한다.
+    -- author·member(이름)는 표시용으로 남기고, *_email이 실제 주인이다.
+    -- (이름만 쓰면 동명이인이 서로의 기록을 수정하고, 개명하면 과거 기록을 잃는다)
+
     -- 미션 달성 체크 — 개인별. 팀 미션(전체)은 달성 인원/전체 인원으로 퍼센트 산출
     CREATE TABLE IF NOT EXISTS task_done (
       task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -211,8 +215,30 @@ export function openDb(file) {
     "ALTER TABLE attendance ADD COLUMN lunch TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE attendance ADD COLUMN checked_at TEXT",
     "ALTER TABLE attendance ADD COLUMN afternoon TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE attendance ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE attendance ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+    // 동명이인 구분 — 소유자를 이메일로 못박는다
+    "ALTER TABLE ta_logs ADD COLUMN author_email TEXT",
+    "ALTER TABLE perf ADD COLUMN member_email TEXT",
+    "ALTER TABLE perf_goals ADD COLUMN member_email TEXT"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
+
+  // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)
+  try {
+    db.exec(`
+      UPDATE ta_logs SET author_email = (
+        SELECT m.email FROM members m WHERE m.name = ta_logs.author
+        AND (SELECT COUNT(*) FROM members m2 WHERE m2.name = ta_logs.author) = 1
+      ) WHERE author_email IS NULL;
+      UPDATE perf SET member_email = (
+        SELECT m.email FROM members m WHERE m.name = perf.member
+        AND (SELECT COUNT(*) FROM members m2 WHERE m2.name = perf.member) = 1
+      ) WHERE member_email IS NULL;
+      UPDATE perf_goals SET member_email = (
+        SELECT m.email FROM members m WHERE m.name = perf_goals.member
+        AND (SELECT COUNT(*) FROM members m2 WHERE m2.name = perf_goals.member) = 1
+      ) WHERE member_email IS NULL;
+    `);
+  } catch (e) { /* 최초 생성 시엔 대상이 없다 */ }
 
   return db;
 }

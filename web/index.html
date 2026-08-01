@@ -503,11 +503,55 @@
     return name === BOOT.me.name ? BOOT.me.email : null;
   }
   function nameOf(email) {
-    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
-    if (m) return m.name;
-    return email === BOOT.me.email ? BOOT.me.name : (email || "");
+    return labelByEmail(email);      // 동명이인이면 소속·직급을 덧붙여 구분한다
   }
   function canWriteAs(name) { return BOOT.me.isManager || name === BOOT.me.name; }
+
+  // 동명이인 구분 — 같은 이름이 둘 이상이면 뒤에 구분 표식을 붙인다.
+  // 표식은 소속 팀, 팀도 같으면 직급, 그것도 같으면 이메일 앞부분.
+  function dupNames() {
+    var cnt = {};
+    BOOT.members.forEach(function (m) { cnt[m.name] = (cnt[m.name] || 0) + 1; });
+    return cnt;
+  }
+  function memberLabel(m) {
+    if (!m) return "";
+    var cnt = dupNames();
+    if ((cnt[m.name] || 0) < 2) return m.name;
+    var same = BOOT.members.filter(function (x) { return x.name === m.name; });
+    var teamOf = function (x) {
+      return (BOOT.teams.filter(function (t) { return t.id === x.team_id; })[0] || {}).name || "";
+    };
+    // 실제로 나만 남는 표식을 고른다 — 팀 → 팀·직급 → 이메일 순으로 좁힌다
+    var cands = [
+      teamOf(m),
+      [teamOf(m), m.role].filter(Boolean).join(" "),
+      m.role,
+      String(m.email || "").split("@")[0]
+    ];
+    for (var i = 0; i < cands.length; i++) {
+      var tag = cands[i];
+      if (!tag) continue;
+      var uniq = same.filter(function (x) {
+        var t = [teamOf(x), [teamOf(x), x.role].filter(Boolean).join(" "), x.role,
+                 String(x.email || "").split("@")[0]][i];
+        return t === tag;
+      }).length === 1;
+      if (uniq) return m.name + "(" + tag + ")";
+    }
+    // 여기까지 왔으면 이메일로도 못 가르는 상태 — 이메일 전체를 쓴다
+    return m.name + "(" + String(m.email || "") + ")";
+  }
+  function labelByEmail(email) {
+    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
+    if (m) return memberLabel(m);
+    return email === BOOT.me.email ? BOOT.me.name : (email || "");
+  }
+  // 이름만 있는 옛 기록용 — 동명이인이면 누구인지 알 수 없다고 표시
+  function labelByName(name) {
+    var cnt = dupNames();
+    return (cnt[name] || 0) >= 2 ? name + "(구분 필요)" : name;
+  }
 
   // ── 홈 대시보드 (벤토) — 실데이터가 있는 타일만 놓는다 ──
   function loadHome() {
@@ -673,7 +717,7 @@
       var recName = m.recruiter_email ? nameOf(m.recruiter_email) : "";
       return '<div class="org-row' + (m.role === "팀원" || m.role === "부팀장" || m.role === "팀장" ? " depth-1" : "") + '">'
         + '<span class="badge ' + (m.is_manager || m.role === "부지점장" || m.role === "지점장" ? "blue" : "gray") + '">' + esc(m.role) + "</span>"
-        + '<span class="name">' + esc(m.name) + "</span>"
+        + '<span class="name">' + esc(memberLabel(m)) + "</span>"
         + '<span class="meta">' + esc(m.email && m.email.indexOf("@미등록.local") < 0 ? m.email : "이메일 미등록")
         + (recName ? " · 도입 " + esc(recName) : "")
         + (m.can_view_all ? " · 전체열람" : "") + "</span>" + tools + "</div>";
@@ -776,7 +820,18 @@
     if (!name) return;
     var role = $("ro-role").value;
     // 수정 중이면 원래 계정을 유지한다 (이메일을 바꾸면 다른 사람이 된다)
-    var email = editingEmail || $("ro-email").value.trim() || (name + "@미등록.local");
+    // 이메일 없이 등록할 때 동명이인이 서로를 덮어쓰지 않게 고유 값을 만든다
+    // (이메일이 열쇠라서 같은 값이면 두 번째 등록이 첫 번째를 지운다)
+    function placeholderEmail(nm) {
+      var base = nm + "@미등록.local";
+      if (!BOOT.members.some(function (m) { return m.email === base; })) return base;
+      for (var i = 2; i < 100; i++) {
+        var cand = nm + i + "@미등록.local";
+        if (!BOOT.members.some(function (m) { return m.email === cand; })) return cand;
+      }
+      return nm + Date.now() + "@미등록.local";
+    }
+    var email = editingEmail || $("ro-email").value.trim() || placeholderEmail(name);
     var newEmail = $("ro-email").value.trim();
     var teamId = role === "지점장" ? null : (myTeamId() || (BOOT.teams[0] && BOOT.teams[0].id));
     var body = { email: email, name: name, teamId: teamId, role: role,
@@ -947,7 +1002,7 @@
   // 하루 상세 목록 — 모바일 하루 보기와 달력 우측 패널이 같이 쓴다
   function dayGroupsHtml(evs, teamId) {
     var groups = [{ em: "", name: "팀 공유", sub: "" }];
-    rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: m.name, sub: m.role }); });
+    rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: memberLabel(m), sub: m.role }); });
     evs.forEach(function (e) {
       if (e.member_email && !groups.some(function (g) { return g.em === e.member_email; }))
         groups.push({ em: e.member_email, name: nameOf(e.member_email), sub: BOOT.me.recruits.indexOf(e.member_email) >= 0 ? "내 도입" : "명단 외" });
@@ -999,7 +1054,7 @@
     rowCells(function (e) { return !e.member_email; }, "");
     var roster = rosterOf(myTeamId());
     roster.forEach(function (m) {
-      h.push('<div class="week-name">' + esc(m.name) + '<span class="sub">' + esc(m.role) + "</span></div>");
+      h.push('<div class="week-name">' + esc(memberLabel(m)) + '<span class="sub">' + esc(m.role) + "</span></div>");
       rowCells(function (e) { return e.member_email === m.email; }, m.email);
     });
     // 명단 밖 인원(총관리자 등)의 개인 일정도 놓치지 않는다
@@ -1525,7 +1580,7 @@
           : (a.id != null ? '<span class="badge gray">미출근' + (a.reason ? " · " + esc(a.reason) : "") + "</span>"
             : '<span class="cell-empty">미보고</span>');
         h.push("<tr>"
-          + '<td class="ro"><strong>' + esc(m.name) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(m.role) + "</span></td>"
+          + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(m.role) + "</span></td>"
           + '<td class="ro">' + state + "</td>"
           + '<td class="ro">' + esc(a.work || "") + "</td>"
           + '<td class="ro">' + esc(a.lunch || "") + "</td>"
@@ -1743,8 +1798,12 @@
         cols: TA_COLS,
         year: Number(month.slice(0, 4)),
         rows: rows,
-        fixed: { author: BOOT.me.name, date: fmtDate(new Date()) },
-        canEditRow: function (r) { return canWriteAs(r.author); },
+        fixed: { author: BOOT.me.name, authorEmail: BOOT.me.email, date: fmtDate(new Date()) },
+        // 소유는 이메일로 판정 — 동명이인이 서로의 일지를 고치지 못하게
+        canEditRow: function (r) {
+          if (BOOT.me.isManager) return true;
+          return r.author_email ? r.author_email === BOOT.me.email : r.author === BOOT.me.name;
+        },
         onDeleteRow: function (r, done) { api("/ta/" + r._id, { method: "DELETE" }).then(done); }
       });
       if (!rows.length) taGrid.addRow();
@@ -1752,13 +1811,20 @@
   }
   function renderTaStats(rows) {
     var byAuthor = {};
-    rows.forEach(function (r) { if (r._id) byAuthor[r.author] = (byAuthor[r.author] || 0) + 1; });
+    // 활동량 집계도 이메일 기준 — 동명이인이 한 칸에 합쳐지지 않게
+    rows.forEach(function (r) {
+      if (!r._id) return;
+      var key = r.author_email || r.author;
+      var label = r.author_email ? labelByEmail(r.author_email) : labelByName(r.author);
+      byAuthor[key] = byAuthor[key] || { n: 0, label: label };
+      byAuthor[key].n++;
+    });
     var names = Object.keys(byAuthor);
     var el = $("ta-stats");
     if (!names.length) { el.hidden = true; return; }
     el.hidden = false;
     el.innerHTML = '<div class="stat"><b>' + rows.filter(function (r) { return r._id; }).length + '</b><span>이번 달 전체</span></div>'
-      + names.map(function (n) { return '<div class="stat"><b>' + byAuthor[n] + "</b><span>" + esc(n) + "</span></div>"; }).join("");
+      + names.map(function (k) { return '<div class="stat"><b>' + byAuthor[k].n + "</b><span>" + esc(byAuthor[k].label) + "</span></div>"; }).join("");
   }
   $("ta-add").addEventListener("click", function () { if (taGrid) taGrid.addRow(); });
   $("ta-save").addEventListener("click", function () {
@@ -1806,8 +1872,17 @@
         var goals = {};
         data.goals.filter(function (g) { return g.team_id === t.id; })
           .forEach(function (g) { goals[g.member] = g; });
-        var names = rosterOf(t.id).map(function (m) { return m.name; });
-        rows.forEach(function (r) { if (names.indexOf(r.member) < 0) names.push(r.member); });
+        // 사람 목록은 이메일이 기준 — 동명이인이 한 줄로 합쳐지지 않게 한다
+        var people = rosterOf(t.id).map(function (m) {
+          return { email: m.email, name: m.name, label: memberLabel(m) };
+        });
+        rows.forEach(function (r) {
+          var key = r.member_email || null;
+          var found = key
+            ? people.some(function (p) { return p.email === key; })
+            : people.some(function (p) { return p.name === r.member && !r.member_email; });
+          if (!found) people.push({ email: key, name: r.member, label: key ? labelByEmail(key) : labelByName(r.member) });
+        });
 
         // 팀 합계
         var tPrem = 0, tCanp = 0, tIntro = 0;
@@ -1818,15 +1893,17 @@
           + '<span class="badge gray">' + rows.length + "건 · 월납 " + fmtNum(tPrem) + " · CANP " + fmtNum(tCanp)
           + (tIntro ? " · 도입 " + tIntro + "명" : "") + "</span></div></div>";
 
-        if (!names.length) {
+        if (!people.length) {
           html += '<div class="card"><div class="empty">팀원 명단이 비어 있습니다.</div></div></div>';
           return;
         }
-        names.forEach(function (n) {
+        people.forEach(function (pp) {
+          var n = pp.name;
           var g = goals[n] || {};
           var i = idx++;
+          var canEdit = BOOT.me.isManager || pp.email === BOOT.me.email;
           html += '<div class="section"><div class="section-head">'
-            + '<h2 style="font-size:15px">' + esc(n)
+            + '<h2 style="font-size:15px">' + esc(pp.label)
             + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
             + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
             + '</h2><div class="toolbar">'
@@ -1834,10 +1911,15 @@
               ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" style="width:150px">'
                 + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
               : "")
-            + (canWriteAs(n) ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
+            + (canEdit ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
             + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
             + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
-          sections.push({ member: n, teamId: t.id, rows: rows.filter(function (r) { return r.member === n; }) });
+          sections.push({
+            member: n, email: pp.email, canEdit: canEdit, teamId: t.id,
+            rows: rows.filter(function (r) {
+              return pp.email ? r.member_email === pp.email : (r.member === n && !r.member_email);
+            })
+          });
         });
         html += "</div>";
       });
@@ -1850,10 +1932,10 @@
           year: Number(month.slice(0, 4)),
           rows: mine,
           fixed: { member: s.member },
-          canEditRow: function () { return canWriteAs(s.member); },
+          canEditRow: function () { return s.canEdit; },
           onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(done); }
         });
-        perfGrids.push({ member: s.member, teamId: s.teamId, grid: g, sumEl: $("perf-sum-" + i) });
+        perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, grid: g, sumEl: $("perf-sum-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
       });
     });
@@ -1875,7 +1957,7 @@
     perfGrids.forEach(function (pg) { pg.grid.commitActive(); });
     perfGrids.forEach(function (pg, i) {
       var news = pg.grid.newRows().filter(function (r) { return r.contract_date || r.premium || r.canp; })
-        .map(function (r) { return Object.assign({}, r, { member: pg.member }); });
+        .map(function (r) { return Object.assign({}, r, { member: pg.member, memberEmail: pg.email }); });
       if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: pg.teamId, month: month, rows: news } }));
       pg.grid.dirtyRows().forEach(function (r) { jobs.push(api("/perf/" + r._id, { method: "POST", body: r })); });
       if (BOOT.me.isManager) {
@@ -1883,7 +1965,8 @@
         var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
         if (gi) {
           (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push({
-            member: pg.member, goal: gi.value.trim(), intro: ii ? Number(ii.value) || 0 : 0
+            member: pg.member, memberEmail: pg.email, goal: gi.value.trim(),
+            intro: ii ? Number(ii.value) || 0 : 0
           });
         }
       }

@@ -128,6 +128,20 @@ function canWriteTeam(user, teamId) {
   return user.teamId === teamId;
 }
 
+// 기록의 주인인지 — 이름이 아니라 이메일로 본다.
+// 이름으로 보면 동명이인이 서로의 기록을 수정하고, 개명하면 과거 기록을 잃는다.
+// 이메일이 비어 있는 옛 기록만 이름으로 대조한다(이관 전 데이터).
+function isOwner(user, ownerEmail, ownerName) {
+  if (ownerEmail) return ownerEmail === user.email;
+  return ownerName === user.name;
+}
+
+// 이름 → 이메일. 동명이인이면 누구인지 특정할 수 없으므로 null.
+function emailForName(name) {
+  const rows = db.prepare("SELECT email FROM members WHERE name = ?").all(name);
+  return rows.length === 1 ? rows[0].email : null;
+}
+
 // 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
 function canApprove(user) {
   return user.isSuper || user.grade === "BM" || user.grade === "ESL" || user.isManager;
@@ -420,7 +434,7 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
   const list = db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
     .all(month + "-00", month + "-99")
     .filter(r => canSeeTeam(user, r.team_id))
-    .filter(r => user.isManager || r.author === user.name);
+    .filter(r => user.isManager || isOwner(user, r.author_email, r.author));
   send(res, 200, list);
 });
 
@@ -429,16 +443,24 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·행이 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, ${TA_FIELDS.join(", ")})
-    VALUES (?, ?${", ?".repeat(TA_FIELDS.length)})`);
+  const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, author_email, ${TA_FIELDS.join(", ")})
+    VALUES (?, ?, ?${", ?".repeat(TA_FIELDS.length)})`);
   const ids = [];
   for (const r of b.rows) {
     if (!r.date) continue;
     if (!isDate(r.date)) return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + r.date });
-    // 일지는 각 팀원이 본인 이름으로 넣는다. 남 이름으로 넣는 건 부지점장(관리자)만.
-    const author = r.author || user.name;
-    if (!user.isManager && author !== user.name) return send(res, 403, { error: "본인 일지만 입력할 수 있습니다" });
-    ids.push(Number(ins.run(teamId, author, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
+    // 일지는 각 팀원이 본인 것으로 넣는다. 남의 것으로 넣는 건 관리자만.
+    // 담당자는 이메일로 지정한다 — 동명이인이 섞이지 않게.
+    let authorEmail = r.authorEmail || (r.author ? emailForName(r.author) : user.email);
+    let author = r.author || user.name;
+    if (r.authorEmail) {
+      const t = getMember(db, r.authorEmail);
+      if (t) author = t.name;
+    }
+    if (!authorEmail) authorEmail = r.author === user.name ? user.email : null;
+    if (!user.isManager && authorEmail !== user.email)
+      return send(res, 403, { error: "본인 일지만 입력할 수 있습니다" });
+    ids.push(Number(ins.run(teamId, author, authorEmail, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
   }
   send(res, 200, { ids });
 });
@@ -446,13 +468,17 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
 route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (row.author !== user.name && !user.isManager) return send(res, 403, { error: "본인 기록만" });
+  if (!isOwner(user, row.author_email, row.author) && !user.isManager)
+    return send(res, 403, { error: "본인 기록만" });
   const b = await readJson(req);
   const sets = TA_FIELDS.filter(f => b[f] != null);
   // 담당자 변경은 관리자만 — 아니면 자기 실적을 남 이름으로 떠넘길 수 있다
   if (b.author != null && b.author !== row.author) {
     if (!user.isManager) return send(res, 403, { error: "담당자 변경은 관리자만" });
     sets.push("author");
+    // 이름만 바꾸면 동명이인 중 누구인지 모른다 — 이메일도 함께 옮긴다
+    const em = b.authorEmail || emailForName(b.author);
+    if (em) db.prepare("UPDATE ta_logs SET author_email = ? WHERE id = ?").run(em, row.id);
   }
   if (!sets.length) return send(res, 400, { error: "고칠 값이 없습니다" });
   db.prepare(`UPDATE ta_logs SET ${sets.map(f => f + " = ?").join(", ")} WHERE id = ?`)
@@ -463,7 +489,8 @@ route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
 route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (row.author !== user.name && !user.isManager) return send(res, 403, { error: "본인 기록만" });
+  if (!isOwner(user, row.author_email, row.author) && !user.isManager)
+    return send(res, 403, { error: "본인 기록만" });
   db.prepare("DELETE FROM ta_logs WHERE id = ?").run(row.id);
   send(res, 200, { ok: true });
 });
@@ -484,15 +511,19 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·월·행이 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  const ins = db.prepare("INSERT INTO perf (team_id, month, member, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  const ins = db.prepare("INSERT INTO perf (team_id, month, member, member_email, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
   const ids = [];
   for (const r of b.rows) {
-    if (!r.member) continue;
+    if (!r.member && !r.memberEmail) continue;
     if (r.contract_date && !isDate(r.contract_date))
       return send(res, 400, { error: "계약일은 2026-08-01 형식으로 넣어 주세요: " + r.contract_date });
+    // 대상은 이메일로 특정한다 — 동명이인이 섞이지 않게
+    const em = r.memberEmail || emailForName(r.member) || (r.member === user.name ? user.email : null);
+    const t = em ? getMember(db, em) : null;
+    const name = (t && t.name) || r.member;
     // 팀원은 자기 업적만, 부지점장(관리자)은 팀 전체 입력 가능
-    if (!user.isManager && r.member !== user.name) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
-    ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", num(r.premium), num(r.canp), r.note || "").lastInsertRowid));
+    if (!user.isManager && em !== user.email) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
+    ids.push(Number(ins.run(teamId, b.month, name, em, r.contract_date || "", num(r.premium), num(r.canp), r.note || "").lastInsertRowid));
   }
   send(res, 200, { ids });
 });
@@ -500,7 +531,8 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
 route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (row.member !== user.name && !user.isManager) return send(res, 403, { error: "본인 업적만" });
+  if (!isOwner(user, row.member_email, row.member) && !user.isManager)
+    return send(res, 403, { error: "본인 업적만" });
   const b = await readJson(req);
   db.prepare("UPDATE perf SET contract_date = ?, premium = ?, canp = ?, note = ? WHERE id = ?")
     .run(b.contract_date ?? row.contract_date, num(b.premium ?? row.premium),
@@ -511,7 +543,8 @@ route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
 route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (row.member !== user.name && !user.isManager) return send(res, 403, { error: "본인 업적만" });
+  if (!isOwner(user, row.member_email, row.member) && !user.isManager)
+    return send(res, 403, { error: "본인 업적만" });
   db.prepare("DELETE FROM perf WHERE id = ?").run(row.id);
   send(res, 200, { ok: true });
 });
@@ -523,14 +556,16 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const prevOf = db.prepare("SELECT * FROM perf_goals WHERE team_id = ? AND month = ? AND member = ?");
   const up = db.prepare(
-    `INSERT INTO perf_goals (team_id, month, member, goal, intro) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(team_id, month, member) DO UPDATE SET goal = excluded.goal, intro = excluded.intro`
+    `INSERT INTO perf_goals (team_id, month, member, member_email, goal, intro) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(team_id, month, member) DO UPDATE SET
+       member_email = excluded.member_email, goal = excluded.goal, intro = excluded.intro`
   );
   // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다
   for (const g of b.goals) {
     if (!g.member) continue;
     const prev = prevOf.get(teamId, b.month, g.member) || {};
-    up.run(teamId, b.month, g.member,
+    const em = g.memberEmail || emailForName(g.member) || prev.member_email || null;
+    up.run(teamId, b.month, g.member, em,
       g.goal !== undefined ? g.goal : (prev.goal || ""),
       g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
   }

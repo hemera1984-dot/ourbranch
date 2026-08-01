@@ -379,7 +379,39 @@ async function main() {
   const attToday = await (await api("t-fc1", "GET", "/attendance?date=" + kstToday)).json();
   assert.equal(attToday.filter(a => a.email === "fc1@x.com").length, 1);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST 확인 완료");
+  // 19) 동명이인 — 같은 이름 두 사람이 서로의 기록을 건드리지 못한다
+  // fc1(팀원1)과 같은 이름으로 fc2를 1팀에 넣는다
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원1", teamId: 1, role: "팀원" })).status, 200);
+
+  // 각자 자기 이름으로 TA를 쓴다 — 이메일로 소유가 갈린다
+  const taA = await (await api("t-fc1", "POST", "/ta", { rows: [{ date: "2027-01-05", cand_name: "A후보" }] })).json();
+  const taB = await (await api("t-fc2", "POST", "/ta", { rows: [{ date: "2027-01-06", cand_name: "B후보" }] })).json();
+  assert.equal(taA.ids.length, 1); assert.equal(taB.ids.length, 1);
+  // 동명이인이라도 남의 일지는 수정·삭제 불가
+  assert.equal((await api("t-fc2", "POST", "/ta/" + taA.ids[0], { result: "가로채기" })).status, 403);
+  assert.equal((await api("t-fc1", "DELETE", "/ta/" + taB.ids[0])).status, 403);
+  // 본인 것은 된다
+  assert.equal((await api("t-fc1", "POST", "/ta/" + taA.ids[0], { result: "내 기록" })).status, 200);
+  // 각자 자기 것만 조회된다 (관리자 아님)
+  const taSeenA = await (await api("t-fc1", "GET", "/ta?month=2027-01")).json();
+  assert.equal(taSeenA.length, 1);
+  assert.equal(taSeenA[0].cand_name, "A후보");
+  assert.equal(taSeenA[0].author_email, "fc1@x.com");   // 이메일이 박혀 있다
+
+  // 업적도 동명이인이 갈린다
+  await api("t-fc1", "POST", "/perf", { month: "2027-01", rows: [{ member: "팀원1", memberEmail: "fc1@x.com", contract_date: "2027-01-10", canp: 100 }] });
+  await api("t-fc2", "POST", "/perf", { month: "2027-01", rows: [{ member: "팀원1", memberEmail: "fc2@x.com", contract_date: "2027-01-11", canp: 200 }] });
+  const dupPerf = await (await api("t-esl1", "GET", "/perf?month=2027-01")).json();
+  const mineA = dupPerf.rows.filter(r => r.member_email === "fc1@x.com");
+  const mineB = dupPerf.rows.filter(r => r.member_email === "fc2@x.com");
+  assert.equal(mineA.length, 1); assert.equal(mineA[0].canp, 100);
+  assert.equal(mineB.length, 1); assert.equal(mineB[0].canp, 200);
+  // 남의 업적 수정 차단
+  assert.equal((await api("t-fc1", "POST", "/perf/" + mineB[0].id, { canp: 999 })).status, 403);
+  // 팀원이 남의 이메일로 입력하려 해도 차단
+  assert.equal((await api("t-fc1", "POST", "/perf", { month: "2027-01", rows: [{ member: "팀원1", memberEmail: "fc2@x.com", canp: 1 }] })).status, 403);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
