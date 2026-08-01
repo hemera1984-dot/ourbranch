@@ -89,11 +89,13 @@
 
       <div class="mobile-only">
         <div class="toolbar" style="margin-bottom:10px">
-          <button class="btn" id="day-prev">이전 날</button>
-          <button class="btn" id="day-today">오늘</button>
-          <button class="btn" id="day-next">다음 날</button>
-          <strong id="day-label" style="font-variant-numeric:tabular-nums"></strong>
+          <button class="btn" id="m-cal-prev">이전 달</button>
+          <button class="btn" id="m-cal-today">오늘</button>
+          <button class="btn" id="m-cal-next">다음 달</button>
+          <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
         </div>
+        <div class="card cal-mini" style="margin-bottom:10px"><div id="m-cal-view"></div></div>
+        <strong id="day-label" style="display:block;margin:0 0 6px;font-variant-numeric:tabular-nums"></strong>
         <div class="card" id="day-view"></div>
         <button class="btn primary fab" id="day-add" type="button">일정 추가</button>
       </div>
@@ -835,35 +837,46 @@
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
 
-  // ── 모바일 하루 보기 — 오늘 중심, 큰 추가 버튼 ──
+  // ── 모바일 — 소형 월간 달력 + 선택한 날 상세 + 큰 추가 버튼 ──
   function loadDay() {
-    var ds = fmtDate(dayBase);
-    var todayStr = fmtDate(new Date());
-    $("day-label").textContent = (dayBase.getMonth() + 1) + "월 " + dayBase.getDate() + "일 "
-      + DOW_FULL[dayBase.getDay()] + (ds === todayStr ? " (오늘)" : "");
+    $("m-cal-label").textContent = calBase.getFullYear() + "년 " + (calBase.getMonth() + 1) + "월";
+    var y = calBase.getFullYear(), mo = calBase.getMonth();
+    var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
-    api("/events?from=" + ds + "&to=" + ds).then(function (evs) {
-      evs = evs.filter(function (e) {
+    api("/events?from=" + from + "&to=" + to).then(function (evs) {
+      calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null
           || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
         return visible && e.status !== "취소";
-      }).sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      });
       evsById = {};
-      evs.forEach(function (e) { evsById[e.id] = e; });
-
-      var h = dayGroupsHtml(evs, teamId);
-      $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+      calEvs.forEach(function (e) { evsById[e.id] = e; });
+      renderCalGrid("m-cal-view", true);
+      renderMobileDay();
     });
   }
-  function moveDay(d) {
-    dayBase = new Date(dayBase.getFullYear(), dayBase.getMonth(), dayBase.getDate() + d);
-    loadDay();
+  function renderMobileDay() {
+    var d = new Date(selDate + "T00:00:00");
+    var todayStr = fmtDate(new Date());
+    $("day-label").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
+      + DOW_FULL[d.getDay()] + (selDate === todayStr ? " (오늘)" : "");
+    var items = calEvs.filter(function (e) { return e.date === selDate; })
+      .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+    var h = dayGroupsHtml(items, myTeamId());
+    $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
   }
-  $("day-prev").addEventListener("click", function () { moveDay(-1); });
-  $("day-next").addEventListener("click", function () { moveDay(1); });
-  $("day-today").addEventListener("click", function () { dayBase = new Date(); loadDay(); });
+  $("m-cal-view").addEventListener("click", function (e) {
+    var cell = e.target.closest(".cal-cell");
+    if (!cell || !cell.dataset.date) return;
+    selDate = cell.dataset.date;
+    renderCalGrid("m-cal-view", true);
+    renderMobileDay();
+  });
+  $("m-cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadDay(); });
+  $("m-cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadDay(); });
+  $("m-cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadDay(); });
   $("day-add").addEventListener("click", function () {
-    openPop(null, { em: BOOT.me.email, date: fmtDate(dayBase), kind: "상담", pickMember: true, onDone: loadDay });
+    openPop(null, { em: BOOT.me.email, date: selDate, kind: "상담", pickMember: true, onDone: loadDay });
   });
   $("day-view").addEventListener("click", function (e) { dayListClick(e, loadDay); });
 
@@ -906,7 +919,8 @@
       renderCalDay();
     });
   }
-  function renderCalGrid() {
+  function renderCalGrid(targetId, compact) {
+    targetId = targetId || "cal-view";
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     var todayStr = fmtDate(new Date());
     var pad = (new Date(y, mo, 1).getDay() + 6) % 7;
@@ -922,18 +936,27 @@
         .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
       var cell = ['<div class="cal-cell' + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
       cell.push('<span class="cal-daynum">' + d + "</span>");
-      items.slice(0, 3).forEach(function (e) {
-        var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
-        cell.push('<div class="cal-ev"><span class="dot ' + kindCls + '"></span>'
-          + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
-          + "<span>" + esc(e.title || e.kind) + "</span></div>");
-      });
-      if (items.length > 3) cell.push('<div class="cal-more">+' + (items.length - 3) + "건</div>");
+      function kindClsOf(e) {
+        return "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+      }
+      if (compact) {
+        // 소형 달력: 색 점만 (최대 4)
+        if (items.length) cell.push('<span class="dots">' + items.slice(0, 4).map(function (e) {
+          return '<span class="dot ' + kindClsOf(e) + '"></span>';
+        }).join("") + "</span>");
+      } else {
+        items.slice(0, 3).forEach(function (e) {
+          cell.push('<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
+            + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
+            + "<span>" + esc(e.title || e.kind) + "</span></div>");
+        });
+        if (items.length > 3) cell.push('<div class="cal-more">+' + (items.length - 3) + "건</div>");
+      }
       cell.push("</div>");
       h.push(cell.join(""));
     }
     h.push("</div>");
-    $("cal-view").innerHTML = h.join("");
+    $(targetId).innerHTML = h.join("");
   }
   function renderCalDay() {
     var d = new Date(selDate + "T00:00:00");
@@ -1245,52 +1268,72 @@
   ];
   function fmtNum(n) { return Number(n || 0).toLocaleString("ko-KR"); }
 
+  // 업적은 열람 범위의 모든 팀이 한 화면에 — 팀 합계 밑에 팀원별 블록 (지점장·총관리자는 전 팀)
   function loadPerf() {
     $("month-label").textContent = monthLabel();
-    var teamId = myTeamId();
     api("/perf?month=" + month).then(function (data) {
-      var rows = data.rows.filter(function (r) { return r.team_id === teamId; });
-      var goals = {};
-      data.goals.filter(function (g) { return g.team_id === teamId; })
-        .forEach(function (g) { goals[g.member] = g; });
-      var roster = rosterOf(teamId);
-      var names = roster.map(function (m) { return m.name; });
-      rows.forEach(function (r) { if (names.indexOf(r.member) < 0) names.push(r.member); });
-
       perfGrids = [];
       var body = $("perf-body");
-      if (!names.length) {
-        body.innerHTML = '<div class="card"><div class="empty">팀원 명단이 비어 있습니다. 조직도 화면에서 먼저 등록합니다.</div></div>';
+      var teams = BOOT.teams;
+      if (!teams.length) {
+        body.innerHTML = '<div class="card"><div class="empty">팀이 아직 없습니다. 조직도에서 먼저 등록합니다.</div></div>';
         return;
       }
-      body.innerHTML = names.map(function (n, i) {
-        var g = goals[n] || {};
-        return '<div class="section"><div class="section-head">'
-          + "<h2>" + esc(n)
-          + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
-          + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
-          + '</h2><div class="toolbar">'
-          + (BOOT.me.isManager
-            ? '<input class="input goal-input" data-member="' + esc(n) + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" style="width:150px">'
-              + '<input class="input intro-input" data-member="' + esc(n) + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
-            : "")
-          + (canWriteAs(n) ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
-          + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
-          + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
-      }).join("")
-        + '<div class="toolbar" style="margin-top:14px"><button class="btn primary" id="perf-save">저장</button></div>';
+      var html = "";
+      var idx = 0;
+      var sections = [];
+      teams.forEach(function (t) {
+        var rows = data.rows.filter(function (r) { return r.team_id === t.id; });
+        var goals = {};
+        data.goals.filter(function (g) { return g.team_id === t.id; })
+          .forEach(function (g) { goals[g.member] = g; });
+        var names = rosterOf(t.id).map(function (m) { return m.name; });
+        rows.forEach(function (r) { if (names.indexOf(r.member) < 0) names.push(r.member); });
 
-      names.forEach(function (n, i) {
-        var mine = rows.filter(function (r) { return r.member === n; })
-          .map(function (r) { r._id = r.id; return r; });
+        // 팀 합계
+        var tPrem = 0, tCanp = 0, tIntro = 0;
+        rows.forEach(function (r) { tPrem += Number(r.premium) || 0; tCanp += Number(r.canp) || 0; });
+        Object.keys(goals).forEach(function (k) { tIntro += Number(goals[k].intro) || 0; });
+        html += '<div class="section" style="margin-top:26px"><div class="section-head"><div class="org-team-head">'
+          + "<h2>" + esc(t.name) + "</h2>"
+          + '<span class="badge gray">' + rows.length + "건 · 월납 " + fmtNum(tPrem) + " · CANP " + fmtNum(tCanp)
+          + (tIntro ? " · 도입 " + tIntro + "명" : "") + "</span></div></div>";
+
+        if (!names.length) {
+          html += '<div class="card"><div class="empty">팀원 명단이 비어 있습니다.</div></div></div>';
+          return;
+        }
+        names.forEach(function (n) {
+          var g = goals[n] || {};
+          var i = idx++;
+          html += '<div class="section"><div class="section-head">'
+            + '<h2 style="font-size:15px">' + esc(n)
+            + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
+            + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
+            + '</h2><div class="toolbar">'
+            + (BOOT.me.isManager
+              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" style="width:150px">'
+                + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
+              : "")
+            + (canWriteAs(n) ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
+            + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
+            + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
+          sections.push({ member: n, teamId: t.id, rows: rows.filter(function (r) { return r.member === n; }) });
+        });
+        html += "</div>";
+      });
+      body.innerHTML = html + '<div class="toolbar" style="margin-top:14px"><button class="btn primary" id="perf-save">저장</button></div>';
+
+      sections.forEach(function (s, i) {
+        var mine = s.rows.map(function (r) { r._id = r.id; return r; });
         var g = makeGrid($("perf-grid-" + i), {
           cols: PERF_COLS,
           rows: mine,
-          fixed: { member: n },
-          canEditRow: function () { return canWriteAs(n); },
+          fixed: { member: s.member },
+          canEditRow: function () { return canWriteAs(s.member); },
           onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(done); }
         });
-        perfGrids.push({ member: n, grid: g, sumEl: $("perf-sum-" + i) });
+        perfGrids.push({ member: s.member, teamId: s.teamId, grid: g, sumEl: $("perf-sum-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
       });
     });
@@ -1298,7 +1341,7 @@
   $("perf-body").addEventListener("click", function (e) {
     var b = e.target.closest(".add-row");
     if (b) perfGrids[Number(b.dataset.i)].grid.addRow();
-    if (e.target.id === "perf-save") savePerf(myTeamId());
+    if (e.target.id === "perf-save") savePerf();
   });
   function updateSum(pg) {
     var rs = pg.grid.rows().filter(function (r) { return r.contract_date || r.premium || r.canp; });
@@ -1306,22 +1349,27 @@
     rs.forEach(function (r) { prem += Number(r.premium) || 0; canp += Number(r.canp) || 0; });
     pg.sumEl.textContent = "합계 " + rs.length + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp);
   }
-  function savePerf(teamId) {
+  function savePerf() {
     var jobs = [];
-    perfGrids.forEach(function (pg) {
+    var goalsByTeam = {};
+    perfGrids.forEach(function (pg, i) {
       var news = pg.grid.newRows().filter(function (r) { return r.contract_date || r.premium || r.canp; })
         .map(function (r) { return Object.assign({}, r, { member: pg.member }); });
-      if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: teamId, month: month, rows: news } }));
+      if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: pg.teamId, month: month, rows: news } }));
       pg.grid.dirtyRows().forEach(function (r) { jobs.push(api("/perf/" + r._id, { method: "POST", body: r })); });
+      if (BOOT.me.isManager) {
+        var gi = document.querySelector('.goal-input[data-i="' + i + '"]');
+        var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
+        if (gi) {
+          (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push({
+            member: pg.member, goal: gi.value.trim(), intro: ii ? Number(ii.value) || 0 : 0
+          });
+        }
+      }
     });
-    if (BOOT.me.isManager) {
-      var goals = [];
-      document.querySelectorAll(".goal-input").forEach(function (inp) {
-        var intro = document.querySelector('.intro-input[data-member="' + inp.dataset.member.replace(/"/g, '\\"') + '"]');
-        goals.push({ member: inp.dataset.member, goal: inp.value.trim(), intro: intro ? Number(intro.value) || 0 : 0 });
-      });
-      if (goals.length) jobs.push(api("/perf/goals", { method: "POST", body: { teamId: teamId, month: month, goals: goals } }));
-    }
+    Object.keys(goalsByTeam).forEach(function (tid) {
+      jobs.push(api("/perf/goals", { method: "POST", body: { teamId: Number(tid), month: month, goals: goalsByTeam[tid] } }));
+    });
     Promise.all(jobs).then(loadPerf);
   }
 
