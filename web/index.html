@@ -519,11 +519,14 @@
     $("home-date").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW[d.getDay()] + "요일";
     var title = BOOT.me.isSuper ? " 총관리자" : BOOT.me.isManager ? " 관리자" : "";
     $("home-greet").textContent = BOOT.me.name + title + "님의 오늘";
+    // 하나가 실패해도 홈이 백지가 되지 않게 — 빈 값으로 대체하고 나머지를 그린다
+    function soft(p, fallback) { return p.catch(function () { return fallback; }); }
     Promise.all([
-      api("/events?from=" + todayStr + "&to=" + todayStr),
-      api("/tasks"), api("/notices"),
-      api("/ta?month=" + thisMonth), api("/perf?month=" + thisMonth),
-      api("/attendance?date=" + todayStr)
+      soft(api("/events?from=" + todayStr + "&to=" + todayStr), []),
+      soft(api("/tasks"), []), soft(api("/notices"), []),
+      soft(api("/ta?month=" + thisMonth), []),
+      soft(api("/perf?month=" + thisMonth), { rows: [], goals: [] }),
+      soft(api("/attendance?date=" + todayStr), [])
     ]).then(function (res) {
       var evs = res[0].filter(function (e) {
         return (e.team_id === teamId || e.team_id == null || BOOT.me.recruits.indexOf(e.member_email) >= 0) && e.status !== "취소";
@@ -549,6 +552,10 @@
       }
 
       var tiles = [];
+      // 출석 정보는 아래 두 타일이 모두 쓴다 — 선언이 뒤에 있으면 항상 undefined가 된다
+      var attList = res[5];
+      var myAtt = attList.filter(function (a) { return a.email === BOOT.me.email; })[0];
+      var rosterEmails = rosterOf(teamId).map(function (m) { return m.email; });
       // 오늘 할 일 — 아침에 3초로 끝내는 체크리스트 (안 한 것만 남는다)
       var todos = [];
       if (!(myAtt && myAtt.present))
@@ -571,9 +578,6 @@
           : '<p class="tile-sub" style="color:var(--green)">오늘 할 일을 모두 마쳤습니다.</p>')
         + "</div>");
       // 출석 — 아침의 첫 행동. 체크 전이면 버튼, 후면 시각과 팀 현황
-      var attList = res[5];
-      var myAtt = attList.filter(function (a) { return a.email === BOOT.me.email; })[0];
-      var rosterEmails = rosterOf(teamId).map(function (m) { return m.email; });
       var attCount = attList.filter(function (a) { return a.present && rosterEmails.indexOf(a.email) >= 0; }).length;
       tiles.push('<div class="tile"><p class="tile-label">오늘 출석</p>'
         + (myAtt && myAtt.present
@@ -717,7 +721,9 @@
   $("pending-box").addEventListener("click", function (e) {
     var ok = e.target.closest(".pd-ok");
     if (ok) {
-      api("/pending/approve", { method: "POST", body: { email: ok.dataset.email, teamId: myTeamId() } })
+      // 신청자에게 적힌 팀(초대에 담긴 팀)을 그대로 쓴다. 화면 콤보 값으로 들어가면 엉뚱한 팀이 된다
+      var p = (BOOT.pending || []).filter(function (x) { return x.email === ok.dataset.email; })[0] || {};
+      api("/pending/approve", { method: "POST", body: { email: ok.dataset.email, teamId: p.team_id != null ? p.team_id : myTeamId() } })
         .then(refreshBoot).then(renderOrg);
       return;
     }
@@ -830,7 +836,8 @@
     }
     var del = e.target.closest(".ro-del");
     if (del) {
-      if (!confirm("명단에서 삭제할까?")) return;
+      var who = (BOOT.members.filter(function (x) { return x.email === del.dataset.email; })[0] || {}).name || del.dataset.email;
+      if (!confirm(who + " 님을 명단에서 삭제할까요?" + "\n\n지난 일정·일지·업적 기록은 남습니다.")) return;
       api("/admin/members/" + encodeURIComponent(del.dataset.email), { method: "DELETE" })
         .then(refreshBoot).then(renderOrg);
       return;
@@ -1317,8 +1324,11 @@
     var to = fmtDate(calBase).slice(0, 7);
     var prev = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1);
     var from = fmtDate(prev).slice(0, 7);
-    var onlyTeam = BOOT.me.isManager
-      && confirm("팀 공유 일정만 가져올까?\n\n확인 = 팀 공유 일정만\n취소 = 팀원 개인 일정까지 전부");
+    // 기본은 안전한 쪽(팀 공유만). 전부 가져오려면 한 번 더 명시적으로 동의받는다
+    var onlyTeam = true;
+    if (BOOT.me.isManager) {
+      onlyTeam = !confirm("팀원 개인 일정까지 전부 가져올까요?\n\n확인 = 팀원 개인 일정까지 전부\n취소 = 팀 공유 일정만 (권장)");
+    }
     api("/events/copy-month", { method: "POST", body: { from: from, to: to, teamId: myTeamId(), onlyTeam: onlyTeam } })
       .then(function (r) {
         alert(from + " → " + to + "\n가져옴 " + r.copied + "건" + (r.skipped ? " · 건너뜀 " + r.skipped + "건(이미 있음)" : ""));

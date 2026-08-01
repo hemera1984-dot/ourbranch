@@ -362,7 +362,24 @@ async function main() {
   // 다른 팀으로는 복사 못 한다
   assert.equal((await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 2 })).status, 403);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사 확인 완료");
+  // 17) TA 일지 개인정보 — 같은 팀이라도 남의 기록은 안 보인다 (작성자 본인 + 관리자만)
+  await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-12-01", cand_name: "후보자A", real_phone: "010-1111-2222" }] });
+  // fc1과 같은 1팀에 팀원 하나 더 추가
+  await api("t-super", "POST", "/admin/members", { email: "new@x.com", name: "신입", teamId: 1, role: "팀원" });
+  const otherTa = await (await api("t-new", "GET", "/ta?month=2026-12")).json();
+  assert.equal(otherTa.length, 0);                       // 같은 팀 팀원에게 안 보임
+  const ownTa = await (await api("t-fc1", "GET", "/ta?month=2026-12")).json();
+  assert.equal(ownTa.length, 1);                         // 본인 것은 보임
+  const mgrTa = await (await api("t-esl1", "GET", "/ta?month=2026-12")).json();
+  assert.equal(mgrTa.length, 1);                         // 관리자는 보임
+
+  // 18) 한국 시간 — 저장 날짜가 KST 기준인지
+  const kstToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  await api("t-fc1", "POST", "/attendance", { present: true });   // 날짜 미지정 → 서버 today()
+  const attToday = await (await api("t-fc1", "GET", "/attendance?date=" + kstToday)).json();
+  assert.equal(attToday.filter(a => a.email === "fc1@x.com").length, 1);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

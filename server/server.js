@@ -21,8 +21,11 @@ const WEB_DIR = process.env.WEB_DIR || "";   // 개발용: web/을 같은 출처
 const db = openDb(DB_FILE);
 const authDb = openAuthDb(AUTH_DB_FILE);
 
-const now = () => new Date().toISOString();
-const today = () => new Date().toISOString().slice(0, 10);
+// 한국 시간 기준. toISOString()은 UTC라 오전 9시 이전 기록이 전날로 넘어가고
+// 시각도 9시간 어긋난다 (08:40 출근 → "23:40 출근"으로 표시되던 문제).
+const KST = 9 * 3600e3;
+const now = () => new Date(Date.now() + KST).toISOString().replace("Z", "+09:00");
+const today = () => new Date(Date.now() + KST).toISOString().slice(0, 10);
 
 // ---------- HTTP 도우미 ----------
 
@@ -412,9 +415,12 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   // LIKE는 %·_ 와일드카드가 통해서 전 기간이 덤프된다 — 범위 비교로 막는다
   const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
+  // TA 일지에는 후보자 실명·연락처가 들어간다. 같은 팀이라고 전원에게 열지 않는다 —
+  // 본인이 쓴 것과 관리자(부지점장 이상)만. 헌법의 개인정보 최소 열람 원칙.
   const list = db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
     .all(month + "-00", month + "-99")
-    .filter(r => canSeeTeam(user, r.team_id));
+    .filter(r => canSeeTeam(user, r.team_id))
+    .filter(r => user.isManager || r.author === user.name);
   send(res, 200, list);
 });
 
@@ -747,7 +753,11 @@ const server = createServer(async (req, res) => {
     if (!m) continue;
     if (r.needManager && !user.isManager) return send(res, 403, { error: "관리자만" });
     try { return await r.handler(req, res, user, m); }
-    catch (e) { return send(res, 500, { error: "서버 오류" }); }
+    catch (e) {
+      // 로그가 없으면 장애 원인을 알 수 없다 (journalctl -u ourbranch 로 확인)
+      console.error("[" + req.method + " " + path + "]", e && e.message, e && e.stack);
+      return send(res, 500, { error: "서버 오류" });
+    }
   }
   send(res, 404, { error: "없는 경로" });
 });
