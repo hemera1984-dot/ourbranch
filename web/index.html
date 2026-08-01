@@ -81,8 +81,23 @@
 
     <section id="screen-sched" hidden>
       <p class="eyebrow">일정</p>
-      <h1>주간 확인표</h1>
-      <p class="page-desc">칸을 누르면 그 자리에서 바로 입력됩니다 — 팀원과 날짜는 칸이 정해줍니다. 등록된 일정을 누르면 수정·삭제. 관리자는 팀원 칸을 눌러 대신 넣을 수 있습니다.</p>
+      <h1 class="desktop-only">주간 확인표</h1>
+      <h1 class="mobile-only">오늘 일정</h1>
+      <p class="page-desc desktop-only">칸을 누르면 그 자리에서 바로 입력됩니다 — 팀원과 날짜는 칸이 정해줍니다. 등록된 일정을 누르면 수정·삭제. 관리자는 팀원 칸을 눌러 대신 넣을 수 있습니다.</p>
+      <p class="page-desc mobile-only">아래 단추로 바로 추가할 수 있습니다. 등록된 일정을 누르면 수정·삭제.</p>
+
+      <div class="mobile-only">
+        <div class="toolbar" style="margin-bottom:10px">
+          <button class="btn" id="day-prev">이전 날</button>
+          <button class="btn" id="day-today">오늘</button>
+          <button class="btn" id="day-next">다음 날</button>
+          <strong id="day-label" style="font-variant-numeric:tabular-nums"></strong>
+        </div>
+        <div class="card" id="day-view"></div>
+        <button class="btn primary fab" id="day-add" type="button">일정 추가</button>
+      </div>
+
+      <div class="desktop-only">
       <div class="toolbar" style="margin-bottom:10px">
         <button class="btn" id="week-prev">이전 주</button>
         <button class="btn" id="week-today">이번 주</button>
@@ -100,6 +115,7 @@
           </div>
         </div>
         <div id="ev-grid" class="card"></div>
+      </div>
       </div>
     </section>
 
@@ -299,7 +315,7 @@
     $("month-nav").hidden = !(name === "ta" || name === "perf");
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
-    if (name === "sched") loadWeek();
+    if (name === "sched") { if (isMobile()) loadDay(); else loadWeek(); }
     if (name === "board") loadBoard();
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
@@ -359,8 +375,8 @@
         .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
       var team = evs.filter(function (e) { return e.member_email !== BOOT.me.email; })
         .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
-      var tasks = res[1].filter(function (t) { return t.team_id === teamId && t.status !== "완료"; });
-      var myTasks = tasks.filter(isMyTask);
+      var tasks = res[1].filter(function (t) { return t.team_id === teamId; });
+      var myTasks = tasks.filter(function (t) { return isMyTask(t) && !myDone(t); });
       var notices = res[2].filter(function (n) { return n.team_id == null || n.team_id === teamId; });
       var taRows = res[3].filter(function (r) { return r.team_id === teamId; });
       var myTa = taRows.filter(function (r) { return r.author === BOOT.me.name; });
@@ -387,15 +403,20 @@
       if (myTasks.length)
         tiles.push('<div class="tile w2"><p class="tile-label">내 미션 ' + myTasks.length + "건</p>"
           + myTasks.slice(0, 4).map(function (t) {
-            return '<div class="tile-row"><span class="badge ' + (t.status === "진행중" ? "blue" : "gray") + '">' + esc(t.status) + "</span>"
+            var pr = taskProgress(t);
+            return '<div class="tile-row"><span class="progress-label">' + pr.pct + '%</span>'
               + '<span class="slot-title">' + esc(t.title) + "</span>"
               + (t.due ? '<span class="slot-place">기한 ' + esc(t.due) + "</span>" : "") + "</div>";
           }).join("") + '<p style="margin:8px 0 0"><a class="tile-more" href="#board">미션·공지로</a></p></div>');
+      // 팀·지점 공지는 홈에서 바로 보고 확인 버튼까지 누른다
       if (notices.length)
-        tiles.push('<div class="tile w2"><p class="tile-label">최신 공지</p>'
-          + '<div class="tile-row"><span class="badge ' + (notices[0].team_id == null ? "blue" : "gray") + '">' + (notices[0].team_id == null ? "지점" : "팀") + "</span>"
-          + '<span class="slot-title">' + esc(notices[0].title) + '</span><span class="slot-place">' + esc((notices[0].created || "").slice(5, 10)) + "</span></div>"
-          + (notices[0].body && notices[0].body[0] ? '<p class="tile-sub">' + esc(notices[0].body[0]) + "</p>" : "")
+        tiles.push('<div class="tile w2"><p class="tile-label">공지</p>'
+          + notices.slice(0, 3).map(function (n) {
+            var readByMe = (n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
+            return '<div class="tile-row"><span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">' + (n.team_id == null ? "지점" : "팀") + "</span>"
+              + '<span class="slot-title">' + esc(n.title) + '</span><span class="slot-place">' + esc((n.created || "").slice(5, 10)) + "</span>"
+              + '<button class="btn' + (readByMe ? "" : " primary") + ' notice-read" data-id="' + n.id + '" style="padding:2px 10px;font-size:12px;margin-left:auto">' + (readByMe ? "확인함" : "확인") + "</button></div>";
+          }).join("")
           + '<p style="margin:8px 0 0"><a class="tile-more" href="#board">공지 전체</a></p></div>');
       if (myTa.length || taRows.length)
         tiles.push('<div class="tile"><p class="tile-label">이번 달 TA</p><div class="tile-num">' + myTa.length + "</div>"
@@ -414,6 +435,8 @@
     });
   }
   $("home-bento").addEventListener("click", function (e) {
+    var rd = e.target.closest(".notice-read");
+    if (rd) { api("/notices/" + rd.dataset.id + "/read", { method: "POST" }).then(loadHome); return; }
     var a = e.target.closest("a.tile-more");
     if (!a) return;
     e.preventDefault();
@@ -503,8 +526,11 @@
   });
 
   // ── 일정 (주간 확인표 + 입력) ──
+  function isMobile() { return window.matchMedia("(max-width: 900px)").matches; }
   var weekOffset = 0;
+  var dayBase = new Date();
   var DAY_NAMES = ["월", "화", "수", "목", "금"];
+  var DOW_FULL = ["일", "월", "화", "수", "목", "금", "토"];
   function mondayOf(d) {
     var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
@@ -626,13 +652,27 @@
     if (p) p.remove();
   }
   function openPop(anchor, o) {
-    // o: { id?, em, date, kind, start, end, title }
+    // o: { id?, em, date, kind, start, end, title, place, pickMember?, onDone? }
     closePop();
     var isNew = o.id == null;
+    var refresh = o.onDone || loadWeek;
     var who = o.em ? (nameOf(o.em) || o.em) : "팀 공유";
+    // 모바일 추가 버튼에서 열면 대상 선택을 준다 (관리자는 팀원 대신 입력·팀 공유 가능)
+    var memberSel = "";
+    if (o.pickMember) {
+      var opts = ['<option value="' + esc(BOOT.me.email) + '">' + esc(BOOT.me.name) + " (나)</option>"];
+      if (BOOT.me.isManager) {
+        opts.push('<option value="">팀 공유</option>');
+        rosterOf(myTeamId()).forEach(function (m) {
+          if (m.email !== BOOT.me.email) opts.push('<option value="' + esc(m.email) + '">' + esc(m.name) + "</option>");
+        });
+      }
+      memberSel = '<div class="pop-row"><select class="input" id="pop-member">' + opts.join("") + "</select></div>";
+    }
     var p = document.createElement("div");
     p.className = "pop";
-    p.innerHTML = '<div class="pop-title">' + esc(who) + " · " + esc(o.date) + "</div>"
+    p.innerHTML = '<div class="pop-title">' + (o.pickMember ? esc(o.date) : esc(who) + " · " + esc(o.date)) + "</div>"
+      + memberSel
       + '<div class="kpicks">' + KINDS.map(function (k) {
         return '<button type="button" class="kpick' + (k === o.kind ? " sel" : "") + '" data-k="' + k + '">' + k + "</button>";
       }).join("") + "</div>"
@@ -644,10 +684,12 @@
       + (isNew ? "" : '<button class="btn" id="pop-del">삭제</button>')
       + '<button class="btn" id="pop-close">닫기</button></div>';
     document.body.appendChild(p);
-    var r = anchor.getBoundingClientRect();
-    var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 280);
-    p.style.left = Math.max(8, left) + "px";
-    p.style.top = (r.bottom + window.scrollY + 4) + "px";
+    if (anchor && !isMobile()) {
+      var r = anchor.getBoundingClientRect();
+      var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 280);
+      p.style.left = Math.max(8, left) + "px";
+      p.style.top = (r.bottom + window.scrollY + 4) + "px";
+    }
 
     var kind = o.kind || "상담";
     p.querySelector(".kpicks").addEventListener("click", function (e) {
@@ -657,8 +699,9 @@
     });
     p.querySelector("#pop-close").addEventListener("click", closePop);
     p.querySelector("#pop-save").addEventListener("click", function () {
+      var em = o.pickMember ? p.querySelector("#pop-member").value : o.em;
       var body = {
-        memberEmail: o.em || null, date: o.date, kind: kind,
+        memberEmail: em || null, date: o.date, kind: kind,
         start: p.querySelector("#pop-start").value || null,
         end: p.querySelector("#pop-end").value || null,
         title: p.querySelector("#pop-title").value.trim(),
@@ -667,10 +710,10 @@
       var req = isNew
         ? api("/events", { method: "POST", body: Object.assign({ teamId: myTeamId() }, body) })
         : api("/events/" + o.id, { method: "POST", body: body });
-      req.then(function () { closePop(); loadWeek(); });
+      req.then(function () { closePop(); refresh(); });
     });
     if (!isNew) p.querySelector("#pop-del").addEventListener("click", function () {
-      api("/events/" + o.id, { method: "DELETE" }).then(function () { closePop(); loadWeek(); });
+      api("/events/" + o.id, { method: "DELETE" }).then(function () { closePop(); refresh(); });
     });
     p.querySelector("#pop-title").focus();
   }
@@ -694,6 +737,60 @@
     if (!e.target.closest(".pop") && !e.target.closest(".week-cell")) closePop();
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
+
+  // ── 모바일 하루 보기 — 오늘 중심, 큰 추가 버튼 ──
+  function loadDay() {
+    var ds = fmtDate(dayBase);
+    var todayStr = fmtDate(new Date());
+    $("day-label").textContent = (dayBase.getMonth() + 1) + "월 " + dayBase.getDate() + "일 "
+      + DOW_FULL[dayBase.getDay()] + (ds === todayStr ? " (오늘)" : "");
+    var teamId = myTeamId();
+    api("/events?from=" + ds + "&to=" + ds).then(function (evs) {
+      evs = evs.filter(function (e) {
+        var visible = e.team_id === teamId || e.team_id == null
+          || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
+        return visible && e.status !== "취소";
+      }).sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      evsById = {};
+      evs.forEach(function (e) { evsById[e.id] = e; });
+
+      var groups = [{ em: "", name: "팀 공유", sub: "" }];
+      rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: m.name, sub: m.role }); });
+      evs.forEach(function (e) {
+        if (e.member_email && !groups.some(function (g) { return g.em === e.member_email; }))
+          groups.push({ em: e.member_email, name: nameOf(e.member_email), sub: "명단 외" });
+      });
+      var h = groups.map(function (g) {
+        var items = evs.filter(function (e) { return (e.member_email || "") === g.em; });
+        if (!items.length && g.em !== BOOT.me.email && g.em !== "") return "";
+        return '<div class="day-group"><div class="day-name">' + esc(g.name)
+          + (g.sub ? '<span class="sub">' + esc(g.sub) + "</span>" : "") + "</div>"
+          + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">일정 없음</span>')
+          + "</div>";
+      }).join("");
+      $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+    });
+  }
+  function moveDay(d) {
+    dayBase = new Date(dayBase.getFullYear(), dayBase.getMonth(), dayBase.getDate() + d);
+    loadDay();
+  }
+  $("day-prev").addEventListener("click", function () { moveDay(-1); });
+  $("day-next").addEventListener("click", function () { moveDay(1); });
+  $("day-today").addEventListener("click", function () { dayBase = new Date(); loadDay(); });
+  $("day-add").addEventListener("click", function () {
+    openPop(null, { em: BOOT.me.email, date: fmtDate(dayBase), kind: "상담", pickMember: true, onDone: loadDay });
+  });
+  $("day-view").addEventListener("click", function (e) {
+    var slot = e.target.closest(".slot");
+    if (!slot || !slot.dataset.eid) return;
+    if (e.target.closest("a.slot-title")) return;
+    var ev = evsById[slot.dataset.eid];
+    if (!ev || ev.source === "myguardian") return;
+    var em = ev.member_email || "";
+    if (!canWriteCell(em)) return;
+    openPop(null, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: loadDay });
+  });
 
   $("week-prev").addEventListener("click", function () { weekOffset--; loadWeek(); });
   $("week-today").addEventListener("click", function () { weekOffset = 0; loadWeek(); });
@@ -748,23 +845,35 @@
   function isMyTask(t) {
     return t.targets === "전체" || (Array.isArray(t.targets) && t.targets.indexOf(BOOT.me.email) >= 0);
   }
+  // 달성률: 팀 미션(전체)은 팀 인원 대비, 개인 미션은 대상 대비
+  function taskProgress(t) {
+    var roster = rosterOf(t.team_id).map(function (m) { return m.email; });
+    var targets = t.targets === "전체" ? roster : (t.targets || []);
+    var denom = targets.length || 1;
+    var doneEmails = (t.dones || []).map(function (d) { return d.email; });
+    var num = targets.filter(function (e) { return doneEmails.indexOf(e) >= 0; }).length;
+    return { num: num, denom: denom, pct: Math.round(num / denom * 100) };
+  }
+  function myDone(t) {
+    return (t.dones || []).some(function (d) { return d.email === BOOT.me.email; });
+  }
   function renderTasks(list) {
     var el = $("task-list");
     if (!list.length) { el.innerHTML = '<div class="card"><div class="empty">부여된 미션이 없습니다.</div></div>'; return; }
-    var stCls = { "요청": "gray", "진행중": "blue", "완료": "green" };
     el.innerHTML = '<div class="card">' + list.map(function (t) {
-      var canAct = isMyTask(t) || BOOT.me.isManager;
+      var pr = taskProgress(t);
       var today = fmtDate(new Date());
-      var overdue = t.due && t.due < today && t.status !== "완료";
+      var overdue = t.due && t.due < today && pr.pct < 100;
+      var doneNames = (t.dones || []).map(function (d) { return d.name; }).join(", ");
       return '<div class="org-row">'
-        + '<span class="badge ' + stCls[t.status] + '">' + esc(t.status) + "</span>"
+        + '<span class="progress-label" style="color:' + (pr.pct === 100 ? "var(--green)" : "inherit") + '">' + pr.pct + "%</span>"
+        + '<span class="progress"><span style="width:' + pr.pct + '%"></span></span>'
         + '<span class="name" style="min-width:0">' + esc(t.title) + "</span>"
         + '<span class="meta">' + esc(targetLabel(t.targets))
+        + " · 달성 " + pr.num + "/" + pr.denom + (doneNames ? " (" + esc(doneNames) + ")" : "")
         + (t.content ? " · " + esc(t.content) : "")
-        + " · " + esc(t.assigned) + " 부여"
         + (t.due ? ' · <span style="color:' + (overdue ? "var(--red)" : "inherit") + '">기한 ' + esc(t.due) + (overdue ? " 경과" : "") + "</span>" : "") + "</span>"
-        + (canAct && t.status !== "진행중" && t.status !== "완료" ? '<button class="btn task-st" data-id="' + t.id + '" data-st="진행중">시작</button>' : "")
-        + (canAct && t.status !== "완료" ? '<button class="btn task-st" data-id="' + t.id + '" data-st="완료">완료</button>' : "")
+        + (isMyTask(t) ? '<button class="btn' + (myDone(t) ? "" : " primary") + ' task-done" data-id="' + t.id + '">' + (myDone(t) ? "달성 취소" : "달성") + "</button>" : "")
         + (BOOT.me.isManager ? '<button class="btn task-del" data-id="' + t.id + '">삭제</button>' : "")
         + "</div>";
     }).join("") + "</div>";
@@ -774,11 +883,15 @@
     var el = $("notice-list");
     if (!list.length) { el.innerHTML = '<div class="card"><div class="empty">등록된 공지가 없습니다.</div></div>'; return; }
     el.innerHTML = list.map(function (n) {
+      var readByMe = (n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
+      var readNames = (n.reads || []).map(function (r) { return r.name; }).join(", ");
       return '<div class="card" style="margin-bottom:10px"><div class="card-pad">'
         + '<div class="toolbar" style="margin-bottom:6px">'
         + '<span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">' + (n.team_id == null ? "지점 전체" : "팀") + "</span>"
         + '<strong style="flex:1">' + esc(n.title) + "</strong>"
         + '<span class="note">' + esc(n.author) + " · " + esc((n.created || "").slice(0, 10)) + "</span>"
+        + '<span class="note" title="' + esc(readNames) + '">확인 ' + (n.reads || []).length + "명</span>"
+        + '<button class="btn' + (readByMe ? "" : " primary") + ' notice-read" data-id="' + n.id + '">' + (readByMe ? "확인함" : "확인") + "</button>"
         + (BOOT.me.isManager ? '<button class="btn notice-del" data-id="' + n.id + '">삭제</button>' : "")
         + "</div>"
         + (n.body || []).map(function (p) { return "<p style='margin:4px 0'>" + esc(p) + "</p>"; }).join("")
@@ -802,8 +915,8 @@
     } }).then(function () { $("task-title").value = ""; $("task-content").value = ""; $("task-due").value = ""; loadBoard(); });
   });
   $("task-list").addEventListener("click", function (e) {
-    var st = e.target.closest(".task-st");
-    if (st) { api("/tasks/" + st.dataset.id + "/status", { method: "POST", body: { status: st.dataset.st } }).then(loadBoard); return; }
+    var done = e.target.closest(".task-done");
+    if (done) { api("/tasks/" + done.dataset.id + "/done", { method: "POST" }).then(loadBoard); return; }
     var del = e.target.closest(".task-del");
     if (del && confirm("이 미션을 삭제할까?")) api("/tasks/" + del.dataset.id, { method: "DELETE" }).then(loadBoard);
   });
@@ -816,6 +929,8 @@
     } }).then(function () { $("notice-title").value = ""; $("notice-body").value = ""; loadBoard(); });
   });
   $("notice-list").addEventListener("click", function (e) {
+    var rd = e.target.closest(".notice-read");
+    if (rd) { api("/notices/" + rd.dataset.id + "/read", { method: "POST" }).then(loadBoard); return; }
     var add = e.target.closest(".cmt-add");
     if (add) {
       var inp = document.querySelector('.cmt-input[data-id="' + add.dataset.id + '"]');
@@ -898,7 +1013,7 @@
       var rows = data.rows.filter(function (r) { return r.team_id === teamId; });
       var goals = {};
       data.goals.filter(function (g) { return g.team_id === teamId; })
-        .forEach(function (g) { goals[g.member] = g.goal; });
+        .forEach(function (g) { goals[g.member] = g; });
       var roster = rosterOf(teamId);
       var names = roster.map(function (m) { return m.name; });
       rows.forEach(function (r) { if (names.indexOf(r.member) < 0) names.push(r.member); });
@@ -910,12 +1025,15 @@
         return;
       }
       body.innerHTML = names.map(function (n, i) {
+        var g = goals[n] || {};
         return '<div class="section"><div class="section-head">'
           + "<h2>" + esc(n)
-          + (goals[n] ? ' <span class="badge blue">목표 ' + esc(goals[n]) + "</span>" : "")
+          + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
+          + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
           + '</h2><div class="toolbar">'
           + (BOOT.me.isManager
-            ? '<input class="input goal-input" data-member="' + esc(n) + '" placeholder="목표 (예: 1,000(100))" value="' + esc(goals[n] || "") + '" style="width:160px">'
+            ? '<input class="input goal-input" data-member="' + esc(n) + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" style="width:150px">'
+              + '<input class="input intro-input" data-member="' + esc(n) + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
             : "")
           + (canWriteAs(n) ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
           + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
@@ -960,7 +1078,8 @@
     if (BOOT.me.isManager) {
       var goals = [];
       document.querySelectorAll(".goal-input").forEach(function (inp) {
-        goals.push({ member: inp.dataset.member, goal: inp.value.trim() });
+        var intro = document.querySelector('.intro-input[data-member="' + inp.dataset.member.replace(/"/g, '\\"') + '"]');
+        goals.push({ member: inp.dataset.member, goal: inp.value.trim(), intro: intro ? Number(intro.value) || 0 : 0 });
       });
       if (goals.length) jobs.push(api("/perf/goals", { method: "POST", body: { teamId: teamId, month: month, goals: goals } }));
     }

@@ -210,11 +210,33 @@ a.slot-title:hover { text-decoration: underline; }
 .roster-row .name { font-weight: 600; min-width: 90px; }
 .roster-row .meta { color: var(--sub); font-size: 12px; flex: 1; }
 
+/* 미션 달성률 — 상태 표시 진행바 (0.3초 허용 항목) */
+.progress { position: relative; flex: none; width: 120px; height: 8px; border-radius: 3px; background: var(--canvas); border: 1px solid var(--line); overflow: hidden; }
+.progress span { position: absolute; inset: 0; width: 0; background: var(--green); transition: width .3s; }
+.progress-label { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 모바일 하루 보기 */
+.mobile-only { display: none; }
+.day-group { padding: 10px 14px; border-top: 1px solid var(--line); }
+.day-group:first-child { border-top: 0; }
+.day-name { font-weight: 700; font-size: 14px; }
+.day-name .sub { font-weight: 400; font-size: 12px; color: var(--ter); margin-left: 6px; }
+.fab {
+  position: fixed; right: 16px; bottom: 16px; z-index: 40;
+  padding: 13px 22px; font-size: 15px; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+
 @media (max-width: 900px) {
   .shell { display: block; }
   .sidebar { width: 100%; border-top-width: 3px; }
   .nav { display: flex; overflow-x: auto; padding: 0; }
   .nav a { border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; }
   .nav a.active { border-left: 0; border-bottom-color: var(--cyan); }
-  .main { padding: 16px 14px; }
+  .main { padding: 16px 14px 80px; }
+  .mobile-only { display: block; }
+  .desktop-only { display: none; }
+  /* 빠른 입력 팝오버는 화면 하단 시트로 */
+  .pop { position: fixed; left: 10px; right: 10px; bottom: 10px; top: auto !important; width: auto; }
+  .btn { padding: 9px 16px; }
+  .input, select.input { padding: 9px 12px; }
 }

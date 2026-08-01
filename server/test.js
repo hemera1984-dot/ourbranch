@@ -181,6 +181,26 @@ async function main() {
   assert.equal((await api("t-fc1", "DELETE", "/tasks/" + t1.id)).status, 403);
   assert.equal((await api("t-esl1", "DELETE", "/tasks/" + t1.id)).status, 200);
 
+  // 10-2) 공지 확인 버튼: 토글, 집계. 미션 달성 체크: 대상만, 토글
+  const nList = await (await api("t-fc1", "GET", "/notices")).json();
+  const nid = nList[0].id;
+  assert.deepEqual(await (await api("t-fc1", "POST", "/notices/" + nid + "/read")).json(), { read: true });
+  let n1 = (await (await api("t-fc1", "GET", "/notices")).json()).find(x => x.id === nid);
+  assert.equal(n1.reads.length, 1);
+  assert.deepEqual(await (await api("t-fc1", "POST", "/notices/" + nid + "/read")).json(), { read: false });
+
+  const tDone = await (await api("t-esl1", "POST", "/tasks", { title: "달성 테스트", targets: "전체" })).json();
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + tDone.id + "/done", {})).status, 200);
+  const td = (await (await api("t-fc1", "GET", "/tasks")).json()).find(x => x.id === tDone.id);
+  assert.equal(td.dones.length, 1);
+  const tSolo = await (await api("t-esl1", "POST", "/tasks", { title: "개인 달성", targets: ["esl1@x.com"] })).json();
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + tSolo.id + "/done", {})).status, 403);   // 대상 아님
+
+  // 10-3) 업적 목표 + 도입 실적
+  assert.equal((await api("t-esl1", "POST", "/perf/goals", { month: "2026-08", goals: [{ member: "팀원1", goal: "1,000(100)", intro: 4 }] })).status, 200);
+  const pg = await (await api("t-fc1", "GET", "/perf?month=2026-08")).json();
+  assert.equal(pg.goals.find(g => g.member === "팀원1").intro, 4);
+
   // 11) 본인 것만: 팀원이 남 이름으로 일지·업적 입력 불가, 부지점장은 가능
   assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "부지점장1" }] })).status, 403);
   assert.equal((await api("t-esl1", "POST", "/ta", { rows: [{ date: "2026-08-02", author: "팀원1" }] })).status, 200);

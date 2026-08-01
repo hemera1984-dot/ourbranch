@@ -56,6 +56,15 @@ export function openDb(file) {
       created   TEXT NOT NULL
     );
 
+    -- 공지 확인 — 댓글 대신 버튼 한 번 (2026-08-01 사용자: 일일이 댓글 다는 건 빡시다)
+    CREATE TABLE IF NOT EXISTS notice_reads (
+      notice_id INTEGER NOT NULL REFERENCES notices(id) ON DELETE CASCADE,
+      email     TEXT NOT NULL,
+      name      TEXT NOT NULL DEFAULT '',
+      created   TEXT NOT NULL,
+      PRIMARY KEY (notice_id, email)
+    );
+
     -- member_email이 NULL이면 팀 공유 일정, 있으면 개인 일정 칸.
     -- team_id NULL은 지점 직속(지점장 등 팀 무소속)의 일정 — 전원 열람.
     -- source/source_key/status/customer_code: 마이가디언 고객미팅 연동
@@ -122,12 +131,13 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_perf_team_month ON perf(team_id, month);
 
-    -- 팀원별 월 목표 (시트의 "목표 1,000(100)" 줄)
+    -- 팀원별 월 목표·도입 실적 (시트의 "목표 1,000(100) 도입4명" 줄)
     CREATE TABLE IF NOT EXISTS perf_goals (
       team_id INTEGER NOT NULL REFERENCES teams(id),
       month   TEXT NOT NULL,
       member  TEXT NOT NULL,
       goal    TEXT NOT NULL DEFAULT '',
+      intro   INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (team_id, month, member)
     );
 
@@ -141,12 +151,22 @@ export function openDb(file) {
       assigned TEXT NOT NULL,
       due      TEXT
     );
+
+    -- 미션 달성 체크 — 개인별. 팀 미션(전체)은 달성 인원/전체 인원으로 퍼센트 산출
+    CREATE TABLE IF NOT EXISTS task_done (
+      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      email   TEXT NOT NULL,
+      name    TEXT NOT NULL DEFAULT '',
+      created TEXT NOT NULL,
+      PRIMARY KEY (task_id, email)
+    );
   `);
 
   // 이미 만들어진 DB에 컬럼 추가 (있으면 실패하므로 삼킨다 — 마이가디언 방식)
   for (const sql of [
     "ALTER TABLE members ADD COLUMN recruiter_email TEXT",
-    "ALTER TABLE events ADD COLUMN place TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE events ADD COLUMN place TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE perf_goals ADD COLUMN intro INTEGER NOT NULL DEFAULT 0"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   return db;

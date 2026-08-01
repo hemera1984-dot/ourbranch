@@ -112,9 +112,21 @@ route("GET", /^\/notices$/, false, (req, res, user) => {
     .filter(n => canSeeTeam(user, n.team_id))
     .map(n => ({
       ...n, body: JSON.parse(n.body),
-      comments: db.prepare("SELECT * FROM comments WHERE notice_id = ? ORDER BY id").all(n.id)
+      comments: db.prepare("SELECT * FROM comments WHERE notice_id = ? ORDER BY id").all(n.id),
+      reads: db.prepare("SELECT email, name, created FROM notice_reads WHERE notice_id = ? ORDER BY created").all(n.id)
     }));
   send(res, 200, list);
+});
+
+// 확인 버튼 — 한 번 누르면 확인, 다시 누르면 취소
+route("POST", /^\/notices\/(\d+)\/read$/, false, async (req, res, user, m) => {
+  const n = db.prepare("SELECT * FROM notices WHERE id = ?").get(Number(m[1]));
+  if (!n || !canSeeTeam(user, n.team_id)) return send(res, 403, { error: "권한 없음" });
+  const has = db.prepare("SELECT 1 FROM notice_reads WHERE notice_id = ? AND email = ?").get(n.id, user.email);
+  if (has) db.prepare("DELETE FROM notice_reads WHERE notice_id = ? AND email = ?").run(n.id, user.email);
+  else db.prepare("INSERT INTO notice_reads (notice_id, email, name, created) VALUES (?, ?, ?, ?)")
+    .run(n.id, user.email, user.name, now());
+  send(res, 200, { read: !has });
 });
 
 route("POST", /^\/notices$/, true, async (req, res, user) => {
@@ -230,8 +242,25 @@ route("POST", /^\/attendance$/, false, async (req, res, user) => {
 route("GET", /^\/tasks$/, false, (req, res, user) => {
   const list = db.prepare("SELECT * FROM tasks ORDER BY assigned DESC, id DESC").all()
     .filter(t => canSeeTeam(user, t.team_id))
-    .map(t => ({ ...t, targets: JSON.parse(t.targets) }));
+    .map(t => ({
+      ...t, targets: JSON.parse(t.targets),
+      dones: db.prepare("SELECT email, name, created FROM task_done WHERE task_id = ? ORDER BY created").all(t.id)
+    }));
   send(res, 200, list);
+});
+
+// 달성 체크 — 대상 본인이 누른다. 다시 누르면 취소.
+route("POST", /^\/tasks\/(\d+)\/done$/, false, async (req, res, user, m) => {
+  const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
+  if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
+  const targets = JSON.parse(t.targets);
+  const isTarget = targets === "전체" || (Array.isArray(targets) && targets.includes(user.email));
+  if (!isTarget) return send(res, 403, { error: "미션 대상만" });
+  const has = db.prepare("SELECT 1 FROM task_done WHERE task_id = ? AND email = ?").get(t.id, user.email);
+  if (has) db.prepare("DELETE FROM task_done WHERE task_id = ? AND email = ?").run(t.id, user.email);
+  else db.prepare("INSERT INTO task_done (task_id, email, name, created) VALUES (?, ?, ?, ?)")
+    .run(t.id, user.email, user.name, now());
+  send(res, 200, { done: !has });
 });
 
 route("POST", /^\/tasks$/, true, async (req, res, user) => {
@@ -374,10 +403,10 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
   if (teamId == null || !b.month || !Array.isArray(b.goals)) return send(res, 400, { error: "팀·월·목표가 없습니다" });
   if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const up = db.prepare(
-    `INSERT INTO perf_goals (team_id, month, member, goal) VALUES (?, ?, ?, ?)
-     ON CONFLICT(team_id, month, member) DO UPDATE SET goal = excluded.goal`
+    `INSERT INTO perf_goals (team_id, month, member, goal, intro) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(team_id, month, member) DO UPDATE SET goal = excluded.goal, intro = excluded.intro`
   );
-  for (const g of b.goals) if (g.member) up.run(teamId, b.month, g.member, g.goal || "");
+  for (const g of b.goals) if (g.member) up.run(teamId, b.month, g.member, g.goal || "", Number(g.intro) || 0);
   send(res, 200, { ok: true });
 });
 
