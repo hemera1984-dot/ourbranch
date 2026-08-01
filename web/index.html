@@ -377,7 +377,7 @@
 
       var tiles = [];
       // 내 오늘 일정 — 항상 놓는다 (비어 있어도 오늘을 확인하는 자리)
-      tiles.push('<div class="tile w2 tile-accent"><p class="tile-label">내 오늘 일정</p>'
+      tiles.push('<div class="tile w2"><p class="tile-label">내 오늘 일정</p>'
         + (mine.length ? mine.map(evLine).join("") : '<p class="tile-sub">오늘 일정이 없습니다.</p>')
         + '<p style="margin:8px 0 0"><a class="tile-more" href="#sched">주간 확인표에서 입력</a></p></div>');
       if (team.length)
