@@ -19,7 +19,7 @@
   <div class="card"><div class="card-pad">
     <p class="eyebrow" id="gate-eyebrow">지점 팀 관리</p>
     <h1 id="gate-title">로그인</h1>
-    <p class="page-desc" id="gate-title-note">회사 구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
+    <p class="page-desc" id="gate-title-note">구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
     <div id="g-signin" style="margin-bottom:12px"></div>
     <div class="toolbar" id="gate-dev" hidden>
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 토큰 (팀원은 사용하지 않습니다)">
@@ -479,7 +479,7 @@
       $("gate-eyebrow").textContent = "초대";
       $("gate-title").textContent = "초대를 받으셨습니다";
       $("gate-title-note").textContent =
-        "회사 구글 계정으로 로그인하면 신청이 접수됩니다. 승인 후 바로 이용할 수 있습니다.";
+        "구글 계정으로 로그인하면 신청이 접수됩니다. 승인 후 바로 이용할 수 있습니다.";
     }
     if (gateShown) return;                          // 동시 401 응답마다 버튼이 겹쳐 그려지지 않게
     gateShown = true;
@@ -877,7 +877,7 @@
       "아래 주소를 휴대폰에서 열어 주세요.",
       appUrl(),
       "",
-      "회사 구글 계정으로 로그인하면 됩니다.",
+      "구글 계정으로 로그인하면 됩니다.",
       "",
       "홈 화면에 아이콘으로 두는 방법",
       "· 아이폰(사파리): 아래 공유 단추 → 홈 화면에 추가",
@@ -1199,7 +1199,7 @@
         BOOT.me.name + "님이 초대했습니다.",
         (r.teamName ? r.teamName + " · " : "") + r.role,
         "",
-        "아래 주소를 눌러 회사 구글 계정으로 로그인하면 됩니다.",
+        "아래 주소를 눌러 구글 계정으로 로그인하면 됩니다.",
         link,
         "",
         "로그인 후 승인되면 바로 이용할 수 있습니다.",
