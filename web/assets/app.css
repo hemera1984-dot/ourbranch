@@ -255,10 +255,22 @@ a.slot-title:hover { text-decoration: underline; }
 @media (max-width: 1200px) { .cal-layout { grid-template-columns: 1fr 300px; } }
 
 /* 모바일 소형 달력 — 숫자 + 색 점만 */
-.cal-mini .cal-cell { min-height: 46px; padding: 4px 5px; }
+.cal-mini .cal-cell { min-height: 52px; padding: 5px 6px; }
 .cal-mini .cal-ev, .cal-mini .cal-more { display: none; }
-.cal-mini .dots { display: flex; flex-wrap: wrap; gap: 2px; }
-.cal-mini .dots .dot { width: 6px; height: 6px; }
+.cal-mini .dots { display: flex; flex-wrap: wrap; gap: 3px; }
+.cal-mini .dots .dot { width: 7px; height: 7px; }
+
+/* 하루 상세 모달 (폰: 날짜 탭 → 아래에서 올라오는 시트) */
+.sheet-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 44; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-height: 75vh; overflow-y: auto;
+  background: var(--surface); border-top: 1px solid var(--line); border-radius: 10px 10px 0 0;
+}
+.sheet-head {
+  position: sticky; top: 0; display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.sheet-head strong { flex: 1; font-size: 16px; }
 
 /* 미션 달성률 — 상태 표시 진행바 (0.3초 허용 항목) */
 .progress { position: relative; flex: none; width: 120px; height: 8px; border-radius: 3px; background: var(--canvas); border: 1px solid var(--line); overflow: hidden; }

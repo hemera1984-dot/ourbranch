@@ -94,6 +94,11 @@
           <button class="btn" id="m-cal-next">다음 달</button>
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
         </div>
+        <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
+          <button class="btn seg-btn" data-scope="esl" hidden>부지점장만</button>
+          <button class="btn seg-btn" data-scope="team">팀 전체</button>
+          <button class="btn seg-btn" data-scope="mine">내 일정</button>
+        </div>
         <div class="card cal-mini" style="margin-bottom:10px"><div id="m-cal-view"></div></div>
         <strong id="day-label" style="display:block;margin:0 0 6px;font-variant-numeric:tabular-nums"></strong>
         <div class="card" id="day-view"></div>
@@ -107,9 +112,10 @@
           <button class="btn seg-btn" id="view-week">주간 확인표</button>
         </span>
         <span id="cal-controls">
-          <span class="seg">
-            <button class="btn seg-btn active" id="scope-team">팀 일정</button>
-            <button class="btn seg-btn" id="scope-mine">내 일정</button>
+          <span class="seg" id="scope-seg">
+            <button class="btn seg-btn" data-scope="esl" hidden>부지점장만</button>
+            <button class="btn seg-btn" data-scope="team">팀 전체</button>
+            <button class="btn seg-btn" data-scope="mine">내 일정</button>
           </span>
           <button class="btn" id="cal-prev">이전 달</button>
           <button class="btn" id="cal-today">이번 달</button>
@@ -835,10 +841,11 @@
   document.addEventListener("mousedown", function (e) {
     if (!e.target.closest(".pop") && !e.target.closest(".week-cell")) closePop();
   });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closePop(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closePop(); closeSheet(); } });
 
   // ── 모바일 — 소형 월간 달력 + 선택한 날 상세 + 큰 추가 버튼 ──
   function loadDay() {
+    initScope();
     $("m-cal-label").textContent = calBase.getFullYear() + "년 " + (calBase.getMonth() + 1) + "월";
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
@@ -855,15 +862,46 @@
       renderMobileDay();
     });
   }
-  function renderMobileDay() {
-    var d = new Date(selDate + "T00:00:00");
-    var todayStr = fmtDate(new Date());
-    $("day-label").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
-      + DOW_FULL[d.getDay()] + (selDate === todayStr ? " (오늘)" : "");
-    var items = calEvs.filter(function (e) { return e.date === selDate; })
+  function dayLabelOf(ds) {
+    var d = new Date(ds + "T00:00:00");
+    return (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()]
+      + (ds === fmtDate(new Date()) ? " (오늘)" : "");
+  }
+  function dayItemsOf(ds) {
+    return calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
       .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
-    var h = dayGroupsHtml(items, myTeamId());
+  }
+  function renderMobileDay() {
+    $("day-label").textContent = dayLabelOf(selDate);
+    var h = dayGroupsHtml(dayItemsOf(selDate), myTeamId());
     $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+  }
+
+  // 날짜 탭 → 하루 상세 시트 (크게 읽는 화면)
+  function closeSheet() {
+    document.querySelectorAll(".sheet, .sheet-back").forEach(function (el) { el.remove(); });
+  }
+  function openDaySheet(ds) {
+    closeSheet();
+    var back = document.createElement("div");
+    back.className = "sheet-back";
+    back.addEventListener("click", closeSheet);
+    var s = document.createElement("div");
+    s.className = "sheet";
+    s.innerHTML = '<div class="sheet-head"><strong>' + esc(dayLabelOf(ds)) + "</strong>"
+      + '<button class="btn primary" id="sheet-add">일정 추가</button>'
+      + '<button class="btn" id="sheet-close">닫기</button></div>'
+      + (dayGroupsHtml(dayItemsOf(ds), myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>');
+    document.body.appendChild(back);
+    document.body.appendChild(s);
+    s.querySelector("#sheet-close").addEventListener("click", closeSheet);
+    s.querySelector("#sheet-add").addEventListener("click", function () {
+      closeSheet();
+      openPop(null, { em: BOOT.me.email, date: ds, kind: "상담", pickMember: true, onDone: loadDay });
+    });
+    s.addEventListener("click", function (e) {
+      dayListClick(e, function () { closeSheet(); loadDay(); });
+    });
   }
   $("m-cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
@@ -871,6 +909,7 @@
     selDate = cell.dataset.date;
     renderCalGrid("m-cal-view", true);
     renderMobileDay();
+    openDaySheet(selDate);
   });
   $("m-cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadDay(); });
   $("m-cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadDay(); });
@@ -883,9 +922,37 @@
   // ── 데스크톱: 달력 보기 (기본) ↔ 주간 확인표 전환 ──
   var schedView = (function () { try { return localStorage.getItem("ob_sched_view") || "cal"; } catch (e) { return "cal"; } })();
   var calBase = new Date();
-  var calScope = "team";          // team = 팀 일정 / mine = 내 일정
+  // 범위: esl = 부지점장 일정만(지점장·총관리자 기본 — 전 팀원이 다 뜨면 정신없다) /
+  //        team = 팀 전체 / mine = 내 일정
+  var calScope = null;   // BOOT 이후 초기화
   var selDate = fmtDate(new Date());
   var calEvs = [];
+
+  function roleOf(email) {
+    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
+    return m ? m.role : "";
+  }
+  function initScope() {
+    if (calScope) return;
+    calScope = BOOT.me.seesAll ? "esl" : "team";
+    document.querySelectorAll('[data-scope="esl"]').forEach(function (b) { b.hidden = !BOOT.me.seesAll; });
+    syncScopeSeg();
+  }
+  function syncScopeSeg() {
+    document.querySelectorAll("#scope-seg .seg-btn, #m-scope-seg .seg-btn").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.scope === calScope);
+    });
+  }
+  function onScopeClick(e) {
+    var b = e.target.closest(".seg-btn");
+    if (!b || !b.dataset.scope) return;
+    calScope = b.dataset.scope;
+    syncScopeSeg();
+    if (isMobile()) { renderCalGrid("m-cal-view", true); renderMobileDay(); }
+    else { renderCalGrid(); renderCalDay(); }
+  }
+  document.getElementById("scope-seg").addEventListener("click", onScopeClick);
+  document.getElementById("m-scope-seg").addEventListener("click", onScopeClick);
 
   function setSchedView(v) {
     schedView = v;
@@ -899,10 +966,13 @@
     if (v === "cal") loadCal(); else loadWeek();
   }
   function scopePass(e) {
-    if (calScope === "team") return true;
-    return e.member_email === BOOT.me.email || !e.member_email;   // 내 일정 + 팀 공유·지점 공통
+    if (calScope === "mine") return e.member_email === BOOT.me.email || !e.member_email;   // 내 일정 + 팀 공유·지점 공통
+    if (calScope === "esl")
+      return !e.member_email || e.team_id == null || roleOf(e.member_email) === "부지점장";  // 부지점장 기록 + 공통·지점 단위
+    return true;   // team = 팀 전체
   }
   function loadCal() {
+    initScope();
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     $("cal-label").textContent = y + "년 " + (mo + 1) + "월";
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
@@ -982,16 +1052,6 @@
   });
   $("view-cal").addEventListener("click", function () { setSchedView("cal"); });
   $("view-week").addEventListener("click", function () { setSchedView("week"); });
-  $("scope-team").addEventListener("click", function () {
-    calScope = "team";
-    $("scope-team").classList.add("active"); $("scope-mine").classList.remove("active");
-    renderCalGrid(); renderCalDay();
-  });
-  $("scope-mine").addEventListener("click", function () {
-    calScope = "mine";
-    $("scope-mine").classList.add("active"); $("scope-team").classList.remove("active");
-    renderCalGrid(); renderCalDay();
-  });
   $("cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadCal(); });
   $("cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadCal(); });
   $("cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadCal(); });
