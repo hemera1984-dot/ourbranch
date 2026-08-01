@@ -22,7 +22,7 @@
     <p class="page-desc" id="gate-title-note">회사 구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
     <div id="g-signin" style="margin-bottom:12px"></div>
     <div class="toolbar" id="gate-dev" hidden>
-      <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 세션 토큰">
+      <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 토큰 (팀원은 사용하지 않습니다)">
       <button id="gate-enter" class="btn primary">들어가기</button>
     </div>
   </div></div>
@@ -435,13 +435,18 @@
   var GOOGLE_CLIENT_ID = "370923160679-3h1hn1flheb4d01bq1amtutr992kldj1.apps.googleusercontent.com";
   var IS_PROD = /insurguard\.life$/.test(location.hostname);
 
+  var DEV_MODE = new URLSearchParams(location.search).has("dev");
   function renderGoogle() {
-    if (!IS_PROD) { $("gate-dev").hidden = false; return; }
+    // 개발용 토큰 입력은 ?dev=1 을 붙였을 때만 — 팀원에게는 절대 보이지 않는다
+    if (DEV_MODE) { $("gate-dev").hidden = false; return; }
     if (!(window.google && window.google.accounts)) {
       var s = document.createElement("script");
       s.src = "https://accounts.google.com/gsi/client";
       s.onload = renderGoogle;
-      s.onerror = function () { $("gate-dev").hidden = false; };
+      s.onerror = function () {
+        $("gate-title-note").textContent =
+          "구글 로그인을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.";
+      };
       document.head.appendChild(s);
       return;
     }
@@ -457,6 +462,11 @@
         }).catch(function () { alert("인증 서버에 연결하지 못했습니다."); });
       }
     });
+    if (!IS_PROD) {
+      $("gate-title-note").textContent =
+        "이 주소에서는 구글 로그인이 동작하지 않습니다. https://api.insurguard.life/branch/ 로 들어와 주세요.";
+      return;
+    }
     window.google.accounts.id.renderButton($("g-signin"), {
       theme: "outline", size: "large", shape: "rectangular", text: "signin_with", locale: "ko", width: 280
     });

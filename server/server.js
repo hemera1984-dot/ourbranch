@@ -251,9 +251,22 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   if (memberEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
   if (memberEmail != null && memberEmail !== user.email && !user.isManager)
     return send(res, 403, { error: "본인 일정만" });
-  const r = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(teamId, memberEmail, b.date, b.start || null, b.end || null, b.kind || "기타", b.title || "", b.place || "");
-  send(res, 200, { id: Number(r.lastInsertRowid) });
+  // 반복 — 규칙을 저장하지 않고 그 자리에서 날짜를 펼쳐 넣는다.
+  // 수정·삭제가 한 건 단위로 단순해지고, 조회에 규칙 해석이 끼지 않는다.
+  const rep = b.repeat || {};
+  const stepDays = { day: 1, week: 7, "2week": 14 }[rep.every] || 0;
+  const count = stepDays ? Math.min(Math.max(Number(rep.count) || 1, 1), 52) : 1;
+
+  const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  const base = new Date(b.date + "T00:00:00");
+  const ids = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i);
+    const ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    ids.push(Number(ins.run(teamId, memberEmail, ds, b.start || null, b.end || null,
+      b.kind || "기타", b.title || "", b.place || "").lastInsertRowid));
+  }
+  send(res, 200, { id: ids[0], ids, count: ids.length });
 });
 
 // 마이가디언 고객미팅 연동 — docs/myguardian-schedule-interop.md 계약 구현.
