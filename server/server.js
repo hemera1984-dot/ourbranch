@@ -619,6 +619,32 @@ route("POST", /^\/invites$/, false, async (req, res, user) => {
   send(res, 200, { code, teamName: team ? team.name : "", role: b.role || "팀원", expiresAt: expires });
 });
 
+// 명단 전용 계정(이메일 모른 채 이름만 등록한 사람)을 실제 구글 계정으로 이어받는다.
+// 이걸 안 하면 조직도에 같은 사람이 두 줄로 갈라지고, 미리 넣어둔 일정·업적이
+// 본인에게 붙지 않는다.
+function mergeMember(fromEmail, toEmail) {
+  if (!fromEmail || !toEmail || fromEmail === toEmail) return;
+  const moves = [
+    ["UPDATE events SET member_email = ? WHERE member_email = ?"],
+    ["UPDATE ta_logs SET author_email = ? WHERE author_email = ?"],
+    ["UPDATE perf SET member_email = ? WHERE member_email = ?"],
+    ["UPDATE perf_goals SET member_email = ? WHERE member_email = ?"],
+    ["UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?"]
+  ];
+  for (const [sql] of moves) db.prepare(sql).run(toEmail, fromEmail);
+  // 출석·확인·달성은 같은 날짜/항목에 두 줄이 생기지 않게 옮긴 뒤 남은 것을 지운다
+  for (const [sql, del] of [
+    ["UPDATE OR IGNORE attendance SET email = ? WHERE email = ?", "DELETE FROM attendance WHERE email = ?"],
+    ["UPDATE OR IGNORE notice_reads SET email = ? WHERE email = ?", "DELETE FROM notice_reads WHERE email = ?"],
+    ["UPDATE OR IGNORE task_done SET email = ? WHERE email = ?", "DELETE FROM task_done WHERE email = ?"],
+    ["UPDATE OR IGNORE event_attendees SET email = ? WHERE email = ?", "DELETE FROM event_attendees WHERE email = ?"]
+  ]) {
+    db.prepare(sql).run(toEmail, fromEmail);
+    db.prepare(del).run(fromEmail);
+  }
+  db.prepare("DELETE FROM members WHERE email = ?").run(fromEmail);
+}
+
 // 승인 — 지점장·부지점장·총관리자
 route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   if (!canApprove(user)) return send(res, 403, { error: "승인 권한이 없습니다" });
@@ -627,14 +653,25 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   const email = String(b.email).toLowerCase();
   const p = db.prepare("SELECT * FROM pending WHERE email = ?").get(email);
   if (!p) return send(res, 404, { error: "신청이 없습니다" });
-  const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (p.team_id ?? user.teamId);
+  // 명단 전용 자리를 이어받는 경우 — 그 자리의 팀·직급·도입자를 그대로 물려받는다
+  let from = null;
+  if (b.mergeFrom) {
+    from = getMember(db, String(b.mergeFrom).toLowerCase());
+    if (!from) return send(res, 404, { error: "이어받을 자리가 없습니다" });
+    if (!canWriteTeam(user, from.team_id)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  }
+  const teamId = from ? from.team_id
+    : (b.teamId !== undefined ? (b.teamId ?? null) : (p.team_id ?? user.teamId));
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
   db.prepare(
-    `INSERT INTO members (email, name, team_id, role) VALUES (?, ?, ?, ?)
-     ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id, role = excluded.role`
-  ).run(email, b.name || p.name || "", teamId, b.role || p.role || "팀원");
+    `INSERT INTO members (email, name, team_id, role, recruiter_email) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
+       role = excluded.role, recruiter_email = excluded.recruiter_email`
+  ).run(email, (from && from.name) || b.name || p.name || "", teamId,
+        (from && from.role) || b.role || p.role || "팀원", from ? from.recruiter_email : null);
+  if (from) mergeMember(from.email, email);   // 기존 기록을 실제 계정으로 옮기고 빈 자리는 지운다
   db.prepare("DELETE FROM pending WHERE email = ?").run(email);
-  send(res, 200, { ok: true });
+  send(res, 200, { ok: true, merged: !!from });
 });
 
 route("POST", /^\/pending\/reject$/, false, async (req, res, user) => {

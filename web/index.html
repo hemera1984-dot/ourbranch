@@ -27,13 +27,16 @@
   <aside class="sidebar">
     <div class="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></div>
     <nav class="nav" id="nav">
+      <p class="nav-group-label">업무</p>
       <a href="#home" data-screen="home">홈</a>
-      <a href="#org" data-screen="org">조직도</a>
       <a href="#sched" data-screen="sched">일정</a>
       <a href="#att" data-screen="att">일일보고</a>
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
+      <p class="nav-group-label">관리</p>
+      <a href="#org" data-screen="org">조직도</a>
+      <a href="#invite" data-screen="invite">초대·승인</a>
     </nav>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
       <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
@@ -61,13 +64,21 @@
       <p class="eyebrow">조직</p>
       <h1>조직도</h1>
       <p class="page-desc">지점장 아래 부지점장이 팀의 단위입니다. 여기서 넣은 명단이 일정·일지·업적 화면에 그대로 나열됩니다.</p>
-      <div id="pending-box" class="card" hidden style="margin-bottom:14px"></div>
-
       <div class="toolbar" id="org-tools" style="margin-bottom:10px">
         <button class="btn" id="ro-team-add-btn" hidden>팀 추가</button>
         <span class="note" id="org-hint"></span>
       </div>
       <div class="card"><div class="oc-wrap"><div id="org-chart"></div></div></div>
+
+    </section>
+
+    <section id="screen-invite" hidden>
+      <p class="eyebrow">계정</p>
+      <h1>초대·승인</h1>
+      <p class="page-desc">조직도는 조직 구조만 다룹니다. 실제로 로그인할 계정은 여기서 연결합니다.
+        초대 문구를 카톡으로 보내면, 상대가 구글 로그인한 뒤 승인 대기로 들어옵니다.</p>
+
+      <div id="pending-box" class="card" hidden style="margin-bottom:14px"></div>
 
       <div class="card card-pad" style="margin-bottom:14px">
         <div class="toolbar">
@@ -86,6 +97,11 @@
         </div>
       </div>
 
+
+      <div class="section">
+        <div class="section-head"><h2>계정 연결 현황</h2><p>로그인할 수 있는 사람과 아직 자리만 있는 사람입니다.</p></div>
+        <div class="card"><div id="link-list"></div></div>
+      </div>
     </section>
 
     <section id="screen-sched" hidden>
@@ -281,7 +297,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "sched", "att", "board", "ta", "perf"];
+  var SCREENS = ["home", "org", "invite", "sched", "att", "board", "ta", "perf"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -509,6 +525,7 @@
     refreshBadges();
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
+    if (name === "invite") renderInvite();
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
     if (name === "att") loadAtt();
     if (name === "board") loadBoard();
@@ -732,17 +749,35 @@
   var TEAM_COLORS = ["#2f6f9f", "#3f8f7a", "#8a6a3f", "#6a5a9a", "#9a5a6a", "#4a7a4a"];
 
   function renderOrg() {
-    renderPending();
     $("ro-team-add-btn").hidden = !BOOT.me.isBranchHead;
     $("org-hint").textContent = BOOT.me.isManager
       ? "칸을 눌러 바로 고칩니다 — 팀 이름·팀원을 누르면 수정, 「+ 팀원」으로 추가."
       : "";
+    renderOrgChart();
+  }
+
+  // 초대·승인 화면 — 계정 연결만 다룬다 (조직 구조는 조직도에서)
+  function renderInvite() {
+    renderPending();
     var it = $("inv-team");
     if (BOOT.me.seesAll && BOOT.teams.length > 1) {
       it.hidden = false;
       it.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
     }
-    renderOrgChart();
+    var linked = BOOT.members.filter(function (m) { return !isUnlinked(m); });
+    var seats = BOOT.members.filter(isUnlinked);
+    var row = function (m, ok) {
+      var tn = (BOOT.teams.filter(function (t) { return t.id === m.team_id; })[0] || {}).name || "지점 직속";
+      return '<div class="org-row">'
+        + '<span class="badge ' + (ok ? "green" : "gray") + '">' + (ok ? "로그인 가능" : "자리만 있음") + "</span>"
+        + '<span class="name">' + esc(memberLabel(m)) + "</span>"
+        + '<span class="meta">' + esc(m.role) + " · " + esc(tn)
+        + (ok ? " · " + esc(m.email) : " · 계정 미연결 — 초대 문구를 보내세요") + "</span></div>";
+    };
+    $("link-list").innerHTML =
+      (seats.length ? seats.map(function (m) { return row(m, false); }).join("") : "")
+      + (linked.length ? linked.map(function (m) { return row(m, true); }).join("") : "")
+      || '<div class="empty">등록된 구성원이 없습니다.</div>';
   }
 
   function renderOrgChart() {
@@ -782,7 +817,9 @@
           h.push('<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
             + ' data-email="' + esc(m.email) + '">'
             + '<span class="r">' + esc(m.role) + "</span>"
-            + "<span>" + esc(memberLabel(m)) + "</span></div>");
+            + "<span>" + esc(memberLabel(m)) + "</span>"
+            + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
+            + "</div>");
         });
       } else h.push('<div class="oc-empty">팀원 없음</div>');
       if (mg) h.push('<div class="oc-add" data-team="' + t.id + '">+ 팀원</div>');
@@ -837,8 +874,9 @@
       + '<div class="pop-row"><input type="text" class="input" id="mp-name" placeholder="이름" value="' + esc(m ? m.name : "") + '"></div>'
       + '<div class="pop-row"><select class="input" id="mp-role"></select></div>'
       + '<div class="pop-row"><select class="input" id="mp-team"></select></div>'
-      + '<div class="pop-row"><input type="text" class="input" id="mp-email" placeholder="이메일 (없으면 비워두기)" value="'
-        + esc(m && String(m.email).indexOf("@미등록.local") < 0 ? m.email : "") + '"></div>'
+      + (m && !isUnlinked(m)
+        ? '<div class="pop-row"><span class="note" style="font-size:11px">계정 ' + esc(m.email) + " (로그인 가능)</span></div>"
+        : '<div class="pop-row"><span class="note" style="font-size:11px">계정 미연결 — 「초대·승인」에서 초대 문구를 보내면 연결됩니다.</span></div>')
       + '<div class="pop-row"><select class="input" id="mp-recruiter"></select></div>'
       + (BOOT.me.isSuper && !isNew
         ? '<div class="pop-row" style="gap:12px">'
@@ -882,19 +920,9 @@
         body.isManager = $("mp-mgr").checked;
         body.canViewAll = $("mp-all").checked;
       }
-      var typed = $("mp-email").value.trim();
-      var job;
-      if (isNew) {
-        body.email = typed || placeholderEmail(name);
-        job = api("/admin/members", { method: "POST", body: body });
-      } else if (typed && typed !== m.email) {
-        job = api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: m.email }) })
-          .then(function () { return api("/admin/members", { method: "POST", body: Object.assign({}, body, { email: typed }) }); })
-          .then(function () { return api("/admin/members/" + encodeURIComponent(m.email), { method: "DELETE" }); });
-      } else {
-        body.email = m.email;
-        job = api("/admin/members", { method: "POST", body: body });
-      }
+      // 조직도는 자리(구조)만 만든다. 계정 연결은 「초대·승인」에서.
+      body.email = isNew ? placeholderEmail(name) : m.email;
+      var job = api("/admin/members", { method: "POST", body: body });
       job.then(refreshBoot).then(function () { closePop(); renderOrg(); });
     });
     if (!isNew) p.querySelector("#mp-del").addEventListener("click", function () {
@@ -951,6 +979,13 @@
       .then(refreshBoot).then(renderOrg);
   });
 
+  // 이메일 없이 이름만 등록한 자리 = 로그인 불가. 그 사람이 실제로 로그인하면
+  // 이 자리를 이어받아야 기록이 흩어지지 않는다.
+  function isUnlinked(m) { return String(m.email || "").indexOf("@미등록.local") >= 0; }
+  function unlinkedSeats(name) {
+    return BOOT.members.filter(function (m) { return isUnlinked(m) && m.name === name; });
+  }
+
   // 승인 대기 — 승인권자(지점장·부지점장·총관리자)에게만 보인다
   function renderPending() {
     var box = $("pending-box");
@@ -958,13 +993,36 @@
     if (!BOOT.me.canApprove || !list.length) { box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = '<div class="card-pad" style="padding-bottom:6px"><strong style="font-size:15px">승인 대기 '
-      + list.length + '명</strong> <span class="note">초대 링크로 들어온 계정입니다. 승인하면 바로 이용할 수 있습니다.</span></div>'
+      + list.length + '명</strong> <span class="note">팀·직급은 초대에 적힌 값이 기본입니다. 바꿔서 승인해도 됩니다. '
+      + '조직도에 같은 이름의 빈 자리가 있으면 그 자리를 이어받게 고르세요.</span></div>'
       + list.map(function (p) {
         var teamName = (BOOT.teams.filter(function (t) { return t.id === p.team_id; })[0] || {}).name || "팀 미지정";
-        return '<div class="org-row"><span class="badge blue">' + esc(p.role) + "</span>"
+        // 이름만 등록해 둔 자리(로그인 불가)가 있으면 그 자리를 이어받게 한다
+        var seats = unlinkedSeats(p.name);
+        var pick = seats.length
+          ? '<select class="input pd-seat" data-email="' + esc(p.email) + '" style="max-width:200px">'
+            + '<option value="">새로 등록</option>'
+            + seats.map(function (m) {
+              var tn = (BOOT.teams.filter(function (t) { return t.id === m.team_id; })[0] || {}).name || "팀 없음";
+              return '<option value="' + esc(m.email) + '">' + esc(m.name) + " · " + esc(tn) + " 자리 이어받기</option>";
+            }).join("") + "</select>"
+          : "";
+        // 팀·직급은 초대에 담긴 값이 기본. 승인하면서 바꿀 수 있다.
+        var teamSel = '<select class="input pd-team" data-email="' + esc(p.email) + '" style="width:130px">'
+          + '<option value="">팀 선택</option>'
+          + BOOT.teams.map(function (t) {
+            return '<option value="' + t.id + '"' + (p.team_id === t.id ? " selected" : "") + ">" + esc(t.name) + "</option>";
+          }).join("") + "</select>";
+        var roleSel = '<select class="input pd-role" data-email="' + esc(p.email) + '" style="width:120px">'
+          + GRADES.slice().reverse().map(function (g) {
+            return '<option value="' + g.name + '"' + (p.role === g.name ? " selected" : "") + ">" + g.name + "</option>";
+          }).join("") + "</select>";
+        return '<div class="org-row">'
           + '<span class="name">' + esc(p.name || "(이름 없음)") + "</span>"
-          + '<span class="meta">' + esc(p.email) + " · " + esc(teamName)
-          + (p.by_name ? " · " + esc(p.by_name) + " 초대" : "") + "</span>"
+          + '<span class="meta">' + esc(p.email)
+          + (p.by_name ? " · " + esc(p.by_name) + " 초대" : " · 직접 접속")
+          + (seats.length ? ' · <span style="color:var(--amber)">같은 이름이 조직도에 있습니다</span>' : "") + "</span>"
+          + teamSel + roleSel + pick
           + '<button class="btn primary pd-ok" data-email="' + esc(p.email) + '">승인</button>'
           + '<button class="btn pd-no" data-email="' + esc(p.email) + '">거절</button></div>';
       }).join("");
@@ -974,7 +1032,20 @@
     if (ok) {
       // 신청자에게 적힌 팀(초대에 담긴 팀)을 그대로 쓴다. 화면 콤보 값으로 들어가면 엉뚱한 팀이 된다
       var p = (BOOT.pending || []).filter(function (x) { return x.email === ok.dataset.email; })[0] || {};
-      api("/pending/approve", { method: "POST", body: { email: ok.dataset.email, teamId: p.team_id != null ? p.team_id : myTeamId() } })
+      var q = function (cls) {
+        return document.querySelector("." + cls + '[data-email="' + ok.dataset.email.replace(/"/g, "") + '"]');
+      };
+      var teamSel = q("pd-team"), roleSel = q("pd-role"), seatSel = q("pd-seat");
+      var teamId = teamSel && teamSel.value ? Number(teamSel.value)
+        : (p.team_id != null ? p.team_id : myTeamId());
+      if (teamId == null && !(seatSel && seatSel.value)) {
+        alert("어느 팀으로 넣을지 골라 주세요.");
+        return;
+      }
+      var body = { email: ok.dataset.email, teamId: teamId };
+      if (roleSel && roleSel.value) body.role = roleSel.value;
+      if (seatSel && seatSel.value) body.mergeFrom = seatSel.value;   // 조직도 자리 이어받기
+      api("/pending/approve", { method: "POST", body: body })
         .then(refreshBoot).then(renderOrg);
       return;
     }

@@ -402,3 +402,16 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .oc-add:hover { background: var(--blue-bg); }
 .oc-chip.oc-add-direct { color: var(--blue); border-style: dashed; cursor: pointer; }
+
+/* 사이드바 그룹 라벨 */
+.nav-group-label {
+  margin: 12px 20px 4px; font-size: 10px; font-weight: 800; letter-spacing: .1em;
+  color: #7d90aa; text-transform: none;
+}
+.nav-group-label:first-child { margin-top: 4px; }
+/* 계정 미연결 표시 */
+.oc-nolink {
+  margin-left: auto; padding: 0 5px; border-radius: 3px;
+  background: var(--canvas); border: 1px solid var(--line);
+  font-size: 11px; color: var(--ter); flex: none;
+}
