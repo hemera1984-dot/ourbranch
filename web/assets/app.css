@@ -9,14 +9,17 @@
   --k-meet-bg: #eceff4; --k-meet-fg: #102a4e; --k-int-bg: #efe9fb; --k-int-fg: #5b3fa8;
 }
 
-/* 다크모드 — 같은 문법(선 구분·신호색), 명도만 뒤집는다 */
+/* 다크모드 — 같은 문법(선 구분·신호색), 명도만 뒤집는다.
+   파란 남색이 아니라 중성 검정 계열 (2026-08-01 사용자 피드백: 푸른 다크는 눈이 아프다) */
 :root[data-theme="dark"] {
-  --canvas: #0e1524; --surface: #151d2e; --ink: #e6ecf5; --sub: #9aa6ba; --ter: #6f7b8e;
-  --line: #24304a; --line-input: #33415c; --blue: #6ba1f5; --blue-h: #8ab4f8; --blue-bg: #1a2947;
-  --navy: #0a1728; --cyan: #00a6c7;
-  --green: #58c68b; --green-bg: #13301f; --red: #ef7f74; --red-bg: #3a1713; --amber: #e0aa50; --amber-bg: #332508;
-  --k-meet-bg: #223048; --k-meet-fg: #b9c8de; --k-int-bg: #2a2344; --k-int-fg: #b9a5ec;
+  --canvas: #121214; --surface: #1b1c1f; --ink: #e8e9ec; --sub: #a3a7af; --ter: #777b82;
+  --line: #2a2c31; --line-input: #3b3e45; --blue: #7aa7f7; --blue-h: #94b9fa; --blue-bg: #21262f;
+  --navy: #101114; --cyan: #00a6c7;
+  --green: #58c68b; --green-bg: #16291e; --red: #ef7f74; --red-bg: #331a17; --amber: #e0aa50; --amber-bg: #2e2510;
+  --k-meet-bg: #26282e; --k-meet-fg: #c3c8d2; --k-int-bg: #29243a; --k-int-fg: #b9a8e8;
+  --today-bg: #1e2023;
 }
+:root { --today-bg: #f2f7fd; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
@@ -110,21 +113,29 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .org-row .meta { color: var(--sub); font-size: 12px; flex: 1; }
 .org-row .btn { padding: 3px 9px; font-size: 11px; }
 
-/* ── 주간 확인표 ── */
-.week-grid { display: grid; grid-template-columns: 120px repeat(5, 1fr); background: var(--surface); }
+/* ── 주간 확인표 — 가독성 우선 (일정표 원칙) ── */
+.week-grid { display: grid; grid-template-columns: 128px repeat(5, minmax(150px, 1fr)); background: var(--surface); }
 .week-cell, .week-name, .week-head-cell {
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
-  padding: 6px 8px; min-height: 34px;
+  padding: 8px 10px; min-height: 44px;
 }
-.week-head-cell { background: var(--canvas); font-size: 11px; color: var(--sub); font-weight: 600; min-height: 0; }
-.week-head-cell.today { color: var(--blue); }
-.week-name { font-weight: 600; font-size: 12px; }
+.week-head-cell { background: var(--canvas); font-size: 12px; color: var(--sub); font-weight: 600; min-height: 0; padding: 7px 10px; }
+.week-head-cell.today { color: var(--blue); background: var(--today-bg); }
+.week-cell.today-col { background: var(--today-bg); }
+/* 팀원 열은 가로 스크롤에도 고정 */
+.week-name, .week-head-cell:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--surface);
+  box-shadow: 1px 0 0 var(--line);
+}
+.week-head-cell:first-child { background: var(--canvas); }
+.week-name { font-weight: 700; font-size: 13px; }
 .week-name .sub { display: block; font-weight: 400; font-size: 11px; color: var(--ter); }
 .week-grid > :nth-child(6n) { border-right: 0; }
-.slot { display: flex; align-items: baseline; gap: 5px; margin: 1px 0; white-space: nowrap; }
-.slot-time { font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
-.slot-title { font-size: 12px; }
-.slot-place { font-size: 11px; color: var(--ter); }
+.slot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 6px; padding: 3px 0; }
+.slot + .slot { border-top: 1px dashed var(--line); }
+.slot-time { font-size: 12px; font-weight: 600; color: var(--sub); font-variant-numeric: tabular-nums; }
+.slot-title { font-size: 13px; }
+.slot-place { font-size: 12px; color: var(--ter); }
 .slot-place::before { content: "· "; }
 .cell-empty { color: var(--line-input); }
 

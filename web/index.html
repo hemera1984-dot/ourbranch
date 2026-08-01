@@ -593,7 +593,7 @@
         var ds = fmtDate(d);
         var items = evs.filter(function (e) { return e.date === ds && filter(e); })
           .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
-        h.push('<div class="week-cell' + (canWriteCell(em) ? " can-add" : "") + '" data-em="' + esc(em || "") + '" data-date="' + ds + '"'
+        h.push('<div class="week-cell' + (canWriteCell(em) ? " can-add" : "") + (ds === todayStr ? " today-col" : "") + '" data-em="' + esc(em || "") + '" data-date="' + ds + '"'
           + (canWriteCell(em) ? ' title="눌러서 일정 추가"' : "") + ">"
           + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">-</span>') + "</div>");
       });
