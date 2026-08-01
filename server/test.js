@@ -50,9 +50,13 @@ async function main() {
     try { await fetch(BASE + "/health"); break; } catch { await new Promise(r => setTimeout(r, 100)); }
   }
 
-  // 1) 인증 경계: 토큰 없음 401, 미승인 계정 401
+  // 1) 인증 경계: 토큰 없음 401
   assert.equal((await fetch(BASE + "/bootstrap")).status, 401);
-  assert.equal((await api("t-wait", "GET", "/bootstrap")).status, 401);
+  // 마이가디언에서 아직 '대기'인 계정 — 자료는 못 보되(403) 우리 가입 신청은 할 수 있어야 한다.
+  // (막아버리면 구글 로그인만 하고 승인 대기열에 들어오지 못한다)
+  const waitRes = await api("t-wait", "GET", "/bootstrap");
+  assert.equal(waitRes.status, 403);
+  assert.equal((await waitRes.json()).needJoin, true);
 
   // 2) 총관리자: 팀 2개 생성, 구성원 배치 (관리자 임명 포함)
   assert.equal((await api("t-super", "POST", "/admin/teams", { name: "1팀" })).status, 200);

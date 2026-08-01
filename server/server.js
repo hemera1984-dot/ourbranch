@@ -81,11 +81,14 @@ function userFor(req) {
   if (!acc) return null;
   const email = acc.email.toLowerCase();
   const member = getMember(db, email);
-  const isSuper = !!acc.is_admin;
+  // 마이가디언에서 아직 승인 전인 계정에는 그쪽 직급·총관리자 권한을 적용하지 않는다.
+  // 하랑지점 접근 여부는 아래 명단(members)으로만 가른다.
+  const mgApproved = acc.status === "승인";
+  const isSuper = mgApproved && !!acc.is_admin;
   // 총관리자를 뺀 나머지는 이 지점 명단(members)에 있어야 한다.
-  // 마이가디언 승인만으로 지점 자료를 열람하게 두면 다른 지점 계정도 들어온다.
+  // 명단에 없으면 가입 신청 경로만 열린다(승인 대기).
   if (!member && !isSuper) return { email, name: acc.name, unlisted: true };
-  const gradeManager = acc.grade === "BM" || acc.grade === "ESL";
+  const gradeManager = mgApproved && (acc.grade === "BM" || acc.grade === "ESL");
   // 도입자: 팀이 달라도 자기가 도입한 팀원의 일정을 본다
   const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ?").all(email).map(r => r.email);
   return {
@@ -95,7 +98,7 @@ function userFor(req) {
     teamId: member ? member.team_id : null,
     isSuper,
     isManager: isSuper || gradeManager || !!(member && member.is_manager),
-    seesAll: isSuper || acc.grade === "BM" || !!(member && member.can_view_all),
+    seesAll: isSuper || (mgApproved && acc.grade === "BM") || !!(member && member.can_view_all),
     recruits
   };
 }
