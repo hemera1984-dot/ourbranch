@@ -45,10 +45,20 @@ function send(res, status, body) {
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let data = "";
-    req.on("data", c => { data += c; if (data.length > 1e6) req.destroy(); });
+    req.on("data", c => {
+      data += c;
+      if (data.length > 1e6) { req.destroy(); reject(new Error("too large")); }   // 끊고 나서 대기하지 않는다
+    });
     req.on("end", () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error("bad json")); } });
     req.on("error", reject);
   });
+}
+
+// 엑셀에서 붙여넣은 "1,000"·"1,000원"도 숫자로 받는다 (Number()는 NaN → 0이 되어 금액이 사라진다)
+function num(v) {
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  const n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.\-]/g, ""));
+  return isFinite(n) ? n : 0;
 }
 
 // ---------- 권한 ----------
@@ -65,12 +75,15 @@ function userFor(req) {
   const email = acc.email.toLowerCase();
   const member = getMember(db, email);
   const isSuper = !!acc.is_admin;
+  // 총관리자를 뺀 나머지는 이 지점 명단(members)에 있어야 한다.
+  // 마이가디언 승인만으로 지점 자료를 열람하게 두면 다른 지점 계정도 들어온다.
+  if (!member && !isSuper) return { email, name: acc.name, unlisted: true };
   const gradeManager = acc.grade === "BM" || acc.grade === "ESL";
   // 도입자: 팀이 달라도 자기가 도입한 팀원의 일정을 본다
   const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ?").all(email).map(r => r.email);
   return {
     email,
-    name: acc.name,
+    name: (member && member.name) || acc.name,
     grade: acc.grade,
     teamId: member ? member.team_id : null,
     isSuper,
@@ -80,10 +93,27 @@ function userFor(req) {
   };
 }
 
-// 열람 가능한 team_id 조건절 (지점 공통 = NULL은 항상 포함하는 쪽에서 처리)
+// 관리자가 손댈 수 있는 대상인지 — 열람이 아니라 쓰기 기준이다.
+// (전체열람 부지점장이 남의 팀 구성원을 옮기거나 지우지 못하게)
+function canManageMember(user, targetEmail) {
+  if (user.isSuper) return true;
+  const t = getMember(db, targetEmail);
+  if (!t) return user.teamId != null;                  // 신규 등록은 자기 팀으로 들어간다
+  return canWriteTeam(user, t.team_id);
+}
+
+// 열람 가능한 team_id (지점 공통 = NULL은 전원 열람)
 function canSeeTeam(user, teamId) {
   if (teamId == null) return true;
   return user.seesAll || user.teamId === teamId;
+}
+
+// 쓰기 가능한 team_id — 열람과 분리한다.
+// can_view_all(전체열람)은 "보는" 권한이지 "쓰는" 권한이 아니고,
+// 지점 공통(NULL) 자원은 총관리자만 건드린다.
+function canWriteTeam(user, teamId) {
+  if (teamId == null) return user.isSuper;
+  return user.isSuper || user.teamId === teamId;
 }
 
 // ---------- 라우팅 ----------
@@ -133,7 +163,7 @@ route("POST", /^\/notices$/, true, async (req, res, user) => {
   const b = await readJson(req);
   if (!b.title) return send(res, 400, { error: "제목이 없습니다" });
   const teamId = b.teamId ?? null;                       // null = 지점 공통
-  if (teamId != null && !canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const r = db.prepare("INSERT INTO notices (team_id, kind, title, body, author, created) VALUES (?, ?, ?, ?, ?, ?)")
     .run(teamId, b.kind || "공지", b.title, JSON.stringify(b.body || []), user.name, now());
   send(res, 200, { id: Number(r.lastInsertRowid) });
@@ -179,7 +209,7 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   // 강의는 지점 전체 일정(team_id NULL) — 등록자 누구나, 강사 = 본인
   const teamId = b.kind === "강의" ? null : (b.teamId ?? user.teamId);
   if ((teamId == null && b.kind !== "강의") || !b.date) return send(res, 400, { error: "팀·날짜가 없습니다" });
-  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId) && !(b.kind === "강의" && teamId == null)) return send(res, 403, { error: "권한 없음" });
   // 팀 공유 일정(개인 지정 없음)은 관리자만, 개인 일정은 본인 것만 (관리자는 팀원 것도)
   const memberEmail = b.memberEmail ? b.memberEmail.toLowerCase() : null;
   if (memberEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
@@ -201,33 +231,54 @@ route("POST", /^\/events\/upsert$/, false, async (req, res, user) => {
   const code = String(b["고객코드"] || "");
   const title = code + (b["차수"] ? " · " + b["차수"] + "차" : "");
   const status = ["예정", "완료", "취소"].includes(b["상태"]) ? b["상태"] : "예정";
+  // 멱등키는 반드시 계정별로 분리한다. 전역 유니크면 같은 고객코드를 쓰는 다른 FC의
+  // 일정을 덮어쓴다 (마이가디언 고객코드는 FC마다 독립 채번).
+  const key = user.email + "|" + b["출처키"];
   db.prepare(
     `INSERT INTO events (team_id, member_email, date, start, kind, title, source, source_key, status, customer_code)
      VALUES (?, ?, ?, ?, ?, ?, 'myguardian', ?, ?, ?)
      ON CONFLICT(source_key) DO UPDATE SET
-       date = excluded.date, start = excluded.start, status = excluded.status,
+       team_id = excluded.team_id, date = excluded.date, start = excluded.start, status = excluded.status,
        title = excluded.title, customer_code = excluded.customer_code`
-  ).run(user.teamId, user.email, date, start, b["종류"] || "고객미팅", title, b["출처키"], status, code);
+  ).run(user.teamId, user.email, date, start, b["종류"] || "고객미팅", title, key, status, code);
   send(res, 200, { ok: true });
 });
 
+// 일정 수정·삭제 권한: 본인 것이거나, 자기 팀 일정을 관리자가.
+// 지점 공통(team_id NULL, 강의 등)은 등록자 본인 또는 총관리자만 — 다른 팀 관리자가
+// 남의 강의를 지우는 일이 없도록.
+function canEditEvent(user, e) {
+  if (e.member_email === user.email) return true;
+  if (e.team_id == null) return user.isSuper;
+  return user.isManager && canWriteTeam(user, e.team_id);
+}
+
 route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
-  if (!e || !canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (e.member_email !== user.email && !user.isManager) return send(res, 403, { error: "본인 일정만" });
+  if (!e) return send(res, 404, { error: "없음" });
+  if (!canEditEvent(user, e)) return send(res, 403, { error: "본인 일정만" });
+  if (e.source === "myguardian") return send(res, 403, { error: "연동 일정은 마이가디언에서 수정합니다" });
   const b = await readJson(req);
+  // 바꾸려는 대상도 검사한다 — 안 그러면 팀원이 자기 일정을 팀 공유나 남의 일정으로 바꾼다
+  const nextEmail = b.memberEmail !== undefined
+    ? (b.memberEmail ? String(b.memberEmail).toLowerCase() : null) : e.member_email;
+  if (nextEmail !== e.member_email && !user.isManager) return send(res, 403, { error: "대상 변경은 관리자만" });
+  if (nextEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
+  // 남의 달력에 심지 못하게 — 대상은 내가 쓸 수 있는 팀 소속이어야 한다
+  if (nextEmail && nextEmail !== user.email) {
+    const t = getMember(db, nextEmail);
+    if (!t || !canWriteTeam(user, t.team_id)) return send(res, 403, { error: "다른 팀 구성원입니다" });
+  }
   db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ? WHERE id = ?")
-    .run(b.memberEmail !== undefined ? (b.memberEmail ? b.memberEmail.toLowerCase() : null) : e.member_email,
-         b.date ?? e.date, b.start ?? e.start, b.end ?? e.end, b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, e.id);
+    .run(nextEmail, b.date ?? e.date, b.start ?? e.start, b.end ?? e.end,
+         b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, e.id);
   send(res, 200, { ok: true });
 });
 
 route("DELETE", /^\/events\/(\d+)$/, false, (req, res, user, m) => {
   const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
   if (!e) return send(res, 404, { error: "없음" });
-  const mine = e.member_email === user.email;
-  if (!mine && !user.isManager) return send(res, 403, { error: "권한 없음" });
-  if (!canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (!canEditEvent(user, e)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM events WHERE id = ?").run(e.id);
   send(res, 200, { ok: true });
 });
@@ -297,7 +348,7 @@ route("POST", /^\/tasks$/, true, async (req, res, user) => {
   const b = await readJson(req);
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.title) return send(res, 400, { error: "팀·제목이 없습니다" });
-  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const r = db.prepare("INSERT INTO tasks (team_id, title, content, targets, status, assigned, due) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .run(teamId, b.title, b.content || "", JSON.stringify(b.targets || "전체"), "요청", today(), b.due || null);
   send(res, 200, { id: Number(r.lastInsertRowid) });
@@ -318,14 +369,14 @@ route("POST", /^\/tasks\/(\d+)\/status$/, false, async (req, res, user, m) => {
 
 route("DELETE", /^\/tasks\/(\d+)$/, true, (req, res, user, m) => {
   const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
-  if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (!t || !canWriteTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM tasks WHERE id = ?").run(t.id);
   send(res, 200, { ok: true });
 });
 
 route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
   const n = db.prepare("SELECT * FROM notices WHERE id = ?").get(Number(m[1]));
-  if (!n || !canSeeTeam(user, n.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (!n || !canWriteTeam(user, n.team_id)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM notices WHERE id = ?").run(n.id);
   send(res, 200, { ok: true });
 });
@@ -336,8 +387,10 @@ const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone",
 
 route("GET", /^\/ta$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
-  const month = q.get("month") || today().slice(0, 7);
-  const list = db.prepare("SELECT * FROM ta_logs WHERE date LIKE ? ORDER BY date, id").all(month + "%")
+  // LIKE는 %·_ 와일드카드가 통해서 전 기간이 덤프된다 — 범위 비교로 막는다
+  const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
+  const list = db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
+    .all(month + "-00", month + "-99")
     .filter(r => canSeeTeam(user, r.team_id));
   send(res, 200, list);
 });
@@ -346,7 +399,7 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   const b = await readJson(req);                          // { teamId?, rows: [...] }
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·행이 없습니다" });
-  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, ${TA_FIELDS.join(", ")})
     VALUES (?, ?${", ?".repeat(TA_FIELDS.length)})`);
   const ids = [];
@@ -366,7 +419,11 @@ route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
   if (row.author !== user.name && !user.isManager) return send(res, 403, { error: "본인 기록만" });
   const b = await readJson(req);
   const sets = TA_FIELDS.filter(f => b[f] != null);
-  if (b.author != null) sets.push("author");
+  // 담당자 변경은 관리자만 — 아니면 자기 실적을 남 이름으로 떠넘길 수 있다
+  if (b.author != null && b.author !== row.author) {
+    if (!user.isManager) return send(res, 403, { error: "담당자 변경은 관리자만" });
+    sets.push("author");
+  }
   if (!sets.length) return send(res, 400, { error: "고칠 값이 없습니다" });
   db.prepare(`UPDATE ta_logs SET ${sets.map(f => f + " = ?").join(", ")} WHERE id = ?`)
     .run(...sets.map(f => String(b[f])), row.id);
@@ -396,14 +453,14 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   const b = await readJson(req);                          // { teamId?, month, rows: [{member, contract_date, premium, canp, note}] }
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·월·행이 없습니다" });
-  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const ins = db.prepare("INSERT INTO perf (team_id, month, member, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?)");
   const ids = [];
   for (const r of b.rows) {
     if (!r.member) continue;
     // 팀원은 자기 업적만, 부지점장(관리자)은 팀 전체 입력 가능
     if (!user.isManager && r.member !== user.name) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
-    ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", Number(r.premium) || 0, Number(r.canp) || 0, r.note || "").lastInsertRowid));
+    ids.push(Number(ins.run(teamId, b.month, r.member, r.contract_date || "", num(r.premium), num(r.canp), r.note || "").lastInsertRowid));
   }
   send(res, 200, { ids });
 });
@@ -414,8 +471,8 @@ route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
   if (row.member !== user.name && !user.isManager) return send(res, 403, { error: "본인 업적만" });
   const b = await readJson(req);
   db.prepare("UPDATE perf SET contract_date = ?, premium = ?, canp = ?, note = ? WHERE id = ?")
-    .run(b.contract_date ?? row.contract_date, Number(b.premium ?? row.premium) || 0,
-         Number(b.canp ?? row.canp) || 0, b.note ?? row.note, row.id);
+    .run(b.contract_date ?? row.contract_date, num(b.premium ?? row.premium),
+         num(b.canp ?? row.canp), b.note ?? row.note, row.id);
   send(res, 200, { ok: true });
 });
 
@@ -431,17 +488,27 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
   const b = await readJson(req);                          // { teamId?, month, goals: [{member, goal}] }
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.goals)) return send(res, 400, { error: "팀·월·목표가 없습니다" });
-  if (!canSeeTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  const prevOf = db.prepare("SELECT * FROM perf_goals WHERE team_id = ? AND month = ? AND member = ?");
   const up = db.prepare(
     `INSERT INTO perf_goals (team_id, month, member, goal, intro) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(team_id, month, member) DO UPDATE SET goal = excluded.goal, intro = excluded.intro`
   );
-  for (const g of b.goals) if (g.member) up.run(teamId, b.month, g.member, g.goal || "", Number(g.intro) || 0);
+  // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다
+  for (const g of b.goals) {
+    if (!g.member) continue;
+    const prev = prevOf.get(teamId, b.month, g.member) || {};
+    up.run(teamId, b.month, g.member,
+      g.goal !== undefined ? g.goal : (prev.goal || ""),
+      g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
+  }
   send(res, 200, { ok: true });
 });
 
 // ---- 관리 (팀·구성원·설정) ----
-route("POST", /^\/admin\/teams$/, true, async (req, res) => {
+// 팀 신설은 지점 구조를 바꾸는 일이라 총관리자만 (화면도 총관리자에게만 보인다)
+route("POST", /^\/admin\/teams$/, true, async (req, res, user) => {
+  if (!user.isSuper) return send(res, 403, { error: "총관리자만" });
   const b = await readJson(req);
   if (!b.name) return send(res, 400, { error: "팀 이름이 없습니다" });
   const r = db.prepare("INSERT INTO teams (name) VALUES (?)").run(b.name);
@@ -451,28 +518,40 @@ route("POST", /^\/admin\/teams$/, true, async (req, res) => {
 route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   const b = await readJson(req);
   if (!b.email) return send(res, 400, { error: "이메일이 없습니다" });
+  const email = String(b.email).toLowerCase();
   // 관리자 임명(is_manager)·전체열람(can_view_all)은 총관리자만
   if ((b.isManager != null || b.canViewAll != null) && !user.isSuper)
     return send(res, 403, { error: "총관리자만" });
+  // 자기 열람 범위 밖 구성원은 손대지 못한다 (다른 팀 사람을 빼오거나 지우는 것 차단)
+  if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
+  const prev = getMember(db, email) || {};
+  // 보낸 값만 갱신 — 도입자만 바꾸려다 이름·팀·직급이 초기화되는 일이 없도록
+  const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (prev.team_id ?? null);
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
   db.prepare(
     `INSERT INTO members (email, name, team_id, role, is_manager, can_view_all, recruiter_email) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        name = excluded.name, team_id = excluded.team_id, role = excluded.role,
-       is_manager = COALESCE(?, members.is_manager),
-       can_view_all = COALESCE(?, members.can_view_all),
-       recruiter_email = COALESCE(?, members.recruiter_email)`
+       is_manager = excluded.is_manager, can_view_all = excluded.can_view_all,
+       recruiter_email = excluded.recruiter_email`
   ).run(
-    b.email.toLowerCase(), b.name || "", b.teamId ?? null, b.role || "팀원",
-    b.isManager ? 1 : 0, b.canViewAll ? 1 : 0, b.recruiterEmail ? b.recruiterEmail.toLowerCase() : null,
-    b.isManager == null ? null : (b.isManager ? 1 : 0),
-    b.canViewAll == null ? null : (b.canViewAll ? 1 : 0),
-    b.recruiterEmail === undefined ? null : (b.recruiterEmail ? b.recruiterEmail.toLowerCase() : "")
+    email,
+    b.name !== undefined ? b.name : (prev.name || ""),
+    teamId,
+    b.role !== undefined ? b.role : (prev.role || "팀원"),
+    b.isManager != null ? (b.isManager ? 1 : 0) : (prev.is_manager || 0),
+    b.canViewAll != null ? (b.canViewAll ? 1 : 0) : (prev.can_view_all || 0),
+    b.recruiterEmail !== undefined
+      ? (b.recruiterEmail ? String(b.recruiterEmail).toLowerCase() : null)
+      : (prev.recruiter_email ?? null)
   );
   send(res, 200, { ok: true });
 });
 
 route("DELETE", /^\/admin\/members\/([^/]+)$/, true, (req, res, user, m) => {
-  db.prepare("DELETE FROM members WHERE email = ?").run(decodeURIComponent(m[1]).toLowerCase());
+  const email = decodeURIComponent(m[1]).toLowerCase();
+  if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
+  db.prepare("DELETE FROM members WHERE email = ?").run(email);
   send(res, 200, { ok: true });
 });
 
@@ -496,19 +575,25 @@ const server = createServer(async (req, res) => {
   if (WEB_DIR && req.method === "GET") {
     const rel = path === "/" ? "index.html" : path.slice(1);
     const file = normalize(join(WEB_DIR, rel));
-    if (file.startsWith(normalize(WEB_DIR)) && existsSync(file) && extname(file)) {
-      const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
-      res.writeHead(200, { "Content-Type": (types[extname(file)] || "application/octet-stream") + "; charset=utf-8" });
-      return res.end(readFileSync(file));
-    }
-    if (path === "/") {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(readFileSync(normalize(join(WEB_DIR, "index.html"))));
+    try {
+      if (file.startsWith(normalize(WEB_DIR)) && existsSync(file) && extname(file)) {
+        const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
+        res.writeHead(200, { "Content-Type": (types[extname(file)] || "application/octet-stream") + "; charset=utf-8" });
+        return res.end(readFileSync(file));
+      }
+      if (path === "/") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        return res.end(readFileSync(normalize(join(WEB_DIR, "index.html"))));
+      }
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("파일을 찾을 수 없습니다");
     }
   }
 
   const user = userFor(req);
   if (!user) return send(res, 401, { error: "로그인이 필요합니다" });
+  if (user.unlisted) return send(res, 403, { error: "지점 명단에 등록되지 않은 계정입니다. 관리자에게 등록을 요청하세요." });
 
   for (const r of routes) {
     if (r.method !== req.method) continue;

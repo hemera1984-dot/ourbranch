@@ -103,14 +103,14 @@ async function main() {
   assert.equal((await api("t-fc1", "POST", "/events/upsert", meet)).status, 200);
   assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "일시": "2026-08-06T15:00:00+09:00" })).status, 200);
   let mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
-  const mine2 = mEvs.filter(e => e.source_key === "mg:C-2026-014:3");
+  const mine2 = mEvs.filter(e => e.source_key === "fc1@x.com|mg:C-2026-014:3");
   assert.equal(mine2.length, 1);                       // 멱등 — 한 건으로 유지
   assert.equal(mine2[0].date, "2026-08-06");
   assert.equal(mine2[0].start, "15:00");
   assert.equal(mine2[0].customer_code, "C-2026-014");
   assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "상태": "취소" })).status, 200);
   mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
-  assert.equal(mEvs.filter(e => e.source_key === "mg:C-2026-014:3")[0].status, "취소");
+  assert.equal(mEvs.filter(e => e.source_key === "fc1@x.com|mg:C-2026-014:3")[0].status, "취소");
 
   // 6-3) 장소 왕복 + 도입자 열람 (팀이 달라도 자기가 도입한 팀원의 일정을 본다)
   const pl = await (await api("t-fc1", "POST", "/events", { date: "2026-08-03", memberEmail: "fc1@x.com", kind: "상담", title: "고객 상담", place: "강남 스타벅스" })).json();
@@ -223,7 +223,65 @@ async function main() {
   assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-08", rows: [{ member: "다른사람" }] })).status, 403);
   assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-08", rows: [{ member: "팀원1", contract_date: "2026-08-20", premium: 30000, canp: 40 }] })).status, 200);
 
-  console.log("전체 통과 — 인증·팀 분리·관리자·총관리자·TA일지·업적·본인기록 경계 확인 완료");
+  // 12) 검증(Codex·자체)에서 나온 우회 경로 회귀 테스트
+  // 12-1) 전체열람(can_view_all)은 열람 권한일 뿐 — 다른 팀에 쓰지 못한다
+  assert.equal((await api("t-esl1", "POST", "/notices", { title: "2팀 침범", teamId: 2 })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/tasks", { title: "2팀 미션", teamId: 2 })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/perf", { month: "2026-08", teamId: 2, rows: [{ member: "팀원2" }] })).status, 403);
+  // 열람은 여전히 된다
+  assert.ok((await (await api("t-esl1", "GET", "/notices")).json()).length > 0);
+
+  // 12-2) 지점 공통(팀 없음) 공지는 총관리자만 쓰고 지운다
+  assert.equal((await api("t-esl1", "POST", "/notices", { title: "지점 공통 사칭" })).status, 403);
+  const common2 = (await (await api("t-super", "GET", "/notices")).json()).find(n => n.team_id == null);
+  assert.equal((await api("t-esl1", "DELETE", "/notices/" + common2.id)).status, 403);
+
+  // 12-3) 관리자도 다른 팀 구성원을 옮기거나 지우지 못한다 (자기 팀 이동으로 권한 우회 차단)
+  assert.equal((await api("t-esl1", "POST", "/admin/members", { email: "esl1@x.com", teamId: 2 })).status, 403);
+  assert.equal((await api("t-esl1", "DELETE", "/admin/members/" + encodeURIComponent("fc2@x.com"))).status, 403);
+  // 팀 신설은 총관리자만
+  assert.equal((await api("t-esl1", "POST", "/admin/teams", { name: "몰래 만든 팀" })).status, 403);
+
+  // 12-4) 구성원 부분 갱신 — 도입자만 바꿔도 이름·팀·직급이 남는다
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", recruiterEmail: "esl1@x.com" })).status, 200);
+  const boot3 = await (await api("t-super", "GET", "/bootstrap")).json();
+  const fc1row = boot3.members.find(m => m.email === "fc1@x.com");
+  assert.equal(fc1row.name, "팀원1"); assert.equal(fc1row.team_id, 1); assert.equal(fc1row.role, "팀원");
+
+  // 12-5) 일정 대상 바꿔치기 차단 (팀 공유·남의 달력에 심기)
+  const ev = await (await api("t-fc1", "POST", "/events", { date: "2026-08-09", memberEmail: "fc1@x.com", kind: "상담" })).json();
+  assert.equal((await api("t-fc1", "POST", "/events/" + ev.id, { memberEmail: null })).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/events/" + ev.id, { memberEmail: "esl1@x.com" })).status, 403);
+
+  // 12-6) 마이가디언 멱등키는 계정별 — 남의 일정을 덮어쓰지 못한다
+  const key = { "출처": "myguardian", "출처키": "mg:C-2026-014:3", "고객코드": "C-2026-014", "일시": "2026-08-11T10:00:00+09:00" };
+  await api("t-fc1", "POST", "/events/upsert", key);
+  await api("t-fc2", "POST", "/events/upsert", { ...key, "고객코드": "덮어쓰기시도", "일시": "2027-01-01T09:00:00+09:00", "상태": "취소" });
+  const fc1Ev = (await (await api("t-fc1", "GET", "/events?from=2026-08-11&to=2026-08-11")).json())
+    .find(e => e.source === "myguardian" && e.member_email === "fc1@x.com");
+  assert.ok(fc1Ev); assert.equal(fc1Ev.customer_code, "C-2026-014"); assert.equal(fc1Ev.status, "예정");
+
+  // 12-7) TA 담당자 위조 차단 (수정 경로)
+  const taOwn = await (await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-08-12", cand_name: "테스트" }] })).json();
+  assert.equal((await api("t-fc1", "POST", "/ta/" + taOwn.ids[0], { author: "부지점장1" })).status, 403);
+
+  // 12-8) 목표 부분 저장 — 목표만 고쳐도 도입 실적이 남는다
+  await api("t-esl1", "POST", "/perf/goals", { month: "2026-09", goals: [{ member: "팀원1", goal: "1,000(100)", intro: 4 }] });
+  await api("t-esl1", "POST", "/perf/goals", { month: "2026-09", goals: [{ member: "팀원1", goal: "1,200(120)" }] });
+  const g9 = (await (await api("t-fc1", "GET", "/perf?month=2026-09")).json()).goals.find(g => g.member === "팀원1");
+  assert.equal(g9.goal, "1,200(120)"); assert.equal(g9.intro, 4);
+
+  // 12-9) 쉼표 금액이 0이 되지 않는다
+  await api("t-fc1", "POST", "/perf", { month: "2026-09", rows: [{ member: "팀원1", contract_date: "2026-09-02", premium: "1,000,000", canp: "1,200" }] });
+  const p9 = (await (await api("t-fc1", "GET", "/perf?month=2026-09")).json()).rows.find(r => r.contract_date === "2026-09-02");
+  assert.equal(p9.premium, 1000000); assert.equal(p9.canp, 1200);
+
+  // 12-10) TA 월 조회에 와일드카드가 통하지 않는다
+  const wild = await (await api("t-fc1", "GET", "/ta?month=%25")).json();
+  const aug = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
+  assert.equal(wild.length, aug.length);   // %는 무시되고 이번 달 기본값으로 처리
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신 경계 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

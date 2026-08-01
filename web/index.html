@@ -14,7 +14,7 @@
   <div class="card"><div class="card-pad">
     <p class="eyebrow">지점 팀 관리</p>
     <h1>로그인</h1>
-    <p class="page-desc">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
+    <p class="page-desc" id="gate-title-note">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
     <div id="g-signin" style="margin-bottom:12px"></div>
     <div class="toolbar" id="gate-dev" hidden>
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 세션 토큰">
@@ -312,7 +312,13 @@
     });
   }
 
-  function showGate() { $("gate").hidden = false; $("app").hidden = true; renderGoogle(); }
+  var gateShown = false;
+  function showGate() {
+    $("gate").hidden = false; $("app").hidden = true;
+    if (gateShown) return;                          // 동시 401 응답마다 버튼이 겹쳐 그려지지 않게
+    gateShown = true;
+    renderGoogle();
+  }
   function tryEnter(t) {
     token = t;
     api("/bootstrap").then(function (b) {
@@ -321,7 +327,14 @@
       $("gate").hidden = true; $("app").hidden = false;
       renderShell();
       show(screen);
-    }).catch(function () { localStorage.removeItem("ob_token"); });
+    }).catch(function (err) {
+      localStorage.removeItem("ob_token");
+      showGate();                                   // 네트워크 오류에도 백지로 두지 않는다
+      if (err && err.message && err.message.indexOf("로그인") < 0) {
+        var g = $("gate-title-note");
+        if (g) g.textContent = "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      }
+    });
   }
   $("gate-enter").addEventListener("click", function () {
     var t = $("gate-token").value.trim();
@@ -358,6 +371,7 @@
       a.classList.toggle("active", a.dataset.screen === name);
     });
     $("month-nav").hidden = !(name === "ta" || name === "perf");
+    closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
@@ -404,6 +418,7 @@
   function loadHome() {
     var teamId = myTeamId();
     var todayStr = fmtDate(new Date());
+    var thisMonth = todayStr.slice(0, 7);           // 홈은 언제나 이번 달 (월 이동과 무관)
     var DOW = ["일", "월", "화", "수", "목", "금", "토"];
     var d = new Date();
     $("home-date").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW[d.getDay()] + "요일";
@@ -412,7 +427,7 @@
     Promise.all([
       api("/events?from=" + todayStr + "&to=" + todayStr),
       api("/tasks"), api("/notices"),
-      api("/ta?month=" + month), api("/perf?month=" + month),
+      api("/ta?month=" + thisMonth), api("/perf?month=" + thisMonth),
       api("/attendance?date=" + todayStr)
     ]).then(function (res) {
       var evs = res[0].filter(function (e) {
@@ -701,13 +716,14 @@
     var att = e.target.closest(".att-btn");
     if (att) { api("/events/" + att.dataset.eid + "/attend", { method: "POST" }).then(refresh); return; }
     var slot = e.target.closest(".slot");
+    var anchor = slot;
     if (!slot || !slot.dataset.eid) return;
     if (e.target.closest("a.slot-title")) return;
     var ev = evsById[slot.dataset.eid];
     if (!ev || ev.source === "myguardian") return;
     var em = ev.member_email || "";
     if (!canWriteCell(em)) return;
-    openPop(null, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: refresh });
+    openPop(anchor, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: refresh });
   }
   function renderWeekView(evs, days) {
     var todayStr = fmtDate(new Date());
@@ -1061,7 +1077,9 @@
   $("week-next").addEventListener("click", function () { weekOffset++; loadWeek(); });
   $("ev-add").addEventListener("click", function () { if (evGrid) evGrid.addRow(); });
   $("ev-save").addEventListener("click", function () {
-    if (!evGrid || !evGrid.hasChanges()) return;
+    if (!evGrid) return;
+    evGrid.commitActive();
+    if (!evGrid.hasChanges()) return;
     var teamId = myTeamId();
     var jobs = [];
     function resolve(r) {
@@ -1070,7 +1088,7 @@
       if (!email) { alert("명단에 없는 이름입니다: " + r.member); return null; }
       return { memberEmail: email };
     }
-    evGrid.newRows().filter(function (r) { return r.date; }).forEach(function (r) {
+    evGrid.newRows().filter(function (r) { return r.date && (r.title || r.place || r.start); }).forEach(function (r) {
       var who = resolve(r); if (!who) return;
       jobs.push(api("/events", { method: "POST", body: {
         teamId: teamId, memberEmail: who.memberEmail,
@@ -1084,7 +1102,9 @@
         date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title, place: r.place || ""
       } }));
     });
-    Promise.all(jobs).then(loadWeek);
+    if (!jobs.length) return;
+    Promise.all(jobs).then(function () { evGrid.markSaved(); loadWeek(); })
+      .catch(function () { loadWeek(); });   // 일부 실패해도 화면을 새로 읽어 중복 저장을 막는다
   });
 
   // ── 출석 (일자별 팀 표 — 실물 스케줄표의 출근일정·점심일정 칸 승계) ──
@@ -1309,14 +1329,20 @@
   }
   $("ta-add").addEventListener("click", function () { if (taGrid) taGrid.addRow(); });
   $("ta-save").addEventListener("click", function () {
-    if (!taGrid || !taGrid.hasChanges()) return;
+    if (!taGrid) return;
+    taGrid.commitActive();
+    if (!taGrid.hasChanges()) return;
     var teamId = myTeamId();
-    var news = taGrid.newRows().filter(function (r) { return r.date; });
+    // 날짜만 자동으로 찬 빈 줄은 저장하지 않는다
+    var news = taGrid.newRows().filter(function (r) {
+      return r.date && (r.cand_name || r.result || r.real_phone || r.safe_phone || r.note);
+    });
     var edits = taGrid.dirtyRows();
     var jobs = [];
     if (news.length) jobs.push(api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }));
     edits.forEach(function (r) { jobs.push(api("/ta/" + r._id, { method: "POST", body: r })); });
-    Promise.all(jobs).then(loadTa);
+    if (!jobs.length) return;
+    Promise.all(jobs).then(function () { taGrid.markSaved(); loadTa(); }).catch(function () { loadTa(); });
   });
 
   // ── 업적현황 ──
@@ -1412,6 +1438,7 @@
   function savePerf() {
     var jobs = [];
     var goalsByTeam = {};
+    perfGrids.forEach(function (pg) { pg.grid.commitActive(); });
     perfGrids.forEach(function (pg, i) {
       var news = pg.grid.newRows().filter(function (r) { return r.contract_date || r.premium || r.canp; })
         .map(function (r) { return Object.assign({}, r, { member: pg.member }); });
@@ -1430,7 +1457,8 @@
     Object.keys(goalsByTeam).forEach(function (tid) {
       jobs.push(api("/perf/goals", { method: "POST", body: { teamId: Number(tid), month: month, goals: goalsByTeam[tid] } }));
     });
-    Promise.all(jobs).then(loadPerf);
+    if (!jobs.length) return;
+    Promise.all(jobs).then(loadPerf).catch(function () { loadPerf(); });
   }
 
   // ── 시작 ──

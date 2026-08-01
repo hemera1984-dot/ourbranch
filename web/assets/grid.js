@@ -7,6 +7,15 @@
 function makeGrid(root, opts) {
   // opts: { cols: [{key, label, num?, width?}], rows: [{...,_id?}], canEditRow(row) -> bool,
   //         fixed: {key: value} — 새 줄에 자동으로 박는 값, onDeleteRow(row) }
+  //
+  // 같은 root에 다시 만들 때 옛 리스너가 남으면 삭제·저장이 여러 번 실행된다.
+  // 노드를 새로 갈아끼워 이전 그리드의 리스너를 통째로 버린다.
+  if (root._gridBound) {
+    var fresh = root.cloneNode(false);
+    root.parentNode.replaceChild(fresh, root);
+    root = fresh;
+  }
+  root._gridBound = true;
   var cols = opts.cols;
   var rows = opts.rows.slice();
   var dirty = new Set();     // 수정된 기존 행 (_id 있는 것)
@@ -84,6 +93,7 @@ function makeGrid(root, opts) {
   });
 
   // 엑셀 붙여넣기: 탭·줄바꿈으로 갈라 현재 셀부터 채운다. 줄이 모자라면 만든다.
+  // 남의 행(읽기 전용)은 건너뛴다 — 저장 시 403이 나고 내 행까지 못 저장하게 된다.
   root.addEventListener("paste", function (e) {
     var td = e.target.closest && e.target.closest("td[contenteditable]");
     if (!td) return;
@@ -96,6 +106,7 @@ function makeGrid(root, opts) {
       var ri = startRi + li;
       if (ri >= rows.length) addRow();
       var r = rows[ri];
+      if (opts.canEditRow && !opts.canEditRow(r)) return;   // 남의 행은 건드리지 않는다
       line.split("\t").forEach(function (val, vi) {
         var c = cols[startCi + vi];
         if (!c) return;
@@ -126,6 +137,11 @@ function makeGrid(root, opts) {
 
   return {
     addRow: addRow,
+    // 저장 직전 호출 — 편집 중인 셀(포커스가 안 빠진 칸)을 반영한다
+    commitActive: function () {
+      var td = document.activeElement;
+      if (td && td.matches && td.matches("td[contenteditable]") && root.contains(td)) commitCell(td);
+    },
     rows: function () { return rows; },
     newRows: function () { return rows.filter(function (r) { return added.has(r); }); },
     dirtyRows: function () { return rows.filter(function (r) { return r._id != null && dirty.has(r._id); }); },
