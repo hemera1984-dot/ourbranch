@@ -116,6 +116,11 @@ function canWriteTeam(user, teamId) {
   return user.isSuper || user.teamId === teamId;
 }
 
+// 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
+function canApprove(user) {
+  return user.isSuper || user.grade === "BM" || user.grade === "ESL" || user.isManager;
+}
+
 // ---------- 라우팅 ----------
 
 const routes = [];
@@ -130,9 +135,13 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
     .filter(m => canSeeTeam(user, m.team_id) || user.recruits.includes(m.email));
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
-    me: user,
+    me: { ...user, canApprove: canApprove(user) },
     teams: user.seesAll ? teams : teams.filter(t => t.id === user.teamId),
-    members
+    members,
+    pending: canApprove(user)
+      ? db.prepare("SELECT * FROM pending ORDER BY created").all()
+          .filter(p => user.seesAll || p.team_id == null || p.team_id === user.teamId)
+      : []
   });
 });
 
@@ -509,6 +518,49 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
   send(res, 200, { ok: true });
 });
 
+// ---- 초대·승인 ----
+// 초대는 아무나 만든다 (카톡으로 링크 전달). 초대 자체로는 권한이 생기지 않는다.
+route("POST", /^\/invites$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  const teamId = b.teamId !== undefined ? (b.teamId ?? null) : user.teamId;
+  const code = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+  const expires = new Date(Date.now() + 14 * 86400e3).toISOString();
+  db.prepare("INSERT INTO invites (code, team_id, role, by_email, by_name, created, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(code, teamId, b.role || "팀원", user.email, user.name, now(), expires);
+  const team = teamId != null ? db.prepare("SELECT name FROM teams WHERE id = ?").get(teamId) : null;
+  send(res, 200, { code, teamName: team ? team.name : "", role: b.role || "팀원", expiresAt: expires });
+});
+
+// 승인 — 지점장·부지점장·총관리자
+route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
+  if (!canApprove(user)) return send(res, 403, { error: "승인 권한이 없습니다" });
+  const b = await readJson(req);
+  if (!b.email) return send(res, 400, { error: "대상이 없습니다" });
+  const email = String(b.email).toLowerCase();
+  const p = db.prepare("SELECT * FROM pending WHERE email = ?").get(email);
+  if (!p) return send(res, 404, { error: "신청이 없습니다" });
+  const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (p.team_id ?? user.teamId);
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  db.prepare(
+    `INSERT INTO members (email, name, team_id, role) VALUES (?, ?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id, role = excluded.role`
+  ).run(email, b.name || p.name || "", teamId, b.role || p.role || "팀원");
+  db.prepare("DELETE FROM pending WHERE email = ?").run(email);
+  send(res, 200, { ok: true });
+});
+
+route("POST", /^\/pending\/reject$/, false, async (req, res, user) => {
+  if (!canApprove(user)) return send(res, 403, { error: "승인 권한이 없습니다" });
+  const b = await readJson(req);
+  const email = String(b.email || "").toLowerCase();
+  const p = db.prepare("SELECT * FROM pending WHERE email = ?").get(email);
+  if (!p) return send(res, 404, { error: "신청이 없습니다" });
+  if (!(user.seesAll || p.team_id == null || p.team_id === user.teamId))
+    return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM pending WHERE email = ?").run(email);
+  send(res, 200, { ok: true });
+});
+
 // ---- 관리 (팀·구성원·설정) ----
 // 팀 신설은 지점 구조를 바꾸는 일이라 총관리자만 (화면도 총관리자에게만 보인다)
 route("POST", /^\/admin\/teams$/, true, async (req, res, user) => {
@@ -597,7 +649,32 @@ const server = createServer(async (req, res) => {
 
   const user = userFor(req);
   if (!user) return send(res, 401, { error: "로그인이 필요합니다" });
-  if (user.unlisted) return send(res, 403, { error: "지점 명단에 등록되지 않은 계정입니다. 관리자에게 등록을 요청하세요." });
+
+  // 명단 미등록 계정에 열어두는 유일한 경로 — 가입 신청·상태 확인.
+  // (초대 링크로 들어온 사람이 여기서 줄을 서고, 승인권자가 승인하면 열린다)
+  if (user.unlisted) {
+    if (path === "/join" && req.method === "POST") {
+      const b = await readJson(req).catch(() => ({}));
+      const inv = b.code
+        ? db.prepare("SELECT * FROM invites WHERE code = ? AND expires_at > ?").get(String(b.code), now())
+        : null;
+      db.prepare(
+        `INSERT INTO pending (email, name, team_id, role, invite_code, by_name, created)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
+           role = excluded.role, invite_code = excluded.invite_code, by_name = excluded.by_name`
+      ).run(user.email, b.name || user.name || "", inv ? inv.team_id : null,
+            inv ? inv.role : "팀원", inv ? inv.code : null, inv ? inv.by_name : "", now());
+      return send(res, 200, { ok: true, invited: !!inv });
+    }
+    if (path === "/join" && req.method === "GET") {
+      const p = db.prepare("SELECT * FROM pending WHERE email = ?").get(user.email);
+      return send(res, 200, { status: p ? "대기" : "없음", name: user.name, email: user.email });
+    }
+    return send(res, 403, {
+      error: "승인 대기 중입니다. 승인되면 바로 이용할 수 있습니다.", needJoin: true
+    });
+  }
 
   for (const r of routes) {
     if (r.method !== req.method) continue;

@@ -25,9 +25,10 @@ seed.run(2, "esl1@x.com", "부지점장1", "승인", "ESL", 0);  // 1팀 관리�
 seed.run(3, "fc1@x.com", "팀원1", "승인", "FC", 0);        // 1팀
 seed.run(4, "fc2@x.com", "팀원2", "승인", "FC", 0);        // 2팀
 seed.run(5, "wait@x.com", "대기자", "대기", null, 0);
+seed.run(6, "new@x.com", "신입", "승인", "FC", 0);          // 승인됐지만 지점 명단엔 없음
 const tok = auth.prepare("INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)");
 tok.run("t-super", 1, far); tok.run("t-esl1", 2, far); tok.run("t-fc1", 3, far);
-tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far);
+tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far); tok.run("t-new", 6, far);
 auth.close();
 
 const srv = spawn(process.execPath, ["server.js"], {
@@ -288,7 +289,38 @@ async function main() {
   const aug = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
   assert.equal(wild.length, aug.length);   // %는 무시되고 이번 달 기본값으로 처리
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신 경계 확인 완료");
+  // 13) 초대 → 가입 신청 → 승인
+  // 13-1) 명단 미등록 계정은 자료를 못 보고 가입 신청만 가능
+  const blocked = await api("t-new", "GET", "/bootstrap");
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).needJoin, true);
+  assert.equal((await api("t-new", "GET", "/notices")).status, 403);
+
+  // 13-2) 초대는 팀원 누구나 만든다
+  const inv = await (await api("t-fc1", "POST", "/invites", { role: "팀원" })).json();
+  assert.ok(inv.code && inv.code.length >= 8);
+  assert.equal(inv.teamName, "1팀");
+
+  // 13-3) 초대 코드로 신청하면 초대한 팀·직급이 따라붙는다
+  assert.equal((await api("t-new", "POST", "/join", { code: inv.code, name: "신입" })).status, 200);
+  let bootA = await (await api("t-esl1", "GET", "/bootstrap")).json();
+  const pend = bootA.pending.find(p => p.email === "new@x.com");
+  assert.ok(pend); assert.equal(pend.team_id, 1); assert.equal(pend.by_name, "팀원1");
+  // 승인권자가 아닌 계정에는 대기 목록이 비어 있다
+  const bootFc = await (await api("t-fc1", "GET", "/bootstrap")).json();
+  assert.equal(bootFc.pending.length, 0);
+  assert.equal(bootFc.me.canApprove, false);
+  assert.equal((await api("t-fc1", "POST", "/pending/approve", { email: "new@x.com" })).status, 403);
+
+  // 13-4) 부지점장이 승인하면 바로 열린다
+  assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "new@x.com", teamId: 1 })).status, 200);
+  assert.equal((await api("t-new", "GET", "/bootstrap")).status, 200);
+  const bootNew = await (await api("t-new", "GET", "/bootstrap")).json();
+  assert.equal(bootNew.me.teamId, 1);
+  bootA = await (await api("t-esl1", "GET", "/bootstrap")).json();
+  assert.equal(bootA.pending.filter(p => p.email === "new@x.com").length, 0);   // 대기 목록에서 빠짐
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인 경계 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

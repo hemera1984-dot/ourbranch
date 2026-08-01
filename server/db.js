@@ -22,6 +22,29 @@ export function openDb(file) {
       name TEXT NOT NULL UNIQUE
     );
 
+    -- 초대 — 누구나 만들 수 있다(카톡으로 링크 전달). 초대 자체는 권한을 주지 않고,
+    -- 링크로 들어온 사람은 '대기' 상태로 줄을 서고 승인권자가 승인해야 열린다.
+    CREATE TABLE IF NOT EXISTS invites (
+      code       TEXT PRIMARY KEY,
+      team_id    INTEGER REFERENCES teams(id),
+      role       TEXT NOT NULL DEFAULT '팀원',
+      by_email   TEXT NOT NULL,
+      by_name    TEXT NOT NULL DEFAULT '',
+      created    TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+
+    -- 가입 신청 — 구글 로그인만 끝낸 사람. 승인되면 members로 옮겨진다.
+    CREATE TABLE IF NOT EXISTS pending (
+      email       TEXT PRIMARY KEY,
+      name        TEXT NOT NULL DEFAULT '',
+      team_id     INTEGER REFERENCES teams(id),
+      role        TEXT NOT NULL DEFAULT '팀원',
+      invite_code TEXT,
+      by_name     TEXT NOT NULL DEFAULT '',
+      created     TEXT NOT NULL
+    );
+
     -- 계정과의 연결 고리는 이메일 (마이가디언 accounts.email 소문자 기준).
     -- is_manager: 관리자(팀원 추가·삭제, 조직도 수정). 부지점장 이상 기본, 총관리자가 토글.
     -- can_view_all: 자기 팀 밖 열람 (총관리자가 승인한 부지점장용).

@@ -12,9 +12,9 @@
 
 <div id="gate" class="gate" hidden>
   <div class="card"><div class="card-pad">
-    <p class="eyebrow">지점 팀 관리</p>
-    <h1>로그인</h1>
-    <p class="page-desc" id="gate-title-note">마이가디언 계정(구글 로그인·총관리자 승인)으로 들어옵니다. 별도 가입·승인이 없습니다.</p>
+    <p class="eyebrow" id="gate-eyebrow">지점 팀 관리</p>
+    <h1 id="gate-title">로그인</h1>
+    <p class="page-desc" id="gate-title-note">회사 구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
     <div id="g-signin" style="margin-bottom:12px"></div>
     <div class="toolbar" id="gate-dev" hidden>
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 세션 토큰">
@@ -61,6 +61,27 @@
       <p class="eyebrow">조직</p>
       <h1>조직도</h1>
       <p class="page-desc">지점장 아래 부지점장이 팀의 단위입니다. 여기서 넣은 명단이 일정·일지·업적 화면에 그대로 나열됩니다.</p>
+      <div id="pending-box" class="card" hidden style="margin-bottom:14px"></div>
+
+      <div class="card card-pad" style="margin-bottom:14px">
+        <div class="toolbar">
+          <strong style="font-size:15px">팀원 초대</strong>
+          <select id="inv-team" class="input" hidden></select>
+          <select id="inv-role" class="input">
+            <option>팀원</option><option>부팀장</option><option>팀장</option><option>부지점장</option>
+          </select>
+          <button class="btn primary" id="inv-make">초대 문구 만들기</button>
+          <span class="note">누구나 초대할 수 있고, 들어온 사람은 승인 후에 열립니다.</span>
+        </div>
+        <div id="inv-result" hidden style="margin-top:10px">
+          <textarea class="input" id="inv-text" rows="6" readonly style="width:100%;resize:vertical"></textarea>
+          <div class="toolbar" style="margin-top:8px">
+            <button class="btn primary" id="inv-copy">카톡 문구 복사</button>
+            <span class="note" id="inv-msg"></span>
+          </div>
+        </div>
+      </div>
+
       <div id="org-admin" class="card card-pad" hidden style="margin-bottom:14px">
         <div class="toolbar">
           <input id="ro-name" class="input" placeholder="이름" style="width:110px">
@@ -300,7 +321,12 @@
     }).then(function (r) {
       if (r.status === 401) { showGate(); throw new Error("로그인 필요"); }
       return r.json().then(function (j) {
-        if (!r.ok) { alert(j.error || "요청 실패"); throw new Error(j.error || r.status); }
+        if (!r.ok) {
+          var e = new Error(j.error || r.status);
+          e.needJoin = !!j.needJoin;
+          if (!e.needJoin) alert(j.error || "요청 실패");   // 승인 대기는 안내 화면으로 처리
+          throw e;
+        }
         return j;
       });
     });
@@ -343,10 +369,18 @@
   var gateShown = false;
   function showGate() {
     $("gate").hidden = false; $("app").hidden = true;
+    if (inviteCode) {
+      $("gate-eyebrow").textContent = "초대";
+      $("gate-title").textContent = "초대를 받으셨습니다";
+      $("gate-title-note").textContent =
+        "회사 구글 계정으로 로그인하면 신청이 접수됩니다. 승인 후 바로 이용할 수 있습니다.";
+    }
     if (gateShown) return;                          // 동시 401 응답마다 버튼이 겹쳐 그려지지 않게
     gateShown = true;
     renderGoogle();
   }
+  var inviteCode = new URLSearchParams(location.search).get("invite") || "";
+
   function tryEnter(t) {
     token = t;
     api("/bootstrap").then(function (b) {
@@ -356,12 +390,33 @@
       renderShell();
       show(screen);
     }).catch(function (err) {
+      var msg = (err && err.message) || "";
+      // 명단에 없는 계정 — 초대 코드로 가입 신청을 넣고 승인 대기 안내를 띄운다
+      if (err && err.needJoin) {
+        localStorage.setItem("ob_token", t);
+        api("/join", { method: "POST", body: { code: inviteCode } })
+          .then(function () { showWaiting(); })
+          .catch(function () { showWaiting(); });
+        return;
+      }
       localStorage.removeItem("ob_token");
       showGate();                                   // 네트워크 오류에도 백지로 두지 않는다
-      if (err && err.message && err.message.indexOf("로그인") < 0) {
-        var g = $("gate-title-note");
-        if (g) g.textContent = "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-      }
+      if (msg.indexOf("로그인") < 0 && msg.indexOf("승인") < 0)
+        $("gate-title-note").textContent = "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    });
+  }
+
+  // 승인 대기 화면 — 로그인은 됐지만 아직 명단에 없는 사람
+  function showWaiting() {
+    $("gate").hidden = false; $("app").hidden = true;
+    $("gate-eyebrow").textContent = "승인 대기";
+    $("gate-title").textContent = "신청이 접수됐습니다";
+    $("gate-title-note").textContent =
+      "지점장·부지점장 승인 후 바로 이용할 수 있습니다. 승인되면 이 화면을 새로고침해 주세요.";
+    $("g-signin").innerHTML = '<button class="btn primary" id="wait-retry">다시 확인</button>';
+    $("gate-dev").hidden = true;
+    document.getElementById("wait-retry").addEventListener("click", function () {
+      tryEnter(token);
     });
   }
   $("gate-enter").addEventListener("click", function () {
@@ -554,6 +609,12 @@
   function renderOrg() {
     $("org-admin").hidden = !BOOT.me.isManager;
     $("ro-team-tools").hidden = !BOOT.me.isSuper;
+    renderPending();
+    var it = $("inv-team");
+    if (BOOT.me.seesAll && BOOT.teams.length > 1) {
+      it.hidden = false;
+      it.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
+    }
     var rec = $("ro-recruiter");
     var cur = rec.value;
     rec.innerHTML = '<option value="">도입자 없음</option>' + BOOT.members.map(function (m) {
@@ -596,6 +657,67 @@
     }).join("");
     $("org-list").innerHTML = html || '<div class="card"><div class="empty">팀이 아직 없습니다. 팀부터 추가합니다.</div></div>';
   }
+
+  // 승인 대기 — 승인권자(지점장·부지점장·총관리자)에게만 보인다
+  function renderPending() {
+    var box = $("pending-box");
+    var list = BOOT.pending || [];
+    if (!BOOT.me.canApprove || !list.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="card-pad" style="padding-bottom:6px"><strong style="font-size:15px">승인 대기 '
+      + list.length + '명</strong> <span class="note">초대 링크로 들어온 계정입니다. 승인하면 바로 이용할 수 있습니다.</span></div>'
+      + list.map(function (p) {
+        var teamName = (BOOT.teams.filter(function (t) { return t.id === p.team_id; })[0] || {}).name || "팀 미지정";
+        return '<div class="org-row"><span class="badge blue">' + esc(p.role) + "</span>"
+          + '<span class="name">' + esc(p.name || "(이름 없음)") + "</span>"
+          + '<span class="meta">' + esc(p.email) + " · " + esc(teamName)
+          + (p.by_name ? " · " + esc(p.by_name) + " 초대" : "") + "</span>"
+          + '<button class="btn primary pd-ok" data-email="' + esc(p.email) + '">승인</button>'
+          + '<button class="btn pd-no" data-email="' + esc(p.email) + '">거절</button></div>';
+      }).join("");
+  }
+  $("pending-box").addEventListener("click", function (e) {
+    var ok = e.target.closest(".pd-ok");
+    if (ok) {
+      api("/pending/approve", { method: "POST", body: { email: ok.dataset.email, teamId: myTeamId() } })
+        .then(refreshBoot).then(renderOrg);
+      return;
+    }
+    var no = e.target.closest(".pd-no");
+    if (no && confirm("이 신청을 거절할까?"))
+      api("/pending/reject", { method: "POST", body: { email: no.dataset.email } })
+        .then(refreshBoot).then(renderOrg);
+  });
+
+  // 초대 문구 — 카톡으로 그대로 보낸다
+  $("inv-make").addEventListener("click", function () {
+    var teamId = $("inv-team").hidden ? myTeamId() : Number($("inv-team").value);
+    api("/invites", { method: "POST", body: { teamId: teamId, role: $("inv-role").value } }).then(function (r) {
+      var link = location.origin + location.pathname + "?invite=" + r.code;
+      var text = [
+        "[" + (BOOT.branchName || "지점") + " 팀 관리 초대]",
+        "",
+        BOOT.me.name + "님이 초대했습니다.",
+        (r.teamName ? r.teamName + " · " : "") + r.role,
+        "",
+        "아래 주소를 눌러 회사 구글 계정으로 로그인하면 됩니다.",
+        link,
+        "",
+        "로그인 후 승인되면 바로 이용할 수 있습니다.",
+        "일정·일일보고·미션·공지·업적을 한 곳에서 봅니다."
+      ].join("\n");
+      $("inv-result").hidden = false;
+      $("inv-text").value = text;
+      $("inv-msg").textContent = "";
+    });
+  });
+  $("inv-copy").addEventListener("click", function () {
+    var text = $("inv-text").value;
+    function done() { $("inv-msg").textContent = "복사했습니다. 카톡에 붙여넣으세요."; }
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    else { fallbackCopy(text); done(); }
+  });
 
   $("ro-add").addEventListener("click", function () {
     var name = $("ro-name").value.trim();
@@ -1589,6 +1711,7 @@
 
   // ── 시작 ──
   var urlToken = new URLSearchParams(location.search).get("token");
+  if (inviteCode) history.replaceState(null, "", location.pathname + location.hash);
   if (urlToken) { history.replaceState(null, "", location.pathname + location.hash); tryEnter(urlToken); }
   else if (localStorage.getItem("ob_token")) tryEnter(localStorage.getItem("ob_token"));
   else showGate();

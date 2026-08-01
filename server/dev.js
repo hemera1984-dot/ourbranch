@@ -21,10 +21,12 @@ const acc = auth.prepare("INSERT INTO accounts (id, email, name, status, grade, 
 acc.run(1, "super@dev.local", "안창민", "승인", "SSL", 1);
 acc.run(2, "esl@dev.local", "부지점장", "승인", "ESL", 0);
 acc.run(3, "fc@dev.local", "팀원한명", "승인", "FC", 0);
+acc.run(4, "new@dev.local", "신입사원", "승인", "FC", 0);   // 명단 미등록 — 초대 흐름 확인용
 const ses = auth.prepare("INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)");
 ses.run("dev-super", 1, far);
 ses.run("dev-esl", 2, far);
 ses.run("dev-fc", 3, far);
+ses.run("dev-new", 4, far);
 auth.close();
 
 process.env.AUTH_DB_FILE = AUTH;
@@ -39,6 +41,6 @@ process.env.WEB_DIR = join(import.meta.dirname, "..", "web");
   d.close();
 }
 
-console.log("개발 토큰: dev-super(총관리자) / dev-esl(부지점장) / dev-fc(팀원)");
+console.log("개발 토큰: dev-super(총관리자) / dev-esl(부지점장) / dev-fc(팀원) / dev-new(미등록)");
 console.log("접속: http://localhost:8788/?token=dev-super");
 await import("./server.js");
