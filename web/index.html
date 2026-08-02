@@ -325,13 +325,13 @@
           <span class="note" id="report-goal"></span>
         </div>
         <div class="rep-grid">
-          <label class="rep-row"><span>출근 상태</span>
+          <div class="rep-row"><span>출근 상태</span>
             <span class="toolbar">
-              <label style="cursor:pointer"><input type="radio" name="rep-present" id="rep-yes" value="1"> 출근</label>
-              <label style="cursor:pointer"><input type="radio" name="rep-present" id="rep-no" value="0"> 미출근</label>
+              <label class="pickchip"><input type="radio" name="rep-present" id="rep-yes" value="1"><span>출근</span></label>
+              <label class="pickchip"><input type="radio" name="rep-present" id="rep-no" value="0"><span>미출근</span></label>
               <input class="input" id="rep-reason" placeholder="미출근 사유 (선택)" style="flex:1;min-width:120px">
             </span>
-          </label>
+          </div>
           <label class="rep-row"><span>오전 활동</span><input class="input" id="rep-work" placeholder="예: 이사 / 고객 상담"></label>
           <label class="rep-row"><span>점심 일정</span><input class="input" id="rep-lunch" placeholder="예: 팀 점심 / 고객 식사"></label>
           <label class="rep-row"><span>오후 활동</span><input class="input" id="rep-afternoon" placeholder="예: 저녁 약속 / 교육"></label>
@@ -346,15 +346,15 @@
       </div>
 
       <div class="section-head" style="margin-bottom:8px">
-        <h2>팀 현황</h2>
-        <div class="toolbar">
+        <h2>팀 현황 <button class="btn fold-btn mobile-only" id="att-fold" aria-expanded="false">펴기</button></h2>
+        <div class="toolbar" id="att-tools">
           <button class="btn" id="att-copy-all">팀 전체 보고 복사</button>
           <button class="btn" id="att-copy-missing">미보고자 복사</button>
           <span class="note" id="att-copy-msg"></span>
         </div>
       </div>
       <div id="att-missing" hidden style="margin-bottom:8px"></div>
-      <div class="card"><div class="grid-wrap"><table class="grid" id="att-table"></table></div></div>
+      <div class="card" id="att-card"><div class="grid-wrap"><table class="grid" id="att-table"></table></div></div>
     </section>
 
     <section id="screen-board" hidden>
@@ -2293,6 +2293,7 @@
       $("rep-last").hidden = myRep.id != null;
     });
     loadAttTable(ds, teamId);
+    if (isMobile()) foldTeam(false); else foldTeam(true);
   }
 
   // 이번 달 목표·현재 실적 — 보고 문구에 자동으로 들어간다
@@ -2322,6 +2323,19 @@
       if (r.present) $("rep-yes").checked = true; else $("rep-no").checked = true;
       $("rep-msg").textContent = (r.date || "") + " 보고를 가져왔습니다. 고쳐서 저장하세요.";
     });
+  });
+
+  // 팀 현황 접기 — 폰으로 일일보고를 여는 이유는 대개 「내 보고를 쓰려고」다.
+  // 팀 표가 먼저 눈에 들어오면 정작 쓸 칸까지 한참 내려야 한다.
+  function foldTeam(open) {
+    var b = $("att-fold");
+    $("att-card").hidden = !open;
+    $("att-tools").hidden = !open;
+    b.textContent = open ? "접기" : "펴기";
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  $("att-fold").addEventListener("click", function () {
+    foldTeam($("att-card").hidden);
   });
 
   function saveReport() {

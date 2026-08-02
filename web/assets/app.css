@@ -601,3 +601,31 @@ a.slot-title:hover { text-decoration: underline; }
 .gchip:hover { border-color: var(--blue); color: var(--blue); }
 .gchip.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .gchip.clear { color: var(--ter); }
+
+/* 고르는 칩 (라디오 대체) — 13px 동그라미는 폰에서 못 누른다 */
+.pickchip { display: inline-flex; align-items: center; cursor: pointer; }
+.pickchip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pickchip span {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 40px; padding: 0 18px; font-size: 14px; font-weight: 600;
+  border: 1px solid var(--line-input); border-radius: 4px;
+  background: var(--surface); color: var(--sub);
+  transition: background .14s, border-color .14s, color .14s;
+}
+.pickchip input:checked + span { background: var(--blue); border-color: var(--blue); color: #fff; }
+.pickchip input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+.fold-btn { margin-left: 8px; font-size: 12px; padding: 4px 12px; vertical-align: middle; }
+
+@media (max-width: 780px) {
+  /* 폰에서 자주 쓰는 화면은 손가락 크기에 맞춘다 (최소 44px) */
+  .rep-row { display: block; }
+  .rep-row > span:first-child { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 700; }
+  .rep-row .input, .rep-row textarea.input { width: 100%; }
+  .pickchip span { min-height: 44px; padding: 0 22px; font-size: 15px; }
+  #rep-save { flex: 1 0 100%; min-height: 46px; font-size: 15px; }
+  #rep-last, #rep-copy { flex: 1; min-height: 44px; }
+  /* 일정 — 한 줄이 27px이면 누르기 어렵고 읽기도 나쁘다 */
+  .slot { min-height: 44px; padding: 8px 10px; }
+  .slot-title { font-size: 14px; }
+  .slot-time, .slot-place { font-size: 13px; }
+}
