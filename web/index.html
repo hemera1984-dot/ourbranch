@@ -40,6 +40,8 @@
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
+      <p class="nav-group-label">내 계정</p>
+      <a href="#me" data-screen="me">내 정보</a>
       <p class="nav-group-label">관리</p>
       <a href="#invite" data-screen="invite">초대·승인</a>
       <a href="#install" data-screen="install">앱 설치</a>
@@ -76,6 +78,32 @@
       </div>
       <div class="card"><div class="oc-wrap"><div id="org-chart"></div></div></div>
 
+    </section>
+
+    <section id="screen-me" hidden>
+      <p class="eyebrow">내 계정</p>
+      <h1>내 정보</h1>
+      <p class="page-desc">구글 계정 이름이 그대로 들어오면 조직도·일정·업적에 그 이름으로 남습니다.
+        실제로 쓰는 이름으로 한 번만 확인해 주세요.</p>
+      <div class="card card-pad" style="max-width:520px">
+        <div class="me-field">
+          <label for="me-input-name">이름</label>
+          <input class="input" id="me-input-name" maxlength="20" placeholder="예: 안창민">
+        </div>
+        <div class="me-field">
+          <label for="me-input-phone">휴대폰 <span class="note">(선택)</span></label>
+          <input class="input" id="me-input-phone" inputmode="tel" maxlength="13" placeholder="010-0000-0000">
+        </div>
+        <div class="me-field">
+          <label>팀 · 직급</label>
+          <div id="me-place" class="me-fixed"></div>
+          <span class="note">팀·직급은 부지점장·지점장이 조직도에서 정합니다. 바뀌어야 하면 말씀해 주세요.</span>
+        </div>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn primary" id="me-save">저장</button>
+          <span class="note" id="me-msg"></span>
+        </div>
+      </div>
     </section>
 
     <section id="screen-invite" hidden>
@@ -365,7 +393,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "invite", "install", "sched", "att", "board", "ta", "perf"];
+  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -493,7 +521,9 @@
       localStorage.setItem("ob_token", t);
       $("gate").hidden = true; $("app").hidden = false;
       renderShell();
-      show(screen);
+      // 승인 직후 첫 접속 — 실명 확인부터. 안 하면 구글 이름으로 조직도·업적에 남는다.
+      var mine = b.members.filter(function (x) { return x.email === b.me.email; })[0];
+      show(mine && !mine.profile_done ? "me" : screen);
     }).catch(function (err) {
       var msg = (err && err.message) || "";
       // 명단에 없는 계정 — 초대 코드로 가입 신청을 넣고 승인 대기 안내를 띄운다
@@ -591,6 +621,7 @@
     refreshBadges();
     if (name === "home") loadHome();
     if (name === "org") renderOrg();
+    if (name === "me") renderMe();
     if (name === "invite") renderInvite();
     if (name === "install") renderInstall();
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
@@ -824,6 +855,27 @@
       : "";
     renderOrgChart();
   }
+
+  // ── 내 정보 ──
+  // 구글 계정 이름("kim jia")이 그대로 남지 않게, 승인 직후 본인이 실명을 확인한다.
+  // 휴대폰은 조직도 명단에 싣지 않는다 — 명단은 지점 전체에 열려 있고, 연락처는 본인 것만 본다.
+  function renderMe() {
+    $("me-msg").textContent = "";
+    return api("/me").then(function (m) {
+      var tn = (BOOT.teams.filter(function (t) { return t.id === m.teamId; })[0] || {}).name;
+      $("me-input-name").value = m.name || "";
+      $("me-input-phone").value = m.phone || "";
+      $("me-place").textContent = (tn || "지점 직속") + " · " + (m.role || "팀원");
+    });
+  }
+  $("me-save").addEventListener("click", function () {
+    api("/me", { method: "POST", body: { name: $("me-input-name").value, phone: $("me-input-phone").value } })
+      .then(function () {
+        return refreshBoot().then(renderMe).then(function () {
+          $("me-msg").textContent = "저장했습니다.";   // renderMe가 안내문을 지우므로 그 뒤에 쓴다
+        });
+      });
+  });
 
   // ── 앱 설치 ──
   var deferredInstall = null;

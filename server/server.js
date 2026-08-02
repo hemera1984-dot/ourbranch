@@ -169,13 +169,14 @@ function route(method, pattern, needManager, handler) {
 
 // 앱 셸 부트스트랩 — 지점명·팀·구성원·내 권한을 한 번에
 route("GET", /^\/bootstrap$/, false, (req, res, user) => {
+  // 조직도는 지점 전체가 다 보인다 (2026-08-02 사용자 지시) — 팀·구성원 명단은 가리지 않는다.
+  // 가리는 것은 자료(일정·업적·TA·공지)이고, 그건 각 엔드포인트가 팀 단위로 막는다.
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email FROM members ORDER BY team_id, name").all()
-    .filter(m => canSeeTeam(user, m.team_id) || user.recruits.includes(m.email));
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done FROM members ORDER BY team_id, name").all();
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user) },
-    teams: user.seesAll ? teams : teams.filter(t => t.id === user.teamId),
+    teams,
     members,
     pending: canApprove(user)
       ? db.prepare("SELECT * FROM pending ORDER BY created").all()
@@ -738,6 +739,24 @@ route("DELETE", /^\/admin\/teams\/(\d+)$/, true, (req, res, user, m) => {
   if (cnt) return send(res, 400, { error: "소속 인원 " + cnt + "명을 먼저 옮겨야 합니다" });
   db.prepare("DELETE FROM teams WHERE id = ?").run(id);
   send(res, 200, { ok: true });
+});
+
+// 내 정보 — 본인이 실명을 확인한다.
+// 구글 계정 이름이 그대로 들어오면 "kim jia"처럼 남아서 조직도·업적·일정이 전부 그 이름이 된다.
+// 팀·직급은 여기서 바꾸지 못한다 — 직급이 관리자 권한의 근거라 본인이 올리면 권한 상승이다.
+route("POST", /^\/me$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  const name = String(b.name || "").trim();
+  if (name.length < 2 || name.length > 20) return send(res, 400, { error: "이름을 2~20자로 입력해 주세요" });
+  const phone = String(b.phone || "").trim().replace(/[^0-9\-]/g, "");
+  if (phone && !/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(phone)) return send(res, 400, { error: "휴대폰 번호 형식을 확인해 주세요" });
+  db.prepare("UPDATE members SET name = ?, phone = ?, profile_done = 1 WHERE email = ?").run(name, phone, user.email);
+  send(res, 200, { ok: true });
+});
+
+route("GET", /^\/me$/, false, (req, res, user) => {
+  const m = getMember(db, user.email) || {};
+  send(res, 200, { name: m.name || user.name, phone: m.phone || "", done: !!m.profile_done, role: m.role || "", teamId: m.team_id ?? null });
 });
 
 route("POST", /^\/admin\/members$/, true, async (req, res, user) => {

@@ -429,3 +429,12 @@ a.slot-title:hover { text-decoration: underline; }
 /* 빠른 입력(찍기) 모드 */
 #stamp-bar .kpicks, #m-stamp-kinds { gap: 5px; }
 .cal-cell.stampable { cursor: copy; }
+
+/* 내 정보 — 입력칸은 넉넉하게, 라벨은 본문 크기로 (가독성 원칙) */
+.me-field { margin-bottom: 14px; }
+.me-field label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.me-field .input { width: 100%; }
+.me-fixed {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--canvas); font-weight: 600; margin-bottom: 4px;
+}

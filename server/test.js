@@ -67,10 +67,12 @@ async function main() {
     { email: "fc2@x.com", name: "팀원2", teamId: 2 }
   ]) assert.equal((await api("t-super", "POST", "/admin/members", m)).status, 200);
 
-  // 3) 열람 분리: 팀원1은 1팀만, 총관리자는 전체
+  // 3) 조직도는 전체 공개 — 팀·명단은 누구에게나 다 보인다 (2026-08-02 사용자 지시).
+  // 가리는 것은 자료(공지·일정·업적·TA)이고 그건 아래 항목들이 확인한다.
   let b = await (await api("t-fc1", "GET", "/bootstrap")).json();
-  assert.deepEqual(b.teams.map(t => t.name), ["1팀"]);
-  assert.deepEqual(b.members.map(m => m.email).sort(), ["esl1@x.com", "fc1@x.com"]);
+  assert.deepEqual(b.teams.map(t => t.name), ["1팀", "2팀"]);
+  assert.deepEqual(b.members.map(m => m.email).sort(), ["esl1@x.com", "fc1@x.com", "fc2@x.com"]);
+  assert.equal(b.me.seesAll, false);          // 명단이 다 보인다고 열람 권한이 생기는 건 아니다
   b = await (await api("t-super", "GET", "/bootstrap")).json();
   assert.equal(b.teams.length, 2);
 
@@ -427,7 +429,22 @@ async function main() {
   assert.equal((await api("t-wait", "POST", "/notices", { title: "2팀 공지", teamId: 2 })).status, 200);
   assert.equal((await api("t-wait", "POST", "/notices", { title: "1팀 침범", teamId: 1 })).status, 403);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급 확인 완료");
+  // 21) 내 정보 — 본인 실명 확인. 팀·직급은 여기서 못 바꾼다(권한 상승 차단).
+  const meBefore = await (await api("t-fc1", "GET", "/me")).json();
+  assert.equal(meBefore.done, false);
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김", phone: "" })).status, 400);      // 너무 짧음
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", phone: "010-1" })).status, 400); // 번호 형식
+  assert.equal((await api("t-fc1", "POST", "/me",
+    { name: "김일번", phone: "010-1234-5678", role: "부지점장", teamId: 2, isManager: true })).status, 200);
+  const meAfter = await (await api("t-fc1", "GET", "/me")).json();
+  assert.equal(meAfter.name, "김일번");
+  assert.equal(meAfter.phone, "010-1234-5678");
+  assert.equal(meAfter.done, true);
+  const meBoot = await (await api("t-fc1", "GET", "/bootstrap")).json();
+  assert.equal(meBoot.me.isManager, false);          // 직급·관리자 권한은 그대로
+  assert.equal(meBoot.me.teamId, 1);                 // 팀도 그대로
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

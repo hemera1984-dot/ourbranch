@@ -219,7 +219,11 @@ export function openDb(file) {
     // 동명이인 구분 — 소유자를 이메일로 못박는다
     "ALTER TABLE ta_logs ADD COLUMN author_email TEXT",
     "ALTER TABLE perf ADD COLUMN member_email TEXT",
-    "ALTER TABLE perf_goals ADD COLUMN member_email TEXT"
+    "ALTER TABLE perf_goals ADD COLUMN member_email TEXT",
+    // 본인 확인 — 구글 계정 이름이 그대로 들어오면 "kim jia"처럼 남는다.
+    // 승인 후 본인이 실명을 확인해야 1이 된다.
+    "ALTER TABLE members ADD COLUMN phone TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE members ADD COLUMN profile_done INTEGER NOT NULL DEFAULT 0"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)
