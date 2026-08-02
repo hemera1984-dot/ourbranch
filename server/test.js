@@ -415,7 +415,19 @@ async function main() {
   // 팀원이 남의 이메일로 입력하려 해도 차단
   assert.equal((await api("t-fc1", "POST", "/perf", { month: "2027-01", rows: [{ member: "팀원1", memberEmail: "fc2@x.com", canp: 1 }] })).status, 403);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인 확인 완료");
+  // 20) 직급은 조직도 기준 — 마이가디언이 '대기'라도 조직도상 부지점장이면 관리자다.
+  // (마이가디언 승인이 늦어 팀 운영이 막히는 일이 없게)
+  assert.equal((await api("t-super", "POST", "/admin/members",
+    { email: "wait@x.com", name: "대기자", teamId: 2, role: "부지점장" })).status, 200);
+  const waitBoot = await (await api("t-wait", "GET", "/bootstrap")).json();
+  assert.equal(waitBoot.me.grade, "ESL");
+  assert.equal(waitBoot.me.isManager, true);
+  assert.equal(waitBoot.me.isSuper, false);           // 총관리자 권한까지 딸려오면 안 된다
+  assert.equal(waitBoot.me.seesAll, false);           // 열람은 자기 팀만
+  assert.equal((await api("t-wait", "POST", "/notices", { title: "2팀 공지", teamId: 2 })).status, 200);
+  assert.equal((await api("t-wait", "POST", "/notices", { title: "1팀 침범", teamId: 1 })).status, 403);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

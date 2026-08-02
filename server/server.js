@@ -75,6 +75,12 @@ function num(v) {
 // - manager: 관리자 — 팀원 추가·삭제, 조직도 수정. 부지점장 이상 기본, 총관리자가 토글.
 // - 열람 범위: super·지점장(BM)·can_view_all → 지점 전체 / 그 외 → 자기 팀
 
+// 조직도 직급명 → 코드. 직급 서열은 BM > ESL > SSL > GSL > FC (헌법 조직·권한 절).
+const GRADE_OF_ROLE = { "지점장": "BM", "부지점장": "ESL", "팀장": "SSL", "부팀장": "GSL", "팀원": "FC" };
+const GRADE_RANK = ["BM", "ESL", "SSL", "GSL", "FC"];
+const rankOf = g => { const i = GRADE_RANK.indexOf(g); return i < 0 ? 99 : i; };
+const topGrade = (a, b) => (rankOf(a) <= rankOf(b) ? a : b) || null;
+
 function userFor(req) {
   const m = /^Bearer (.+)$/.exec(req.headers.authorization || "");
   const acc = accountForToken(authDb, m ? m[1] : null);
@@ -88,17 +94,21 @@ function userFor(req) {
   // 총관리자를 뺀 나머지는 이 지점 명단(members)에 있어야 한다.
   // 명단에 없으면 가입 신청 경로만 열린다(승인 대기).
   if (!member && !isSuper) return { email, name: acc.name, unlisted: true };
-  const gradeManager = mgApproved && (acc.grade === "BM" || acc.grade === "ESL");
+  // 직급은 하랑지점 조직도(role)가 기준이다. 마이가디언 직급은 조직도 직급이 없거나
+  // 더 높을 때만 쓴다 — 조직도에 부지점장으로 올려놨는데 마이가디언 승인이 늦어서
+  // 관리자 권한이 없는 일이 없게. 부지점장·지점장은 관리자급이다(2026-08-02 확인).
+  const grade = topGrade(member && GRADE_OF_ROLE[member.role], mgApproved ? acc.grade : null);
+  const gradeManager = grade === "BM" || grade === "ESL";
   // 도입자: 팀이 달라도 자기가 도입한 팀원의 일정을 본다
   const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ?").all(email).map(r => r.email);
   return {
     email,
     name: (member && member.name) || acc.name,
-    grade: acc.grade,
+    grade,
     teamId: member ? member.team_id : null,
     isSuper,
     isManager: isSuper || gradeManager || !!(member && member.is_manager),
-    seesAll: isSuper || (mgApproved && acc.grade === "BM") || !!(member && member.can_view_all),
+    seesAll: isSuper || grade === "BM" || !!(member && member.can_view_all),
     recruits
   };
 }
