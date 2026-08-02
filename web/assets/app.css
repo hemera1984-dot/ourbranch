@@ -534,35 +534,47 @@ a.slot-title:hover { text-decoration: underline; }
   .app-splash { animation: none }
 }
 
-/* ── 홈 히어로 배너 ── */
-/* 사진 위에 인사말을 얹는다. 밝은 하늘 위에서도 흰 글자가 읽히도록
-   불투명 막을 한 겹 깐다 (헌법 「가독성 우선」). */
+/* ── 홈 배너 (코덱스 안, 2026-08-02 사용자 선택) ──
+   영상 배너를 걷어내고 정지 배너로. 지표 두 칸은 실제 값이 있을 때만 그린다.
+   원안의 4px 세로 색줄과 12/16px 반경은 우리 규칙(장식 색줄 금지, radius 6/4/3)에 맞춰 걷어냈다. */
 .hero {
-  position: relative; overflow: hidden;
-  border-radius: 6px; margin-bottom: 18px;
-  height: 168px; background: #0a0e14;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 28px;
+  height: 168px; padding: 22px 26px; margin-bottom: 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
 }
-.hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* 글자가 놓이는 왼쪽만 진하게. 하늘이 밝아 균일한 막으로는 흰 글자가 안 읽힌다
-   (실측 2.39:1 → 6.0:1). 장식이 아니라 가독성 장치라 그라데이션을 쓴다. */
-.hero-scrim {
-  position: absolute; inset: 0;
-  background: linear-gradient(90deg,
-    rgba(6,10,16,.88) 0%, rgba(6,10,16,.86) 32%, rgba(6,10,16,.5) 62%, rgba(6,10,16,.3) 100%);
+.hero-copy { min-width: 0; }
+.hero-date { margin: 0 0 6px; color: var(--blue); font-size: 13px; font-weight: 700; }
+.hero-greet { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -.035em; line-height: 1.22; }
+.hero-sub { margin: 8px 0 0; color: var(--sub); font-size: 14px; }
+.hero-metrics { display: flex; gap: 10px; }
+.metric {
+  min-width: 128px; height: 76px; padding: 12px 14px;
+  display: flex; flex-direction: column; justify-content: center; gap: 5px;
+  background: var(--canvas); border: 1px solid var(--line); border-radius: 4px;
 }
-.hero-text {
-  position: relative; height: 100%;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 0 24px;
+.metric-label { color: var(--sub); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.metric-value { color: var(--blue); font-size: 20px; font-weight: 800; line-height: 1.2; }
+
+@media (max-width: 900px) {
+  .hero { height: 156px; padding: 18px 20px; gap: 18px; }
+  .hero-greet { font-size: 22px; }
+  .hero-metrics { flex-direction: column; }
+  .metric {
+    min-width: 118px; height: 34px; padding: 6px 12px;
+    flex-direction: row; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .metric-value { font-size: 17px; }
 }
-.hero-text .eyebrow { color: rgba(255,255,255,.78); margin-bottom: 2px; }
-.hero-text h1 { color: #fff; margin: 0 0 4px; font-size: 25px; letter-spacing: -.035em; }
-.hero-sub { margin: 0; color: rgba(255,255,255,.84); font-size: 14px; }
-@media (max-width: 780px) {
-  /* 좁은 화면에서는 글자가 폭을 다 쓰므로 균일하게 덮는다 */
-  .hero-scrim { background: rgba(6, 10, 16, .84); }
-  .hero { height: 132px; }
-  .hero-text { padding: 0 16px; }
-  .hero-text h1 { font-size: 20px; }
+@media (max-width: 560px) {
+  .hero {
+    height: auto; min-height: 130px; padding: 14px 16px;
+    grid-template-columns: 1fr; gap: 10px;
+  }
+  .hero-greet { font-size: 19px; }
   .hero-sub { font-size: 13px; }
+  .hero-metrics { flex-direction: row; }
+  .metric { flex: 1; min-width: 0; }
+  .metric-label { overflow: hidden; text-overflow: ellipsis; }
 }
+
