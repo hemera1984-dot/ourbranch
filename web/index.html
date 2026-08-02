@@ -30,17 +30,17 @@
 
 <div id="app" class="shell" hidden>
   <aside class="sidebar">
-    <div class="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></div>
+    <a class="brand" href="#home" id="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></a>
     <nav class="nav" id="nav">
       <p class="nav-group-label">업무</p>
       <a href="#home" data-screen="home">홈</a>
+      <a href="#org" data-screen="org">조직도</a>
       <a href="#sched" data-screen="sched">일정</a>
       <a href="#att" data-screen="att">일일보고</a>
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
       <p class="nav-group-label">관리</p>
-      <a href="#org" data-screen="org">조직도</a>
       <a href="#invite" data-screen="invite">초대·승인</a>
       <a href="#install" data-screen="install">앱 설치</a>
     </nav>
@@ -603,6 +603,8 @@
     var a = e.target.closest("a"); if (!a) return;
     e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
   });
+  // 사이드바 지점명 = 홈 (로고를 누르면 첫 화면으로 — 익숙한 동작)
+  $("brand").addEventListener("click", function (e) { e.preventDefault(); location.hash = "home"; show("home"); });
   $("team-pick").addEventListener("change", function () { show(screen); });
   $("theme-toggle").addEventListener("click", function () {
     applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");

@@ -40,7 +40,9 @@ button, input, select { font: inherit; color: inherit; }
   width: 216px; flex: none; background: var(--navy); color: #cfd8e5;
   border-top: 4px solid var(--cyan); display: flex; flex-direction: column;
 }
-.brand { padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.brand { display: block; padding: 18px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.08);
+  text-decoration: none; transition: background .14s; }
+.brand:hover { background: rgba(255,255,255,.05); }
 .brand-name { display: block; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -0.035em; }
 .brand-caption { display: block; font-size: 10px; color: #8fa3bd; letter-spacing: .08em; font-weight: 600; margin-top: 2px; }
 .nav { padding: 10px 0; flex: 1; }
