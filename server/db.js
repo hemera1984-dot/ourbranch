@@ -197,6 +197,21 @@ export function openDb(file) {
     -- (이름만 쓰면 동명이인이 서로의 기록을 수정하고, 개명하면 과거 기록을 잃는다)
 
     -- 미션 달성 체크 — 개인별. 팀 미션(전체)은 달성 인원/전체 인원으로 퍼센트 산출
+    -- TA 일지 잠금 — 지점 공용 비밀번호를 푼 사람과 만료 시각 (서버 재시작에도 유지)
+    CREATE TABLE IF NOT EXISTS ta_unlock (
+      email TEXT PRIMARY KEY,
+      until TEXT NOT NULL
+    );
+
+    -- 열람 기록 — 후보자 실명·연락처가 든 일지를 누가 언제 열었는지 남긴다.
+    -- 민원이 들어왔을 때 이 기록이 없으면 아무것도 확인할 수 없다.
+    CREATE TABLE IF NOT EXISTS ta_access (
+      id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      email   TEXT NOT NULL,
+      name    TEXT NOT NULL DEFAULT '',
+      created TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS task_done (
       task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       email   TEXT NOT NULL,

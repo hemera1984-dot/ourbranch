@@ -462,7 +462,46 @@ async function main() {
   assert.equal(seen.birthday, "08-15");
   assert.equal(seen.joined_at, "2024-03-01");
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일 확인 완료");
+  // 23) TA 일지 잠금 — 지점 공용 비밀번호. 후보자 실명·연락처가 든 화면이라 한 겹 잠근다.
+  let lock = await (await api("t-fc1", "GET", "/ta/lock")).json();
+  assert.equal(lock.enabled, false);                        // 비밀번호 설정 전에는 잠그지 않는다
+  assert.equal((await api("t-fc1", "POST", "/ta/password", { password: "1234" })).status, 403);  // 팀원 불가
+  assert.equal((await api("t-super", "POST", "/ta/password", { password: "12" })).status, 400);  // 너무 짧음
+  assert.equal((await api("t-super", "POST", "/ta/password", { password: "harang24" })).status, 200);
+  // 설정 뒤엔 읽기도 쓰기도 막힌다
+  const locked = await api("t-fc1", "GET", "/ta?month=2026-08");
+  assert.equal(locked.status, 403);
+  assert.equal((await locked.json()).taLocked, true);
+  assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-08-09", cand_name: "잠김" }] })).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/ta/unlock", { password: "틀림" })).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/ta/unlock", { password: "harang24" })).status, 200);
+  assert.equal((await api("t-fc1", "GET", "/ta?month=2026-08")).status, 200);
+  lock = await (await api("t-fc1", "GET", "/ta/lock")).json();
+  assert.equal(lock.unlocked, true);
+  // 열람 기록 — 지점장·총관리자만 본다
+  assert.equal((await api("t-fc1", "GET", "/ta/access")).status, 403);
+  const acc = await (await api("t-super", "GET", "/ta/access")).json();
+  assert.ok(acc.some(a => a.email === "fc1@x.com"));
+  // 비밀번호를 바꾸면 기존 해제는 무효
+  assert.equal((await api("t-super", "POST", "/ta/password", { password: "harang25" })).status, 200);
+  assert.equal((await api("t-fc1", "GET", "/ta?month=2026-08")).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/ta/unlock", { password: "harang25" })).status, 200);
+
+  // 24) 보관기간 6개월 — 서버가 켜질 때 지운다
+  const old = new Date(Date.now() + 9 * 3600e3);
+  old.setMonth(old.getMonth() - 7);
+  const oldDate = old.toISOString().slice(0, 10);
+  await api("t-fc1", "POST", "/ta", { rows: [{ date: oldDate, cand_name: "7개월전" }] });
+  assert.equal((await (await api("t-fc1", "GET", "/ta?month=" + oldDate.slice(0, 7))).json()).length, 1);
+  await new Promise(done => {
+    const boot = spawn(process.execPath, ["server.js"], {
+      env: { ...process.env, PORT: "18789", DB_FILE: DATA, AUTH_DB_FILE: AUTH }, stdio: "ignore"
+    });
+    setTimeout(() => { boot.kill(); done(); }, 1200);
+  });
+  assert.equal((await (await api("t-fc1", "GET", "/ta?month=" + oldDate.slice(0, 7))).json()).length, 0);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

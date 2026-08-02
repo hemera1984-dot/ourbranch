@@ -372,7 +372,20 @@
       <p class="eyebrow">도입 활동</p>
       <h1>TA 일지</h1>
       <p class="page-desc">한 줄이 통화 한 건입니다. 엑셀에서 범위를 복사해 그대로 붙여넣을 수 있습니다. 마지막 줄에서 Enter를 누르면 새 줄이 생깁니다.
-        <strong>지점 전체가 함께 봅니다</strong> — 걸러야 할 상대는 「주의」 칸에 표시해 주세요. 수정·삭제는 쓴 사람만 할 수 있습니다.</p>
+        <strong>지점 전체가 함께 봅니다</strong> — 걸러야 할 상대는 「주의」 칸에 표시해 주세요. 수정·삭제는 쓴 사람만 할 수 있습니다.
+        후보자 실명·연락처가 들어가는 화면이라 6개월이 지난 기록은 자동으로 지워집니다.</p>
+
+      <div class="card card-pad" id="ta-lock" hidden style="max-width:420px">
+        <strong style="font-size:15px">지점 공용 비밀번호</strong>
+        <p class="note" id="ta-lock-desc" style="margin:4px 0 10px"></p>
+        <div class="toolbar">
+          <input class="input" type="password" id="ta-pw" placeholder="비밀번호" style="flex:1;min-width:140px">
+          <button class="btn primary" id="ta-pw-go">열기</button>
+        </div>
+        <p class="note" id="ta-lock-msg" style="margin-top:8px"></p>
+      </div>
+
+      <div id="ta-body">
       <div class="stat-row" id="ta-stats" hidden></div>
       <div class="section">
         <div class="section-head">
@@ -385,6 +398,12 @@
         </div>
         <div id="ta-flag-box" class="card card-pad" hidden style="margin-bottom:12px"></div>
         <div id="ta-grid" class="card"></div>
+      </div>
+      <div class="toolbar" id="ta-admin" hidden style="margin-top:12px">
+        <button class="btn" id="ta-pw-set">공용 비밀번호 변경</button>
+        <button class="btn" id="ta-access-btn">열람 기록</button>
+      </div>
+      <div id="ta-access-box" class="card card-pad" hidden style="margin-top:10px"></div>
       </div>
     </section>
 
@@ -2277,8 +2296,33 @@
     { key: "note", label: "특이사항", width: 140 }
   ];
 
+  // TA 일지는 지점 공용 비밀번호로 한 겹 잠근다.
+  // 지점 전체가 함께 보는 대신, 후보자 실명·연락처가 로그인만으로 열리지는 않게.
   function loadTa() {
     $("month-label").textContent = monthLabel();
+    api("/ta/lock").then(function (lk) {
+      $("ta-admin").hidden = !lk.canSetPassword;
+      $("ta-access-box").hidden = true;
+      if (lk.enabled && !lk.unlocked) {
+        $("ta-lock").hidden = false; $("ta-body").hidden = true;
+        $("ta-lock-desc").textContent =
+          "지점원끼리 공유하는 비밀번호를 넣어 주세요. 한 번 열면 " + lk.hours + "시간 동안 유지됩니다.";
+        $("ta-lock-msg").textContent = "";
+        $("ta-pw").value = "";
+        $("ta-pw").focus();
+        return;
+      }
+      $("ta-lock").hidden = true; $("ta-body").hidden = false;
+      if (!lk.enabled && lk.canSetPassword)
+        $("ta-lock-msg").textContent = "";
+      loadTaRows();
+      // 비밀번호가 아직 없다 — 잠글 사람에게만 알린다
+      if (!lk.enabled && lk.canSetPassword)
+        $("ta-pw-set").textContent = "공용 비밀번호 설정 (아직 없음)";
+    });
+  }
+
+  function loadTaRows() {
     api("/ta?month=" + month).then(function (rows) {
       // 지점 전체가 함께 본다 — 팀으로 거르지 않는다 (2026-08-02 사용자 지시)
       rows = rows.map(function (r) { r._id = r.id; return r; });
@@ -2316,6 +2360,40 @@
     el.innerHTML = '<div class="stat"><b>' + rows.filter(function (r) { return r._id; }).length + '</b><span>이번 달 전체</span></div>'
       + names.map(function (k) { return '<div class="stat"><b>' + byAuthor[k].n + "</b><span>" + esc(byAuthor[k].label) + "</span></div>"; }).join("");
   }
+  function taUnlock() {
+    var pw = $("ta-pw").value;
+    if (!pw) return;
+    api("/ta/unlock", { method: "POST", body: { password: pw } })
+      .then(function () { loadTa(); })
+      .catch(function () { $("ta-lock-msg").textContent = "비밀번호가 맞지 않습니다."; });
+  }
+  $("ta-pw-go").addEventListener("click", taUnlock);
+  $("ta-pw").addEventListener("keydown", function (e) { if (e.key === "Enter") taUnlock(); });
+
+  $("ta-pw-set").addEventListener("click", function () {
+    var pw = prompt("지점 공용 비밀번호 (4자 이상)\n바꾸면 열어둔 사람들이 모두 다시 입력해야 합니다.");
+    if (!pw) return;
+    api("/ta/password", { method: "POST", body: { password: pw } })
+      .then(function () { alert("설정했습니다. 지점원들에게 알려 주세요."); loadTa(); });
+  });
+
+  // 열람 기록 — 민원이 들어왔을 때 누가 언제 열었는지 확인한다
+  $("ta-access-btn").addEventListener("click", function () {
+    var box = $("ta-access-box");
+    if (!box.hidden) { box.hidden = true; return; }
+    api("/ta/access").then(function (rows) {
+      box.hidden = false;
+      box.innerHTML = '<strong style="font-size:15px">열람 기록 ' + rows.length + "건</strong>"
+        + '<p class="note" style="margin:4px 0 10px">비밀번호를 넣어 일지를 연 기록입니다. 6개월치만 남습니다.</p>'
+        + (rows.length
+          ? rows.slice(0, 50).map(function (r) {
+            return '<div class="rep-row"><span class="slot-place">' + esc((r.created || "").slice(0, 16).replace("T", " "))
+              + '</span><span class="slot-title">' + esc(r.name || r.email) + "</span></div>";
+          }).join("")
+          : '<p class="empty">아직 없습니다.</p>');
+    });
+  });
+
   // 주의 명단 — 연락하기 전에 훑는 화면. 월과 무관하게 표시된 것만 모은다.
   $("ta-flagged").addEventListener("click", function () {
     var box = $("ta-flag-box");
@@ -2350,7 +2428,7 @@
     if (news.length) jobs.push(api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }));
     edits.forEach(function (r) { jobs.push(api("/ta/" + r._id, { method: "POST", body: r })); });
     if (!jobs.length) return;
-    Promise.all(jobs).then(function () { taGrid.markSaved(); loadTa(); }).catch(function () { loadTa(); });
+    Promise.all(jobs).then(function () { taGrid.markSaved(); loadTaRows(); }).catch(function () { loadTaRows(); });
   });
 
   // ── 업적현황 ──

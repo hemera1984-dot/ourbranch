@@ -9,8 +9,9 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { join, normalize, extname } from "node:path";
-import { openDb, getSetting, getMember } from "./db.js";
+import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken } from "./auth.js";
+import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8788);
 const DB_FILE = process.env.DB_FILE || "./ourbranch.db";
@@ -158,6 +159,61 @@ function emailForName(name) {
 // 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
 function canApprove(user) {
   return user.isSuper || user.grade === "BM" || user.grade === "ESL" || user.isManager;
+}
+
+// ---------- TA 일지 잠금·보관기간 ----------
+//
+// TA 일지에는 후보자 실명·전화번호가 들어간다. 지점 전체가 함께 보는 이유는
+// 「같은 사람에게 두 번 연락해서 민원이 나는 것」을 막기 위해서다. 그래서 열되,
+// 지점 공용 비밀번호로 한 겹 잠그고, 누가 열었는지 남기고, 6개월이 지나면 지운다.
+
+const TA_UNLOCK_HOURS = 8;          // 하루 업무 단위. 매번 묻지 않되 다음 날은 다시 묻는다.
+const TA_KEEP_MONTHS = 6;           // 보관기간 (2026-08-02 사용자 확정)
+
+function hashPw(pw, salt) {
+  return scryptSync(String(pw), salt, 64).toString("hex");
+}
+function setTaPassword(pw) {
+  const salt = randomBytes(16).toString("hex");
+  setSetting(db, "ta_pw", salt + "$" + hashPw(pw, salt));
+}
+function taLockEnabled() {
+  return !!getSetting(db, "ta_pw");
+}
+function checkTaPassword(pw) {
+  const stored = getSetting(db, "ta_pw");
+  if (!stored) return false;
+  const [salt, hash] = stored.split("$");
+  const a = Buffer.from(hash, "hex");
+  const b = Buffer.from(hashPw(pw, salt), "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function taUnlocked(user) {
+  if (!taLockEnabled()) return true;
+  const row = db.prepare("SELECT until FROM ta_unlock WHERE email = ?").get(user.email);
+  return !!row && row.until > now();
+}
+function unlockTa(user) {
+  const until = new Date(Date.now() + KST + TA_UNLOCK_HOURS * 3600e3).toISOString().replace("Z", "+09:00");
+  db.prepare("INSERT INTO ta_unlock (email, until) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET until = excluded.until")
+    .run(user.email, until);
+  db.prepare("INSERT INTO ta_access (email, name, created) VALUES (?, ?, ?)").run(user.email, user.name, now());
+  return until;
+}
+
+// 6개월 지난 일지는 지운다. 켜질 때 한 번, 이후 하루 한 번.
+// (백업은 backup.sh가 14일 보관하므로 사고가 나도 되돌릴 여지가 있다)
+function purgeOldTa() {
+  const d = new Date(Date.now() + KST);
+  d.setMonth(d.getMonth() - TA_KEEP_MONTHS);
+  const cutoff = d.toISOString().slice(0, 10);
+  const n = db.prepare("SELECT COUNT(*) n FROM ta_logs WHERE date < ?").get(cutoff).n;
+  if (n) {
+    db.prepare("DELETE FROM ta_logs WHERE date < ?").run(cutoff);
+    console.log("[TA 보관기간] " + cutoff + " 이전 " + n + "건 삭제");
+  }
+  // 열람 기록도 같은 기간만 남긴다
+  db.prepare("DELETE FROM ta_access WHERE created < ?").run(cutoff);
 }
 
 // ---------- 라우팅 ----------
@@ -452,7 +508,46 @@ route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
 // 엑셀형 그리드 전제: 조회는 월 단위 한 방, 저장은 여러 줄 한 방(붙여넣기 대응).
 const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note", "flag"];
 
+// 잠금 상태 — 화면이 처음 물어볼지 말지 정한다
+route("GET", /^\/ta\/lock$/, false, (req, res, user) => {
+  const row = db.prepare("SELECT until FROM ta_unlock WHERE email = ?").get(user.email);
+  send(res, 200, {
+    enabled: taLockEnabled(),
+    unlocked: taUnlocked(user),
+    until: row ? row.until : null,
+    canSetPassword: isBranchHead(user),
+    hours: TA_UNLOCK_HOURS,
+    keepMonths: TA_KEEP_MONTHS
+  });
+});
+
+route("POST", /^\/ta\/unlock$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  if (!checkTaPassword(b.password || "")) return send(res, 403, { error: "비밀번호가 맞지 않습니다" });
+  send(res, 200, { ok: true, until: unlockTa(user) });
+});
+
+// 공용 비밀번호 설정·변경 — 지점장·총관리자만
+route("POST", /^\/ta\/password$/, false, async (req, res, user) => {
+  if (!isBranchHead(user)) return send(res, 403, { error: "지점장·총관리자만" });
+  const b = await readJson(req);
+  const pw = String(b.password || "").trim();
+  if (pw.length < 4) return send(res, 400, { error: "비밀번호를 4자 이상으로 정해 주세요" });
+  setTaPassword(pw);
+  // 비밀번호를 바꾸면 기존 해제는 모두 무효 — 바꾼 이유가 있을 것이다
+  db.prepare("DELETE FROM ta_unlock").run();
+  unlockTa(user);
+  send(res, 200, { ok: true });
+});
+
+// 열람 기록 — 지점장·총관리자만 본다
+route("GET", /^\/ta\/access$/, false, (req, res, user) => {
+  if (!isBranchHead(user)) return send(res, 403, { error: "지점장·총관리자만" });
+  send(res, 200, db.prepare("SELECT * FROM ta_access ORDER BY id DESC LIMIT 200").all());
+});
+
 route("GET", /^\/ta$/, false, (req, res, user) => {
+  if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const q = new URL(req.url, "http://x").searchParams;
   // LIKE는 %·_ 와일드카드가 통해서 전 기간이 덤프된다 — 범위 비교로 막는다
   const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
@@ -470,6 +565,7 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
 });
 
 route("POST", /^\/ta$/, false, async (req, res, user) => {
+  if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const b = await readJson(req);                          // { teamId?, rows: [...] }
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·행이 없습니다" });
@@ -497,6 +593,7 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
 });
 
 route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
+  if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
   if (!isOwner(user, row.author_email, row.author) && !user.isManager)
@@ -518,6 +615,7 @@ route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
 });
 
 route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
+  if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
   if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
   if (!isOwner(user, row.author_email, row.author) && !user.isManager)
@@ -900,3 +998,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => console.log("ourbranch API :" + PORT));
+
+// 보관기간 청소 — 켤 때 한 번, 이후 하루 한 번
+purgeOldTa();
+setInterval(purgeOldTa, 24 * 3600e3).unref();
