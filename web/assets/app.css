@@ -616,15 +616,26 @@ a.slot-title:hover { text-decoration: underline; }
 .pickchip input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
 .fold-btn { margin-left: 8px; font-size: 12px; padding: 4px 12px; vertical-align: middle; }
 
+/* 손가락으로 쓰는 기기 — 폭이 아니라 포인터로 가른다.
+   태블릿(1024px)도 손가락이다. 폭으로만 가르면 태블릿이 27px 줄을 받는다. */
+@media (pointer: coarse) {
+  .pickchip span { min-height: 44px; padding: 0 22px; font-size: 15px; }
+  .slot { min-height: 44px; padding: 8px 10px; }
+  .slot-title { font-size: 14px; }
+  .slot-time, .slot-place { font-size: 13px; }
+  .btn { min-height: 42px; }
+  .oc-member, .oc-chip { min-height: 40px; }
+  .gchip { min-height: 42px; padding: 0 16px; }
+}
+
+/* 좁은 화면 — 이건 폭의 문제다 (쌓기·접기·전체 폭) */
 @media (max-width: 780px) {
-  /* 폰에서 자주 쓰는 화면은 손가락 크기에 맞춘다 (최소 44px) */
   .rep-row { display: block; }
   .rep-row > span:first-child { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 700; }
   .rep-row .input, .rep-row textarea.input { width: 100%; }
   .pickchip span { min-height: 44px; padding: 0 22px; font-size: 15px; }
   #rep-save { flex: 1 0 100%; min-height: 46px; font-size: 15px; }
   #rep-last, #rep-copy { flex: 1; min-height: 44px; }
-  /* 일정 — 한 줄이 27px이면 누르기 어렵고 읽기도 나쁘다 */
   .slot { min-height: 44px; padding: 8px 10px; }
   .slot-title { font-size: 14px; }
   .slot-time, .slot-place { font-size: 13px; }
