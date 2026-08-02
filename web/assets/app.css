@@ -232,9 +232,11 @@ a.slot-title:hover { text-decoration: underline; }
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; pointer-events: none;
 }
+/* 밝은 입자가 글자 뒤를 지나갈 때 대비가 2.75:1까지 떨어졌다 → 80%로 올려 4.7:1 확보.
+   영상이 원래 어두워서 이 정도로 덮어도 빛줄기는 그대로 보인다. */
 .gate-scrim {
   position: absolute; inset: 0; pointer-events: none;
-  background: rgba(8, 12, 18, .62);
+  background: rgba(8, 12, 18, .80);
 }
 .gate-inner {
   position: relative; width: 100%; max-width: 400px; text-align: center;
@@ -526,4 +528,37 @@ a.slot-title:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .splash-shine { display: none }
   .app-splash { animation: none }
+}
+
+/* ── 홈 히어로 배너 ── */
+/* 사진 위에 인사말을 얹는다. 밝은 하늘 위에서도 흰 글자가 읽히도록
+   불투명 막을 한 겹 깐다 (헌법 「가독성 우선」). */
+.hero {
+  position: relative; overflow: hidden;
+  border-radius: 6px; margin-bottom: 18px;
+  height: 168px; background: #0a0e14;
+}
+.hero-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* 글자가 놓이는 왼쪽만 진하게. 하늘이 밝아 균일한 막으로는 흰 글자가 안 읽힌다
+   (실측 2.39:1 → 6.0:1). 장식이 아니라 가독성 장치라 그라데이션을 쓴다. */
+.hero-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    rgba(6,10,16,.88) 0%, rgba(6,10,16,.86) 32%, rgba(6,10,16,.5) 62%, rgba(6,10,16,.3) 100%);
+}
+.hero-text {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 24px;
+}
+.hero-text .eyebrow { color: rgba(255,255,255,.78); margin-bottom: 2px; }
+.hero-text h1 { color: #fff; margin: 0 0 4px; font-size: 25px; letter-spacing: -.035em; }
+.hero-sub { margin: 0; color: rgba(255,255,255,.84); font-size: 14px; }
+@media (max-width: 780px) {
+  /* 좁은 화면에서는 글자가 폭을 다 쓰므로 균일하게 덮는다 */
+  .hero-scrim { background: rgba(6, 10, 16, .84); }
+  .hero { height: 132px; }
+  .hero-text { padding: 0 16px; }
+  .hero-text h1 { font-size: 20px; }
+  .hero-sub { font-size: 13px; }
 }

@@ -81,9 +81,16 @@
     </div>
 
     <section id="screen-home" hidden>
-      <p class="eyebrow" id="home-date"></p>
-      <h1 id="home-greet"></h1>
-      <p class="page-desc">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
+      <div class="hero">
+        <video class="hero-bg" id="hero-video" poster="assets/hero-poster.jpg"
+               muted loop playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+        <div class="hero-scrim"></div>
+        <div class="hero-text">
+          <p class="eyebrow" id="home-date"></p>
+          <h1 id="home-greet"></h1>
+          <p class="hero-sub">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
+        </div>
+      </div>
       <div class="bento" id="home-bento"></div>
     </section>
 
@@ -729,7 +736,7 @@
     $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit");
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
-    if (name === "home") loadHome();
+    if (name === "home") { loadHome(); startHeroVideo(); }
     if (name === "org") renderOrg();
     if (name === "me") renderMe();
     if (name === "invite") renderInvite();
@@ -825,6 +832,17 @@
   function mdLabel(md) {
     var p = String(md || "").split("-");
     return p.length === 2 ? +p[0] + "월 " + +p[1] + "일" : "";
+  }
+
+  // 히어로 배너 영상 — 홈을 실제로 열 때만 내려받는다(1.4MB).
+  // 모션 줄이기 설정이면 포스터 한 장으로 끝낸다.
+  function startHeroVideo() {
+    var v = $("hero-video");
+    if (v.getAttribute("src")) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    v.setAttribute("src", "assets/hero.mp4");
+    var play = v.play();
+    if (play && play.catch) play.catch(function () { /* 자동재생 차단 시 포스터로 남는다 */ });
   }
 
   // 생일은 MM-DD로만 보관한다(나이 비공개). 오늘부터 within일 안에 오는 사람을 가까운 순으로.
