@@ -516,7 +516,25 @@ async function main() {
   assert.deepEqual(mm.filter(e => e.title === "월말 회의").map(e => e.date).sort(),
     ["2027-01-31", "2027-02-28", "2027-03-31"]);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정 확인 완료");
+  // 26) 도입 현황 — 단계별 집계. 숫자만 나오므로 TA 잠금과 무관하게 열린다.
+  await api("t-fc1", "POST", "/ta", { rows: [
+    { date: "2027-05-04", cand_name: "가", stage: "통화" },
+    { date: "2027-05-05", cand_name: "나", stage: "면접" },
+    { date: "2027-05-06", cand_name: "다", stage: "위촉" },
+    { date: "2027-05-07", cand_name: "라", stage: "거절" },
+    { date: "2027-05-08", cand_name: "마" }                    // 빈 값은 통화로 본다
+  ] });
+  const rc = await (await api("t-fc2", "GET", "/recruit?month=2027-05")).json();
+  assert.equal(rc.total["통화"], 2);
+  assert.equal(rc.total["면접"], 1);
+  assert.equal(rc.total["위촉"], 1);
+  assert.equal(rc.total["거절"], 1);
+  assert.equal(rc.byMember.length, 1);
+  assert.equal(rc.byMember[0].email, "fc1@x.com");
+  // 후보자 이름·연락처가 새어나가지 않는다
+  assert.ok(!JSON.stringify(rc).includes("가"));
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

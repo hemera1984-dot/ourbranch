@@ -448,3 +448,17 @@ a.slot-title:hover { text-decoration: underline; }
 /* TA 일지 주의 표시 — 걸러야 할 상대는 줄 전체가 눈에 띄어야 한다 */
 .grid tr.warn td { background: var(--red-bg); }
 .grid tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+
+/* 도입 깔때기 — 막대 길이로 어디서 끊기는지 한눈에 */
+.funnel { display: flex; flex-direction: column; gap: 8px; }
+.fn-row { display: flex; align-items: center; gap: 10px; }
+.fn-k { font-size: 13px; font-weight: 700; min-width: 34px; }
+.fn-bar { flex: 1; height: 20px; background: var(--canvas); border-radius: 3px; overflow: hidden; }
+.fn-bar i { display: block; height: 100%; background: var(--blue); }
+.fn-n { font-size: 14px; min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.fn-p { font-size: 13px; color: var(--sub); min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+.rc-cell {
+  font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px;
+  color: var(--sub); white-space: nowrap;
+}
+.rc-cell.on { border-color: var(--green); color: var(--green); font-weight: 700; }

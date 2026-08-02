@@ -38,8 +38,10 @@
       <a href="#sched" data-screen="sched">일정</a>
       <a href="#att" data-screen="att">일일보고</a>
       <a href="#board" data-screen="board">미션·공지</a>
-      <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
+      <p class="nav-group-label">리쿠르팅</p>
+      <a href="#ta" data-screen="ta">TA 일지</a>
+      <a href="#recruit" data-screen="recruit">도입 현황</a>
       <p class="nav-group-label">내 계정</p>
       <a href="#me" data-screen="me">내 정보</a>
       <p class="nav-group-label">관리</p>
@@ -407,6 +409,29 @@
       </div>
     </section>
 
+    <section id="screen-recruit" hidden>
+      <p class="eyebrow">리쿠르팅</p>
+      <h1>도입 현황</h1>
+      <p class="page-desc">TA 일지의 「단계」 칸에서 모은 숫자입니다. 어디서 끊기는지 보이면 그다음이 보입니다.
+        이름·연락처는 여기 나오지 않습니다.</p>
+      <div class="section">
+        <div class="section-head"><h2>이번 달 깔때기</h2><p>통화에서 위촉까지 얼마나 남는지.</p></div>
+        <div class="card card-pad"><div id="rc-funnel"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>팀별</h2></div>
+        <div class="card"><div id="rc-team"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>사람별</h2></div>
+        <div class="card"><div id="rc-member"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>내가 도입한 팀원</h2><p>조직도에 도입자로 등록된 사람들입니다.</p></div>
+        <div class="card"><div id="rc-mine"></div></div>
+      </div>
+    </section>
+
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
@@ -424,7 +449,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf"];
+  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -647,7 +672,7 @@
     document.querySelectorAll("#nav a").forEach(function (a) {
       a.classList.toggle("active", a.dataset.screen === name);
     });
-    $("month-nav").hidden = !(name === "ta" || name === "perf");
+    $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit");
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
     if (name === "home") loadHome();
@@ -660,6 +685,7 @@
     if (name === "board") loadBoard();
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
+    if (name === "recruit") loadRecruit();
   }
   $("nav").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
@@ -952,6 +978,60 @@
         });
       });
   });
+
+  // ── 도입 현황 ──
+  // 후보자 이름·연락처는 다루지 않는다. 서버가 숫자만 준다(그래서 TA 잠금과 무관).
+  function loadRecruit() {
+    $("month-label").textContent = monthLabel();
+    api("/recruit?month=" + month).then(function (r) {
+      var t = r.total;
+      var call = t["통화"] + t["면접"] + t["위촉"] + t["거절"];   // 일지를 쓴 것 자체가 통화다
+      var meet = t["면접"] + t["위촉"];
+      var join = t["위촉"];
+      var pct = function (a, b) { return b ? Math.round(a / b * 100) : 0; };
+      $("rc-funnel").innerHTML = call
+        ? '<div class="funnel">'
+          + [["통화", call, 100], ["면접", meet, pct(meet, call)], ["위촉", join, pct(join, call)]]
+            .map(function (x) {
+              return '<div class="fn-row"><span class="fn-k">' + x[0] + "</span>"
+                + '<span class="fn-bar"><i style="width:' + Math.max(x[2], 2) + '%"></i></span>'
+                + '<b class="fn-n">' + x[1] + "건</b>"
+                + '<span class="fn-p">' + x[2] + "%</span></div>";
+            }).join("") + "</div>"
+          + '<p class="note" style="margin-top:10px">통화 → 면접 전환 ' + pct(meet, call)
+          + "% · 면접 → 위촉 전환 " + pct(join, meet) + "%"
+          + (t["거절"] ? " · 거절 " + t["거절"] + "건" : "") + "</p>"
+        : '<p class="empty">이번 달 기록이 없습니다. TA 일지에 「단계」를 채우면 여기에 모입니다.</p>';
+
+      var stageRow = function (label, v) {
+        return '<div class="rep-row"><span class="slot-title">' + esc(label) + "</span>"
+          + r.stages.map(function (st) {
+            return '<span class="rc-cell' + (st === "위촉" ? " on" : "") + '">' + st + " " + (v[st] || 0) + "</span>";
+          }).join("") + "</div>";
+      };
+      $("rc-team").innerHTML = r.byTeam.length
+        ? r.byTeam.map(function (x) {
+          var tn = (BOOT.teams.filter(function (t2) { return t2.id === x.teamId; })[0] || {}).name || "지점 직속";
+          return stageRow(tn, x);
+        }).join("")
+        : '<p class="empty">아직 없습니다.</p>';
+      $("rc-member").innerHTML = r.byMember.length
+        ? r.byMember
+          .sort(function (a, b) { return (b["위촉"] - a["위촉"]) || (b["면접"] - a["면접"]); })
+          .map(function (x) { return stageRow(x.email ? labelByEmail(x.email) : x.name, x); }).join("")
+        : '<p class="empty">아직 없습니다.</p>';
+
+      var mine = BOOT.members.filter(function (m) { return m.recruiter_email === BOOT.me.email; });
+      $("rc-mine").innerHTML = mine.length
+        ? mine.map(function (m) {
+          var tn = (BOOT.teams.filter(function (t2) { return t2.id === m.team_id; })[0] || {}).name || "지점 직속";
+          return '<div class="rep-row"><span class="slot-title">' + esc(memberLabel(m)) + "</span>"
+            + '<span class="slot-place">' + esc(tn) + " · " + esc(m.role)
+            + (m.joined_at ? " · 위촉 " + esc(m.joined_at) : "") + "</span></div>";
+        }).join("")
+        : '<p class="empty">아직 없습니다. 조직도에서 팀원의 도입자를 지정하면 여기에 모입니다.</p>';
+    });
+  }
 
   // ── 앱 설치 ──
   var deferredInstall = null;
@@ -2302,6 +2382,7 @@
   // ── TA 일지 ──
   var TA_COLS = [
     { key: "flag", label: "주의", width: 52 },
+    { key: "stage", label: "단계", width: 56 },
     { key: "author", label: "담당자", width: 70 },
     { key: "date", label: "날짜", width: 90, date: true },
     { key: "cand_name", label: "이름", width: 70 },

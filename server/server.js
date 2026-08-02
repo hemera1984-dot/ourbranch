@@ -511,7 +511,10 @@ route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
 
 // ---- TA 일지 ----
 // 엑셀형 그리드 전제: 조회는 월 단위 한 방, 저장은 여러 줄 한 방(붙여넣기 대응).
-const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note", "flag"];
+const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note", "flag", "stage"];
+
+// 도입 단계 — 순서가 곧 깔때기다. 빈 값은 「통화」로 본다(일지를 쓴 것 자체가 통화다).
+const STAGES = ["통화", "면접", "위촉", "거절"];
 
 // 잠금 상태 — 화면이 처음 물어볼지 말지 정한다
 route("GET", /^\/ta\/lock$/, false, (req, res, user) => {
@@ -567,6 +570,31 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
     : db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
         .all(month + "-00", month + "-99");
   send(res, 200, list);
+});
+
+// 도입 현황 — 숫자만 돌려준다(후보자 이름·연락처 없음).
+// 그래서 TA 일지 잠금과 무관하게 열어도 개인정보 문제가 없다.
+route("GET", /^\/recruit$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
+  const rows = db.prepare("SELECT team_id, author, author_email, stage FROM ta_logs WHERE date >= ? AND date <= ?")
+    .all(month + "-00", month + "-99");
+  const blank = () => Object.fromEntries(STAGES.map(s => [s, 0]));
+  const total = blank(), byTeam = {}, byMember = {};
+  for (const r of rows) {
+    const st = STAGES.includes(r.stage) ? r.stage : "통화";
+    total[st]++;
+    const t = (byTeam[r.team_id] = byTeam[r.team_id] || blank());
+    t[st]++;
+    const key = r.author_email || r.author;
+    const m = (byMember[key] = byMember[key] || { email: r.author_email, name: r.author, ...blank() });
+    m[st]++;
+  }
+  send(res, 200, {
+    month, stages: STAGES, total,
+    byTeam: Object.entries(byTeam).map(([id, v]) => ({ teamId: id === "null" ? null : Number(id), ...v })),
+    byMember: Object.values(byMember)
+  });
 });
 
 route("POST", /^\/ta$/, false, async (req, res, user) => {
