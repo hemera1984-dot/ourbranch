@@ -172,7 +172,7 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
   // 조직도는 지점 전체가 다 보인다 (2026-08-02 사용자 지시) — 팀·구성원 명단은 가리지 않는다.
   // 가리는 것은 자료(일정·업적·TA·공지)이고, 그건 각 엔드포인트가 팀 단위로 막는다.
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done FROM members ORDER BY team_id, name").all();
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at FROM members ORDER BY team_id, name").all();
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user) },
@@ -450,18 +450,22 @@ route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
 
 // ---- TA 일지 ----
 // 엑셀형 그리드 전제: 조회는 월 단위 한 방, 저장은 여러 줄 한 방(붙여넣기 대응).
-const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note"];
+const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note", "flag"];
 
 route("GET", /^\/ta$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   // LIKE는 %·_ 와일드카드가 통해서 전 기간이 덤프된다 — 범위 비교로 막는다
   const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
-  // TA 일지에는 후보자 실명·연락처가 들어간다. 같은 팀이라고 전원에게 열지 않는다 —
-  // 본인이 쓴 것과 관리자(부지점장 이상)만. 헌법의 개인정보 최소 열람 원칙.
-  const list = db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
-    .all(month + "-00", month + "-99")
-    .filter(r => canSeeTeam(user, r.team_id))
-    .filter(r => user.isManager || isOwner(user, r.author_email, r.author));
+  // TA 일지는 지점 전체가 함께 본다 (2026-08-02 사용자 지시).
+  // 알바몬 등에서 걸러야 할 상대를 지점이 공유하는 것이 이 일지의 주된 쓸모다 —
+  // 팀별로 갈라두면 옆 팀이 이미 거른 사람에게 또 연락하게 된다.
+  // 쓰기(수정·삭제)는 그대로 본인·관리자만.
+  const flagged = q.get("flagged") === "1";
+  const list = flagged
+    // 주의 표시는 기간을 가리지 않는다 — 연락하기 전에 훑어보는 명단이다
+    ? db.prepare("SELECT * FROM ta_logs WHERE flag <> '' ORDER BY date DESC, id DESC LIMIT 500").all()
+    : db.prepare("SELECT * FROM ta_logs WHERE date >= ? AND date <= ? ORDER BY date, id")
+        .all(month + "-00", month + "-99");
   send(res, 200, list);
 });
 
@@ -750,13 +754,23 @@ route("POST", /^\/me$/, false, async (req, res, user) => {
   if (name.length < 2 || name.length > 20) return send(res, 400, { error: "이름을 2~20자로 입력해 주세요" });
   const phone = String(b.phone || "").trim().replace(/[^0-9\-]/g, "");
   if (phone && !/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(phone)) return send(res, 400, { error: "휴대폰 번호 형식을 확인해 주세요" });
-  db.prepare("UPDATE members SET name = ?, phone = ?, profile_done = 1 WHERE email = ?").run(name, phone, user.email);
+  // 생일은 MM-DD만 — 연도를 받으면 나이가 지점 전체에 공개된다
+  const birthday = String(b.birthday || "").trim();
+  if (birthday && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(birthday))
+    return send(res, 400, { error: "생일은 08-15 형식으로 넣어 주세요" });
+  const joinedAt = String(b.joinedAt || "").trim();
+  if (joinedAt && !isDate(joinedAt)) return send(res, 400, { error: "위촉일은 2026-08-01 형식으로 넣어 주세요" });
+  db.prepare("UPDATE members SET name = ?, phone = ?, birthday = ?, joined_at = ?, profile_done = 1 WHERE email = ?")
+    .run(name, phone, birthday, joinedAt, user.email);
   send(res, 200, { ok: true });
 });
 
 route("GET", /^\/me$/, false, (req, res, user) => {
   const m = getMember(db, user.email) || {};
-  send(res, 200, { name: m.name || user.name, phone: m.phone || "", done: !!m.profile_done, role: m.role || "", teamId: m.team_id ?? null });
+  send(res, 200, {
+    name: m.name || user.name, phone: m.phone || "", birthday: m.birthday || "", joinedAt: m.joined_at || "",
+    done: !!m.profile_done, role: m.role || "", teamId: m.team_id ?? null
+  });
 });
 
 route("POST", /^\/admin\/members$/, true, async (req, res, user) => {

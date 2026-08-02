@@ -179,8 +179,16 @@ async function main() {
   assert.equal(taRes.ids.length, 2);
   let ta = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
   assert.equal(ta.length, 2);
-  assert.equal((await api("t-fc2", "GET", "/ta?month=2026-08")).status, 200);
-  assert.equal((await (await api("t-fc2", "GET", "/ta?month=2026-08")).json()).length, 0);   // 2팀은 안 보임
+  // TA 일지는 지점 전체가 함께 본다 — 2팀 팀원에게도 1팀 기록이 보인다 (2026-08-02)
+  assert.equal((await (await api("t-fc2", "GET", "/ta?month=2026-08")).json()).length, 2);
+  // 보이기만 하지 고치지는 못한다 — 쓰기는 본인·자기 팀 관리자만
+  assert.equal((await api("t-fc2", "POST", "/ta/" + taRes.ids[0], { result: "침범" })).status, 403);
+  assert.equal((await api("t-fc2", "DELETE", "/ta/" + taRes.ids[0])).status, 403);
+  // 주의 표시 — 기간과 무관하게 모아본다 (알바몬 블랙 걸러내기)
+  assert.equal((await api("t-fc1", "POST", "/ta/" + taRes.ids[0], { flag: "주의" })).status, 200);
+  const flagged = await (await api("t-fc2", "GET", "/ta?flagged=1")).json();
+  assert.equal(flagged.length, 1);
+  assert.equal(flagged[0].flag, "주의");
   assert.equal((await api("t-fc1", "POST", "/ta/" + taRes.ids[0], { result: "재통화 약속" })).status, 200);
   ta = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
   assert.equal(ta[0].result, "재통화 약속");
@@ -368,16 +376,16 @@ async function main() {
   // 다른 팀으로는 복사 못 한다
   assert.equal((await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 2 })).status, 403);
 
-  // 17) TA 일지 개인정보 — 같은 팀이라도 남의 기록은 안 보인다 (작성자 본인 + 관리자만)
+  // 17) TA 일지 — 읽기는 지점 전체, 쓰기는 본인·관리자 (2026-08-02 사용자 지시)
   await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-12-01", cand_name: "후보자A", real_phone: "010-1111-2222" }] });
-  // fc1과 같은 1팀에 팀원 하나 더 추가
   await api("t-super", "POST", "/admin/members", { email: "new@x.com", name: "신입", teamId: 1, role: "팀원" });
   const otherTa = await (await api("t-new", "GET", "/ta?month=2026-12")).json();
-  assert.equal(otherTa.length, 0);                       // 같은 팀 팀원에게 안 보임
+  assert.equal(otherTa.length, 1);                       // 같은 팀 팀원도 본다
   const ownTa = await (await api("t-fc1", "GET", "/ta?month=2026-12")).json();
-  assert.equal(ownTa.length, 1);                         // 본인 것은 보임
+  assert.equal(ownTa.length, 1);
   const mgrTa = await (await api("t-esl1", "GET", "/ta?month=2026-12")).json();
-  assert.equal(mgrTa.length, 1);                         // 관리자는 보임
+  assert.equal(mgrTa.length, 1);
+  assert.equal((await api("t-new", "POST", "/ta/" + otherTa[0].id, { note: "침범" })).status, 403);
 
   // 18) 한국 시간 — 저장 날짜가 KST 기준인지
   const kstToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -398,11 +406,12 @@ async function main() {
   assert.equal((await api("t-fc1", "DELETE", "/ta/" + taB.ids[0])).status, 403);
   // 본인 것은 된다
   assert.equal((await api("t-fc1", "POST", "/ta/" + taA.ids[0], { result: "내 기록" })).status, 200);
-  // 각자 자기 것만 조회된다 (관리자 아님)
+  // 조회는 지점 전체지만 소유자는 이메일로 갈린다 (동명이인이 섞이지 않는다)
   const taSeenA = await (await api("t-fc1", "GET", "/ta?month=2027-01")).json();
-  assert.equal(taSeenA.length, 1);
-  assert.equal(taSeenA[0].cand_name, "A후보");
-  assert.equal(taSeenA[0].author_email, "fc1@x.com");   // 이메일이 박혀 있다
+  assert.equal(taSeenA.length, 2);
+  const own = taSeenA.filter(r => r.author_email === "fc1@x.com");
+  assert.equal(own.length, 1);
+  assert.equal(own[0].cand_name, "A후보");
 
   // 업적도 동명이인이 갈린다
   await api("t-fc1", "POST", "/perf", { month: "2027-01", rows: [{ member: "팀원1", memberEmail: "fc1@x.com", contract_date: "2027-01-10", canp: 100 }] });
@@ -444,7 +453,16 @@ async function main() {
   assert.equal(meBoot.me.isManager, false);          // 직급·관리자 권한은 그대로
   assert.equal(meBoot.me.teamId, 1);                 // 팀도 그대로
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보 확인 완료");
+  // 22) 생일·위촉일 — MM-DD만 받고(나이 비공개), 명단에 실려 지점 전체가 챙긴다
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "2026-08-15" })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "13-01" })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "08-15", joinedAt: "2024-03-01" })).status, 200);
+  const bdBoot = await (await api("t-fc2", "GET", "/bootstrap")).json();
+  const seen = bdBoot.members.filter(m => m.email === "fc1@x.com")[0];
+  assert.equal(seen.birthday, "08-15");
+  assert.equal(seen.joined_at, "2024-03-01");
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

@@ -223,7 +223,12 @@ export function openDb(file) {
     // 본인 확인 — 구글 계정 이름이 그대로 들어오면 "kim jia"처럼 남는다.
     // 승인 후 본인이 실명을 확인해야 1이 된다.
     "ALTER TABLE members ADD COLUMN phone TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE members ADD COLUMN profile_done INTEGER NOT NULL DEFAULT 0"
+    "ALTER TABLE members ADD COLUMN profile_done INTEGER NOT NULL DEFAULT 0",
+    // 생일은 MM-DD만 둔다 (연도를 받으면 나이가 지점 전체에 공개된다)
+    "ALTER TABLE members ADD COLUMN birthday TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE members ADD COLUMN joined_at TEXT NOT NULL DEFAULT ''",
+    // TA 일지 주의 표시 — 알바몬 등에서 걸러야 할 상대를 지점 전체가 공유한다
+    "ALTER TABLE ta_logs ADD COLUMN flag TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)

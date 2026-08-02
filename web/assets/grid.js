@@ -6,6 +6,7 @@
 
 function makeGrid(root, opts) {
   // opts: { cols: [{key, label, num?, width?}], rows: [{...,_id?}], canEditRow(row) -> bool,
+  //         rowClass(row) -> string — 줄 전체에 붙일 클래스 (TA 일지 주의 표시 등),
   //         fixed: {key: value} — 새 줄에 자동으로 박는 값, onDeleteRow(row) }
   //
   // 같은 root에 다시 만들 때 옛 리스너가 남으면 삭제·저장이 여러 번 실행된다.
@@ -51,7 +52,9 @@ function makeGrid(root, opts) {
     h.push("<th></th></tr></thead><tbody>");
     rows.forEach(function (r, ri) {
       var editable = opts.canEditRow ? opts.canEditRow(r) : true;
-      h.push('<tr data-ri="' + ri + '"' + (dirty.has(r._id) || added.has(r) ? ' class="dirty"' : "") + ">");
+      var cls = [dirty.has(r._id) || added.has(r) ? "dirty" : "", opts.rowClass ? opts.rowClass(r) : ""]
+        .filter(Boolean).join(" ");
+      h.push('<tr data-ri="' + ri + '"' + (cls ? ' class="' + cls + '"' : "") + ">");
       cols.forEach(function (c, ci) {
         var v = esc(r[c.key]);
         if (!editable) h.push('<td class="ro' + (c.num ? " num" : "") + '">' + v + "</td>");

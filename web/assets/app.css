@@ -438,3 +438,13 @@ a.slot-title:hover { text-decoration: underline; }
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--canvas); font-weight: 600; margin-bottom: 4px;
 }
+
+/* 지점 명부 카드 — 조직도에서 사람을 누르면 뜨는 연락처 */
+.info-k { font-size: 12px; color: var(--ter); min-width: 44px; }
+.info-v { font-size: 13px; font-weight: 600; }
+.info-v a { color: var(--blue); text-decoration: none; }
+.oc-member, .oc-chip { cursor: pointer; }
+
+/* TA 일지 주의 표시 — 걸러야 할 상대는 줄 전체가 눈에 띄어야 한다 */
+.grid tr.warn td { background: var(--red-bg); }
+.grid tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--red); }
