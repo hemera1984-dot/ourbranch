@@ -352,8 +352,19 @@ a.slot-title:hover { text-decoration: underline; }
   .main { padding: 16px 14px 80px; }
   .mobile-only { display: block; }
   .desktop-only { display: none; }
-  /* 빠른 입력 팝오버는 화면 하단 시트로 */
-  .pop { position: fixed; left: 10px; right: 10px; bottom: 10px; top: auto !important; width: auto; }
+  /* 빠른 입력 팝오버는 화면 하단 시트로.
+     키보드가 올라오면 아이폰은 이 시트를 덮어버려 「저장」에 손이 닿지 않는다.
+     --kb(키보드 높이)는 JS가 visualViewport로 재서 넣어준다. */
+  .pop {
+    position: fixed; left: 10px; right: 10px; top: auto !important; width: auto;
+    bottom: calc(10px + var(--kb, 0px));
+    max-height: 72vh; overflow-y: auto;
+  }
+  /* 버튼 줄은 시트 안에서 항상 바닥에 붙어 있는다 */
+  .pop > .pop-row:last-child {
+    position: sticky; bottom: 0; margin-bottom: -12px;
+    padding: 8px 0 12px; background: var(--surface);
+  }
   .btn { padding: 9px 16px; }
   .input, select.input { padding: 9px 12px; }
 }

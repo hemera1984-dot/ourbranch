@@ -1,3 +1,22 @@
-server/*.db
-server/*.db-wal
-server/*.db-shm
+# 데이터베이스 — 저장소가 공개다. 어디에 놓이든 올라가지 않게 한다.
+# (전에는 server/*.db만 막아서 루트에 생긴 test-auth.db가 그대로 커밋돼 있었다)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.db.gz
+*.dump
+
+# 비밀·환경설정
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+
+# 내려받은 자료·임시
+*.log
+node_modules/
+.DS_Store
+Thumbs.db

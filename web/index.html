@@ -727,7 +727,29 @@
     });
   }
 
+  // ── 저장 안 한 입력 지키기 ──
+  // 그리드에 쓴 내용은 「저장」을 눌러야 서버로 간다. 그 전에 화면을 옮기거나
+  // 창을 닫으면 조용히 사라진다 — 하루치 TA를 통째로 잃는 사고가 된다.
+  function pendingGrid() {
+    if (screen === "ta" && taGrid && taGrid.hasChanges()) return taGrid;
+    if (screen === "perf" && perfGrids && perfGrids.some(function (g) { return g && g.hasChanges(); })) return true;
+    return null;
+  }
+  function confirmLeave() {
+    if (!pendingGrid()) return true;
+    return confirm("저장하지 않은 입력이 있습니다. 이대로 나가면 사라집니다.\n\n그래도 나갈까요?");
+  }
+  window.addEventListener("beforeunload", function (e) {
+    if (!pendingGrid()) return;
+    e.preventDefault();
+    e.returnValue = "";          // 브라우저 기본 경고 (문구는 브라우저가 정한다)
+  });
+
   function show(name) {
+    if (name !== screen && !confirmLeave()) {
+      location.hash = screen;    // 주소만 바뀌고 화면은 남아 있는 상태를 되돌린다
+      return;
+    }
     screen = name;
     SCREENS.forEach(function (s) { $("screen-" + s).hidden = s !== name; });
     document.querySelectorAll("#nav a").forEach(function (a) {
@@ -1817,6 +1839,22 @@
   }
 
   // ── 셀 클릭 빠른 입력 — 팀원·날짜는 셀이 정하고, 사람은 내용만 넣는다 ──
+  // 키보드가 올라온 만큼 시트를 띄운다.
+  // 아이폰은 키보드가 화면을 덮을 뿐 레이아웃을 줄이지 않아서, 그냥 두면
+  // 하단에 붙은 「저장」이 키보드 뒤로 들어가 누를 수가 없다.
+  function trackKeyboard() {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    var apply = function () {
+      var gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty("--kb", gap + "px");
+    };
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    apply();
+  }
+  trackKeyboard();
+
   function closePop() {
     var p = document.querySelector(".pop");
     if (p) p.remove();
@@ -2788,7 +2826,13 @@
     if (news.length) jobs.push(api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }));
     edits.forEach(function (r) { jobs.push(api("/ta/" + r._id, { method: "POST", body: r })); });
     if (!jobs.length) return;
-    Promise.all(jobs).then(function () { taGrid.markSaved(); loadTaRows(); }).catch(function () { loadTaRows(); });
+    // 실패하면 화면을 다시 그리지 않는다 — 방금 친 내용이 눈앞에서 사라지면
+    // 다시 칠 방법이 없다. 입력은 그대로 두고 무엇이 잘못됐는지만 알린다.
+    Promise.all(jobs)
+      .then(function () { taGrid.markSaved(); loadTaRows(); })
+      .catch(function (err) {
+        alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
+      });
   });
 
   // ── 업적현황 ──
@@ -2922,7 +2966,9 @@
       jobs.push(api("/perf/goals", { method: "POST", body: { teamId: Number(tid), month: month, goals: goalsByTeam[tid] } }));
     });
     if (!jobs.length) return;
-    Promise.all(jobs).then(loadPerf).catch(function () { loadPerf(); });
+    Promise.all(jobs).then(loadPerf).catch(function (err) {
+      alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
+    });
   }
 
   // ── 시작 ──
