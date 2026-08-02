@@ -15,12 +15,24 @@
 </head>
 <body>
 
+<div class="app-splash" id="app-splash" hidden>
+  <div class="splash-center">
+    <span class="splash-mark"><img src="assets/icon-512.png" alt=""><span class="splash-shine"></span></span>
+    <p class="splash-name" id="splash-name">지점 팀 관리</p>
+    <p class="splash-cap">일정 · 일일보고 · 미션 · 업적</p>
+  </div>
+</div>
+
 <div id="gate" class="gate" hidden>
   <div class="card"><div class="card-pad">
     <p class="eyebrow" id="gate-eyebrow">지점 팀 관리</p>
     <h1 id="gate-title">로그인</h1>
     <p class="page-desc" id="gate-title-note">구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
     <div id="g-signin" style="margin-bottom:12px"></div>
+    <div id="gate-go" hidden style="margin-bottom:12px">
+      <button class="btn primary" id="gate-go-btn" style="font-size:15px;padding:10px 22px">메인화면으로 가기</button>
+      <button class="btn" id="gate-logout">다른 계정으로</button>
+    </div>
     <div class="toolbar" id="gate-dev" hidden>
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 토큰 (팀원은 사용하지 않습니다)">
       <button id="gate-enter" class="btn primary">들어가기</button>
@@ -570,16 +582,34 @@
   }
   var inviteCode = new URLSearchParams(location.search).get("invite") || "";
 
-  function tryEnter(t) {
+  function enterApp() {
+    $("gate").hidden = true; $("app").hidden = false;
+    renderShell();
+    // 승인 직후 첫 접속 — 실명 확인부터. 안 하면 구글 이름으로 조직도·업적에 남는다.
+    var mine = BOOT.members.filter(function (x) { return x.email === BOOT.me.email; })[0];
+    show(mine && !mine.profile_done ? "me" : screen);
+  }
+
+  // 이미 로그인된 사람에게 보여주는 시작 화면.
+  // 바로 들여보내지 않고 「메인화면으로 가기」를 누르게 한다 (2026-08-02 사용자 지시).
+  function showWelcome() {
+    $("gate").hidden = false; $("app").hidden = true;
+    $("gate-eyebrow").textContent = BOOT.branchName || "지점 팀 관리";
+    $("gate-title").textContent = BOOT.me.name + "님, 안녕하세요";
+    $("gate-title-note").textContent = "로그인되어 있습니다. 바로 들어가시면 됩니다.";
+    $("g-signin").innerHTML = "";
+    $("gate-dev").hidden = true;
+    $("gate-go").hidden = false;
+  }
+
+  function tryEnter(t, landing) {
     token = t;
     api("/bootstrap").then(function (b) {
       BOOT = b;
       localStorage.setItem("ob_token", t);
-      $("gate").hidden = true; $("app").hidden = false;
-      renderShell();
-      // 승인 직후 첫 접속 — 실명 확인부터. 안 하면 구글 이름으로 조직도·업적에 남는다.
-      var mine = b.members.filter(function (x) { return x.email === b.me.email; })[0];
-      show(mine && !mine.profile_done ? "me" : screen);
+      try { localStorage.setItem("ob_branch", b.branchName || ""); } catch (e) { /* 사파리 비공개 */ }
+      if (landing) { showWelcome(); return; }
+      enterApp();
     }).catch(function (err) {
       var msg = (err && err.message) || "";
       // 명단에 없는 계정 — 초대 코드로 가입 신청을 넣고 승인 대기 안내를 띄운다
@@ -610,6 +640,11 @@
       tryEnter(token);
     });
   }
+  $("gate-go-btn").addEventListener("click", enterApp);
+  $("gate-logout").addEventListener("click", function () {
+    localStorage.removeItem("ob_token");
+    location.reload();
+  });
   $("gate-enter").addEventListener("click", function () {
     var t = $("gate-token").value.trim();
     if (t) tryEnter(t);
@@ -2667,10 +2702,28 @@
   }
 
   // ── 시작 ──
+  // 스플래시 — 세션당 1회, 1.35초. 지점명은 코드에 박지 않고 지난 접속 값을 쓴다.
+  (function () {
+    if (/[?&]nosplash/.test(location.search)) return;
+    try {
+      if (sessionStorage.getItem("ob_splash")) return;
+      sessionStorage.setItem("ob_splash", "1");
+    } catch (e) { return; }
+    var el = $("app-splash");
+    var saved = "";
+    try { saved = localStorage.getItem("ob_branch") || ""; } catch (e) { /* 무시 */ }
+    if (saved) $("splash-name").textContent = saved;
+    el.hidden = false;
+    // CSS가 아직 안 붙은 상태(캐시 문제)면 스플래시를 띄우지 않는다
+    if (getComputedStyle(el).position !== "fixed") { el.hidden = true; return; }
+    var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(function () { el.hidden = true; }, still ? 700 : 1350);
+  })();
+
   var urlToken = new URLSearchParams(location.search).get("token");
   if (inviteCode) history.replaceState(null, "", location.pathname + location.hash);
   if (urlToken) { history.replaceState(null, "", location.pathname + location.hash); tryEnter(urlToken); }
-  else if (localStorage.getItem("ob_token")) tryEnter(localStorage.getItem("ob_token"));
+  else if (localStorage.getItem("ob_token")) tryEnter(localStorage.getItem("ob_token"), true);
   else showGate();
 })();
 </script>
