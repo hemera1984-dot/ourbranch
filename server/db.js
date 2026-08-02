@@ -247,7 +247,10 @@ export function openDb(file) {
     // 도입 단계 — 통화 → 면접 → 위촉. 어디서 끊기는지 봐야 도입이 는다.
     "ALTER TABLE ta_logs ADD COLUMN stage TEXT NOT NULL DEFAULT ''",
     // 조직도 수동 정렬 — 끌어서 놓은 순서. NULL이면 직급·이름 순(기존 동작).
-    "ALTER TABLE members ADD COLUMN sort_order INTEGER"
+    "ALTER TABLE members ADD COLUMN sort_order INTEGER",
+    // 나간 사람은 지우지 않고 내린다 — 지우면 그 사람의 일정·일지·업적이 고아가 된다
+    "ALTER TABLE members ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE members ADD COLUMN left_at TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)

@@ -69,6 +69,20 @@ function num(v) {
   return isFinite(n) ? n : 0;
 }
 
+// 여러 줄을 한 번에 저장할 때는 전부 되거나 전부 안 되거나여야 한다.
+// 중간에 실패하면 앞줄만 저장된 채 오류가 나고, 사용자가 다시 누르면 중복된다.
+function tx(fn) {
+  db.exec("BEGIN");
+  try {
+    const out = fn();
+    db.exec("COMMIT");
+    return out;
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch { /* 이미 풀렸으면 무시 */ }
+    throw e;
+  }
+}
+
 // ---------- 권한 ----------
 //
 // 사용자(user) = 마이가디언 계정 + ourbranch 소속 정보.
@@ -95,6 +109,8 @@ function userFor(req) {
   // 총관리자를 뺀 나머지는 이 지점 명단(members)에 있어야 한다.
   // 명단에 없으면 가입 신청 경로만 열린다(승인 대기).
   if (!member && !isSuper) return { email, name: acc.name, unlisted: true };
+  // 명단에서 내린 사람은 로그인해도 자료를 볼 수 없다 (기록은 남기되 접근은 끊는다)
+  if (member && member.active === 0 && !isSuper) return { email, name: member.name, unlisted: true };
   // 직급은 하랑지점 조직도(role)가 기준이다. 마이가디언 직급은 조직도 직급이 없거나
   // 더 높을 때만 쓴다 — 조직도에 부지점장으로 올려놨는데 마이가디언 승인이 늦어서
   // 관리자 권한이 없는 일이 없게. 부지점장·지점장은 관리자급이다(2026-08-02 확인).
@@ -228,7 +244,7 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
   // 조직도는 지점 전체가 다 보인다 (2026-08-02 사용자 지시) — 팀·구성원 명단은 가리지 않는다.
   // 가리는 것은 자료(일정·업적·TA·공지)이고, 그건 각 엔드포인트가 팀 단위로 막는다.
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at, sort_order FROM members ORDER BY team_id, name").all();
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at, sort_order, active, left_at FROM members ORDER BY team_id, name").all();
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user) },
@@ -549,6 +565,19 @@ route("POST", /^\/ta\/password$/, false, async (req, res, user) => {
 });
 
 // 열람 기록 — 지점장·총관리자만 본다
+// 백업 상태 — 총관리자·지점장만. 백업이 조용히 멈춰 있는 것을 모르는 게 가장 위험하다.
+route("GET", /^\/admin\/backup$/, false, (req, res, user) => {
+  if (!isBranchHead(user)) return send(res, 403, { error: "지점장·총관리자만" });
+  try {
+    const raw = readFileSync("/var/lib/ourbranch/backup-status.json", "utf8");
+    const st = JSON.parse(raw);
+    const age = (Date.now() - new Date(st["시각"]).getTime()) / 3600e3;
+    send(res, 200, { ...st, "지난시간": Math.round(age), "정상": !!st["성공"] && age < 36 });
+  } catch {
+    send(res, 200, { "정상": false, "사유": "백업 기록이 없습니다" });
+  }
+});
+
 route("GET", /^\/ta\/access$/, false, (req, res, user) => {
   if (!isBranchHead(user)) return send(res, 403, { error: "지점장·총관리자만" });
   send(res, 200, db.prepare("SELECT * FROM ta_access ORDER BY id DESC LIMIT 200").all());
@@ -620,10 +649,16 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
   const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, author_email, ${TA_FIELDS.join(", ")})
     VALUES (?, ?, ?${", ?".repeat(TA_FIELDS.length)})`);
+  // 형식 검사는 한 줄이라도 틀리면 아예 시작하지 않는다 — 절반만 저장되는 일이 없게
+  for (const r of b.rows) {
+    if (r.date && !isDate(r.date))
+      return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + r.date });
+  }
   const ids = [];
+  try {
+  tx(() => {
   for (const r of b.rows) {
     if (!r.date) continue;
-    if (!isDate(r.date)) return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + r.date });
     // 일지는 각 팀원이 본인 것으로 넣는다. 남의 것으로 넣는 건 관리자만.
     // 담당자는 이메일로 지정한다 — 동명이인이 섞이지 않게.
     let authorEmail = r.authorEmail || (r.author ? emailForName(r.author) : user.email);
@@ -633,10 +668,11 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
       if (t) author = t.name;
     }
     if (!authorEmail) authorEmail = r.author === user.name ? user.email : null;
-    if (!user.isManager && authorEmail !== user.email)
-      return send(res, 403, { error: "본인 일지만 입력할 수 있습니다" });
+    if (!user.isManager && authorEmail !== user.email) throw new Error("본인 일지만 입력할 수 있습니다");
     ids.push(Number(ins.run(teamId, author, authorEmail, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
   }
+  });
+  } catch (e) { return send(res, 403, { error: e.message || "저장하지 못했습니다" }); }
   send(res, 200, { ids });
 });
 
@@ -688,20 +724,26 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·월·행이 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  const ins = db.prepare("INSERT INTO perf (team_id, month, member, member_email, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-  const ids = [];
   for (const r of b.rows) {
-    if (!r.member && !r.memberEmail) continue;
     if (r.contract_date && !isDate(r.contract_date))
       return send(res, 400, { error: "계약일은 2026-08-01 형식으로 넣어 주세요: " + r.contract_date });
+  }
+  const ins = db.prepare("INSERT INTO perf (team_id, month, member, member_email, contract_date, premium, canp, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  const ids = [];
+  try {
+  tx(() => {
+  for (const r of b.rows) {
+    if (!r.member && !r.memberEmail) continue;
     // 대상은 이메일로 특정한다 — 동명이인이 섞이지 않게
     const em = r.memberEmail || emailForName(r.member) || (r.member === user.name ? user.email : null);
     const t = em ? getMember(db, em) : null;
     const name = (t && t.name) || r.member;
     // 팀원은 자기 업적만, 부지점장(관리자)은 팀 전체 입력 가능
-    if (!user.isManager && em !== user.email) return send(res, 403, { error: "본인 업적만 입력할 수 있습니다" });
+    if (!user.isManager && em !== user.email) throw new Error("본인 업적만 입력할 수 있습니다");
     ids.push(Number(ins.run(teamId, b.month, name, em, r.contract_date || "", num(r.premium), num(r.canp), r.note || "").lastInsertRowid));
   }
+  });
+  } catch (e) { return send(res, 403, { error: e.message || "저장하지 못했습니다" }); }
   send(res, 200, { ids });
 });
 
@@ -737,15 +779,19 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
      ON CONFLICT(team_id, month, member) DO UPDATE SET
        member_email = excluded.member_email, goal = excluded.goal, intro = excluded.intro`
   );
-  // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다
-  for (const g of b.goals) {
-    if (!g.member) continue;
-    const prev = prevOf.get(teamId, b.month, g.member) || {};
-    const em = g.memberEmail || emailForName(g.member) || prev.member_email || null;
-    up.run(teamId, b.month, g.member, em,
-      g.goal !== undefined ? g.goal : (prev.goal || ""),
-      g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
-  }
+  // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다.
+  // 화면은 「바뀐 항목만」 보낸다. 빈 칸을 그대로 보내 목표가 조용히 지워지던 사고를 막는다.
+  tx(() => {
+    for (const g of b.goals) {
+      if (!g.member) continue;
+      if (g.goal === undefined && g.intro === undefined) continue;   // 바뀐 게 없으면 건드리지 않는다
+      const prev = prevOf.get(teamId, b.month, g.member) || {};
+      const em = g.memberEmail || emailForName(g.member) || prev.member_email || null;
+      up.run(teamId, b.month, g.member, em,
+        g.goal !== undefined ? g.goal : (prev.goal || ""),
+        g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
+    }
+  });
   send(res, 200, { ok: true });
 });
 
@@ -994,10 +1040,31 @@ route("POST", /^\/admin\/members\/order$/, true, async (req, res, user) => {
   send(res, 200, { ok: true });
 });
 
+// 명단에서 내리기 — 지우지 않는다.
+// 지우면 그 사람의 일정·TA 일지·업적이 주인 없는 기록으로 남고, 팀 합계도 어긋난다.
+// 기록이 하나도 없는 자리(잘못 만든 줄)만 실제로 지운다.
 route("DELETE", /^\/admin\/members\/([^/]+)$/, true, (req, res, user, m) => {
   const email = decodeURIComponent(m[1]).toLowerCase();
   if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
-  db.prepare("DELETE FROM members WHERE email = ?").run(email);
+  const has = ["SELECT COUNT(*) n FROM events WHERE member_email = ?",
+               "SELECT COUNT(*) n FROM ta_logs WHERE author_email = ?",
+               "SELECT COUNT(*) n FROM perf WHERE member_email = ?",
+               "SELECT COUNT(*) n FROM attendance WHERE email = ?"]
+    .some(sql => db.prepare(sql).get(email).n > 0);
+  if (!has) {
+    db.prepare("DELETE FROM members WHERE email = ?").run(email);
+    return send(res, 200, { ok: true, removed: true });
+  }
+  db.prepare("UPDATE members SET active = 0, left_at = ?, is_manager = 0, can_view_all = 0 WHERE email = ?")
+    .run(today(), email);
+  send(res, 200, { ok: true, removed: false });
+});
+
+// 다시 올리기 — 잘못 내렸거나 복귀한 경우
+route("POST", /^\/admin\/members\/([^/]+)\/restore$/, true, (req, res, user, m) => {
+  const email = decodeURIComponent(m[1]).toLowerCase();
+  if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
+  db.prepare("UPDATE members SET active = 1, left_at = '' WHERE email = ?").run(email);
   send(res, 200, { ok: true });
 });
 

@@ -319,6 +319,9 @@
         <span class="note" id="att-summary"></span>
       </div>
 
+      <p class="note" id="att-ahead" hidden style="margin:-4px 0 10px">
+        저녁이라 <strong>다음 날 보고</strong> 화면으로 열렸습니다. 오늘 현황은 위 「오늘」을 누르세요.</p>
+
       <div class="card card-pad" id="report-box" style="margin-bottom:14px">
         <div class="toolbar" style="margin-bottom:10px">
           <strong style="font-size:15px">내 보고</strong>
@@ -346,7 +349,8 @@
       </div>
 
       <div class="section-head" style="margin-bottom:8px">
-        <h2>팀 현황 <button class="btn fold-btn mobile-only" id="att-fold" aria-expanded="false">펴기</button></h2>
+        <h2>팀 현황 <span class="note" id="att-team-date" style="font-weight:600"></span>
+          <button class="btn fold-btn mobile-only" id="att-fold" aria-expanded="false">펴기</button></h2>
         <div class="toolbar" id="att-tools">
           <button class="btn" id="att-copy-all">팀 전체 보고 복사</button>
           <button class="btn" id="att-copy-missing">미보고자 복사</button>
@@ -804,7 +808,7 @@
   // 조직도 순서 — 손으로 정한 순서(sort_order)가 있으면 그게 먼저다.
   // 아직 정하지 않은 사람은 종전대로 직급·이름 순으로 뒤에 붙는다.
   function rosterOf(teamId) {
-    return BOOT.members.filter(function (m) { return m.team_id === teamId; })
+    return BOOT.members.filter(function (m) { return m.team_id === teamId && m.active !== 0; })
       .sort(function (a, b) {
         var ao = a.sort_order, bo = b.sort_order;
         if (ao != null && bo != null) return ao - bo;
@@ -946,6 +950,19 @@
         return !(n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
       });
       if (unread.length) todos.push({ t: "안 읽은 공지 " + unread.length + "건", href: "#board" });
+
+      // 백업이 조용히 멈춰 있는 것을 모르는 게 가장 위험하다. 문제일 때만 뜬다.
+      if (BOOT.me.isBranchHead) {
+        api("/admin/backup").then(function (bk) {
+          if (bk["정상"]) return;
+          var box = document.createElement("div");
+          box.className = "tile w2";
+          box.innerHTML = '<p class="tile-label" style="color:var(--red)">백업 확인 필요</p>'
+            + '<p class="tile-sub">' + esc(bk["사유"] || ("마지막 백업이 " + bk["지난시간"] + "시간 전입니다"))
+            + " — 서버를 확인해 주세요.</p>";
+          $("home-bento").prepend(box);
+        }).catch(function () { /* 조회 실패는 조용히 넘긴다 */ });
+      }
 
       // 배너 지표 — 홈 타일을 보기 전에 먼저 눈에 들어와야 할 두 가지
       var bd0 = upcomingBirthdays(14);
@@ -1225,7 +1242,7 @@
   function renderOrgChart() {
     var mg = BOOT.me.isManager;
     var teams = BOOT.teams;
-    var direct = BOOT.members.filter(function (m) { return m.team_id == null; })
+    var direct = BOOT.members.filter(function (m) { return m.team_id == null && m.active !== 0; })
       .sort(function (a, b) { return (ROLE_RANK[a.role] == null ? 9 : ROLE_RANK[a.role]) - (ROLE_RANK[b.role] == null ? 9 : ROLE_RANK[b.role]); });
     var head = direct.filter(function (m) { return m.role === "지점장"; })[0];
 
@@ -1360,7 +1377,7 @@
         '<div class="pop-row"><span class="note" style="font-size:11px;flex:1">순서</span>'
         + '<button class="btn" id="mp-up">위로</button><button class="btn" id="mp-down">아래로</button></div>')
       + '<div class="pop-row"><button class="btn primary" id="mp-save">저장</button>'
-      + (isNew ? "" : '<button class="btn" id="mp-del">삭제</button>')
+      + (isNew ? "" : '<button class="btn" id="mp-del">명단에서 내리기</button>')
       + '<button class="btn" id="mp-close">닫기</button></div>';
     document.body.appendChild(p);
     placePop(p, anchor);
@@ -2304,13 +2321,23 @@
     return d;
   })();
   var myRep = {};
+  var attMoved = false;      // 사용자가 직접 날짜를 옮겼는지 (자동 이동 안내를 끄기 위해)
 
   function loadAtt() {
     var ds = fmtDate(attBase);
     var todayStr = fmtDate(new Date());
     var tomorrow = fmtDate(new Date(Date.now() + 86400e3));
+    var when = ds === todayStr ? " (오늘)" : ds === tomorrow ? " (내일)" : "";
     $("att-label").textContent = (attBase.getMonth() + 1) + "월 " + attBase.getDate() + "일 "
-      + DOW_FULL[attBase.getDay()] + (ds === todayStr ? " (오늘)" : ds === tomorrow ? " (내일)" : "");
+      + DOW_FULL[attBase.getDay()] + when;
+    // 어느 날 현황을 보고 있는지 표에도 적는다 — 저녁에 열면 내일 화면이라
+    // 팀 전원이 미보고로 보이는 함정이 있었다(2026-08-03).
+    $("att-team-date").textContent = (attBase.getMonth() + 1) + "월 " + attBase.getDate() + "일" + when;
+    // 앞날 보고의 「출근」은 사실이 아니라 계획이다
+    var ahead = ds > todayStr;
+    $("rep-yes").nextElementSibling.textContent = ahead ? "출근 예정" : "출근";
+    $("rep-no").nextElementSibling.textContent = ahead ? "미출근 예정" : "미출근";
+    $("att-ahead").hidden = !(ahead && !attMoved);
     loadReportGoal();
     var teamId = myTeamId();
     api("/attendance?date=" + ds).then(function (list) {
@@ -2535,10 +2562,10 @@
         + "\n오늘 안에 올려 주세요."
       : (d.getMonth() + 1) + "/" + d.getDate() + " 일일보고 전원 제출 완료", "att-copy-msg");
   });
-  $("att-prev").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() - 1); loadAtt(); });
-  $("att-next").addEventListener("click", function () { attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() + 1); loadAtt(); });
-  $("att-today").addEventListener("click", function () { attBase = new Date(); loadAtt(); });
-  $("att-tomorrow").addEventListener("click", function () { attBase = new Date(Date.now() + 86400e3); loadAtt(); });
+  $("att-prev").addEventListener("click", function () { attMoved = true; attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() - 1); loadAtt(); });
+  $("att-next").addEventListener("click", function () { attMoved = true; attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() + 1); loadAtt(); });
+  $("att-today").addEventListener("click", function () { attMoved = true; attBase = new Date(); loadAtt(); });
+  $("att-tomorrow").addEventListener("click", function () { attMoved = true; attBase = new Date(Date.now() + 86400e3); loadAtt(); });
 
   // ── 미션·공지 ──
   function loadBoard() {
@@ -2899,8 +2926,10 @@
             + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
             + '</h2><div class="toolbar">'
             + (BOOT.me.isManager
-              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" style="width:150px">'
-                + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
+              // data-init에 처음 값을 담아두고, 저장할 때 바뀐 것만 보낸다.
+              // 전에는 빈 칸도 그대로 보내서 남의 목표가 조용히 지워졌다.
+              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" data-init="' + esc(g.goal || "") + '" style="width:150px">'
+                + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" data-init="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
               : "")
             + (canEdit ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
             + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
@@ -2954,11 +2983,13 @@
       if (BOOT.me.isManager) {
         var gi = document.querySelector('.goal-input[data-i="' + i + '"]');
         var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
+        // 바뀐 칸만 보낸다 — 손대지 않은 목표를 빈 값으로 덮어쓰지 않게
         if (gi) {
-          (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push({
-            member: pg.member, memberEmail: pg.email, goal: gi.value.trim(),
-            intro: ii ? Number(ii.value) || 0 : 0
-          });
+          var payload = { member: pg.member, memberEmail: pg.email };
+          var changed = false;
+          if (gi.value.trim() !== (gi.dataset.init || "")) { payload.goal = gi.value.trim(); changed = true; }
+          if (ii && String(ii.value || "") !== (ii.dataset.init || "")) { payload.intro = Number(ii.value) || 0; changed = true; }
+          if (changed) (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push(payload);
         }
       }
     });

@@ -581,7 +581,61 @@ async function main() {
   const none = await (await api("t-new", "GET", "/attendance/last")).json();
   assert.equal(none.id, undefined);              // 쓴 적 없으면 빈 값
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고 확인 완료");
+  // 30) 목표가 조용히 지워지지 않는다 — 보내지 않은 항목은 손대지 않는다
+  await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2027-11", goals: [{ member: "팀원1", goal: "1,000(100)", intro: 2 }] });
+  // 다른 사람 목표만 고쳐 저장 — 팀원1 것은 보내지 않는다
+  await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2027-11", goals: [{ member: "부지점장1", goal: "2,000(200)" }] });
+  let pgoal = await (await api("t-esl1", "GET", "/perf?month=2027-11")).json();
+  let keep = pgoal.goals.filter(g => g.member === "팀원1")[0];
+  assert.equal(keep.goal, "1,000(100)");        // 남아 있어야 한다
+  assert.equal(keep.intro, 2);
+  // 일부러 비우면 지워진다 (빈 문자열을 명시적으로 보낼 때만)
+  await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2027-11", goals: [{ member: "팀원1", goal: "" }] });
+  pgoal = await (await api("t-esl1", "GET", "/perf?month=2027-11")).json();
+  keep = pgoal.goals.filter(g => g.member === "팀원1")[0];
+  assert.equal(keep.goal, "");
+  assert.equal(keep.intro, 2);                  // 도입은 그대로
+
+  // 31) 일괄 저장은 전부 되거나 전부 안 되거나 — 중간에 막히면 앞줄도 남지 않는다
+  const before = (await (await api("t-fc1", "GET", "/ta?month=2027-12")).json()).length;
+  const mixed = await api("t-fc1", "POST", "/ta", { rows: [
+    { date: "2027-12-01", cand_name: "첫줄" },
+    { date: "2027-12-02", cand_name: "남의것", authorEmail: "fc2@x.com" }   // 팀원은 남의 일지를 못 넣는다
+  ] });
+  assert.equal(mixed.status, 403);
+  const after = (await (await api("t-fc1", "GET", "/ta?month=2027-12")).json()).length;
+  assert.equal(after, before);                  // 첫 줄도 저장되지 않았다
+  // 날짜 형식이 틀리면 아예 시작하지 않는다
+  assert.equal((await api("t-fc1", "POST", "/ta", { rows: [
+    { date: "2027-12-03", cand_name: "정상" }, { date: "12월 4일", cand_name: "형식오류" }
+  ] })).status, 400);
+  assert.equal((await (await api("t-fc1", "GET", "/ta?month=2027-12")).json()).length, before);
+
+  // 32) 명단에서 내리기 — 기록이 있으면 지우지 않고 내린다
+  await api("t-super", "POST", "/admin/members", { email: "그만둔@x.com", name: "퇴사자", teamId: 1, role: "팀원" });
+  // 기록이 없으면 실제로 지운다 (잘못 만든 줄)
+  let del = await (await api("t-super", "DELETE", "/admin/members/" + encodeURIComponent("그만둔@x.com"))).json();
+  assert.equal(del.removed, true);
+  // 기록이 있으면 내리기만 한다
+  await api("t-super", "POST", "/admin/members", { email: "new@x.com", name: "신입", teamId: 1, role: "팀원" });
+  await api("t-new", "POST", "/attendance", { date: "2027-10-01", present: true, work: "기록 남김" });
+  del = await (await api("t-super", "DELETE", "/admin/members/" + encodeURIComponent("new@x.com"))).json();
+  assert.equal(del.removed, false);
+  const afterOff = await (await api("t-super", "GET", "/bootstrap")).json();
+  const gone = afterOff.members.filter(m => m.email === "new@x.com")[0];
+  assert.equal(gone.active, 0);                       // 명단에는 남아 있되 내려간 상태
+  assert.ok(gone.left_at);
+  // 내려간 사람은 로그인해도 자료를 못 본다
+  const leftBoot = await api("t-new", "GET", "/bootstrap");
+  assert.equal(leftBoot.status, 403);
+  // 기록은 그대로 있다
+  const keptAtt = await (await api("t-super", "GET", "/attendance?date=2027-10-01")).json();
+  assert.ok(keptAtt.some(a => a.email === "new@x.com"));
+  // 다시 올릴 수 있다
+  assert.equal((await api("t-super", "POST", "/admin/members/" + encodeURIComponent("new@x.com") + "/restore")).status, 200);
+  assert.equal((await api("t-new", "GET", "/bootstrap")).status, 200);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
