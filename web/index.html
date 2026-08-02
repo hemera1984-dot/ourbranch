@@ -88,11 +88,10 @@
 
       <div class="card card-pad" style="margin-bottom:14px">
         <div class="toolbar">
-          <strong style="font-size:15px">팀원 초대</strong>
+          <strong style="font-size:15px">초대</strong>
           <select id="inv-team" class="input" hidden></select>
-          <select id="inv-role" class="input"></select>
           <button class="btn primary" id="inv-make">초대 문구 만들기</button>
-          <span class="note">누구나 초대할 수 있고, 들어온 사람은 승인 후에 열립니다.</span>
+          <span class="note">누구나 초대할 수 있습니다. 직급은 승인할 때 정합니다.</span>
         </div>
         <div id="inv-result" hidden style="margin-top:10px">
           <textarea class="input" id="inv-text" rows="6" readonly style="width:100%;resize:vertical"></textarea>
@@ -536,19 +535,7 @@
     var v = Number($("team-pick").value);
     return isNaN(v) || !v ? (BOOT.teams[0] ? BOOT.teams[0].id : null) : v;
   }
-  function fillRoleSelects() {
-    var asc = GRADES.slice().reverse();               // 팀원 → 지점장 순
-    var opts = function (list) {
-      return list.map(function (g) {
-        return '<option value="' + g.name + '">' + g.name + " (" + g.code + ")</option>";
-      }).join("");
-    };
-    // 초대로는 지점장을 만들지 않는다 (조직도에서 직접 지정)
-    $("inv-role").innerHTML = opts(asc.filter(function (g) { return g.code !== "BM"; }));
-  }
-
   function renderShell() {
-    fillRoleSelects();
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
     $("me-name").textContent = BOOT.me.name;
@@ -1191,13 +1178,13 @@
   // 초대 문구 — 카톡으로 그대로 보낸다
   $("inv-make").addEventListener("click", function () {
     var teamId = $("inv-team").hidden ? myTeamId() : Number($("inv-team").value);
-    api("/invites", { method: "POST", body: { teamId: teamId, role: $("inv-role").value } }).then(function (r) {
+    // 초대는 하나뿐이다 — 직급은 승인할 때 정한다 (2026-08-02 사용자 지시)
+    api("/invites", { method: "POST", body: { teamId: teamId } }).then(function (r) {
       var link = location.origin + location.pathname + "?invite=" + r.code;
       var text = [
         "[" + (BOOT.branchName || "지점") + " 팀 관리 초대]",
         "",
-        BOOT.me.name + "님이 초대했습니다.",
-        (r.teamName ? r.teamName + " · " : "") + r.role,
+        BOOT.me.name + "님이 초대했습니다." + (r.teamName ? " (" + r.teamName + ")" : ""),
         "",
         "아래 주소를 눌러 구글 계정으로 로그인하면 됩니다.",
         link,
