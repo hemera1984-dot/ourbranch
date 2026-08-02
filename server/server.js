@@ -325,13 +325,18 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   // 수정·삭제가 한 건 단위로 단순해지고, 조회에 규칙 해석이 끼지 않는다.
   const rep = b.repeat || {};
   const stepDays = { day: 1, week: 7, "2week": 14 }[rep.every] || 0;
-  const count = stepDays ? Math.min(Math.max(Number(rep.count) || 1, 1), 52) : 1;
+  const byMonth = rep.every === "month";            // 매월 같은 날짜 (교육·정기 회의)
+  const count = stepDays || byMonth ? Math.min(Math.max(Number(rep.count) || 1, 1), 52) : 1;
 
   const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
   const base = new Date(b.date + "T00:00:00");
   const ids = [];
   for (let i = 0; i < count; i++) {
-    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i);
+    const d = byMonth
+      // 31일에 매월을 걸면 2월은 3월로 넘어간다 — 말일로 당겨 그 달에 남긴다
+      ? new Date(base.getFullYear(), base.getMonth() + i,
+          Math.min(base.getDate(), new Date(base.getFullYear(), base.getMonth() + i + 1, 0).getDate()))
+      : new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i);
     const ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     ids.push(Number(ins.run(teamId, memberEmail, ds, b.start || null, b.end || null,
       b.kind || "기타", b.title || "", b.place || "").lastInsertRowid));

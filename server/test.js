@@ -501,7 +501,22 @@ async function main() {
   });
   assert.equal((await (await api("t-fc1", "GET", "/ta?month=" + oldDate.slice(0, 7))).json()).length, 0);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간 확인 완료");
+  // 25) 반복 일정 — 규칙을 저장하지 않고 그 자리에서 날짜를 펼친다
+  const rw = await (await api("t-esl1", "POST", "/events",
+    { date: "2027-03-02", kind: "교육", title: "주간 스터디", repeat: { every: "week", count: 4 } })).json();
+  assert.equal(rw.count, 4);
+  const wk = await (await api("t-esl1", "GET", "/events?from=2027-03-01&to=2027-03-31")).json();
+  assert.deepEqual(wk.filter(e => e.title === "주간 스터디").map(e => e.date),
+    ["2027-03-02", "2027-03-09", "2027-03-16", "2027-03-23"]);
+  // 매월 31일 — 그 달에 31일이 없으면 말일로 당긴다 (다음 달로 새지 않게)
+  const rm = await (await api("t-esl1", "POST", "/events",
+    { date: "2027-01-31", kind: "회의", title: "월말 회의", repeat: { every: "month", count: 3 } })).json();
+  assert.equal(rm.count, 3);
+  const mm = await (await api("t-esl1", "GET", "/events?from=2027-01-01&to=2027-04-30")).json();
+  assert.deepEqual(mm.filter(e => e.title === "월말 회의").map(e => e.date).sort(),
+    ["2027-01-31", "2027-02-28", "2027-03-31"]);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

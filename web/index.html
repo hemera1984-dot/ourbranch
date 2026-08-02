@@ -1560,6 +1560,18 @@
       + '<input type="time" class="input" id="pop-end" value="' + esc(o.end || "") + '"></div>'
       + '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="' + esc(o.title || "") + '"></div>'
       + '<div class="pop-row"><input type="text" class="input" id="pop-place" placeholder="장소" value="' + esc(o.place || "") + '"></div>'
+      // 반복 — 평소엔 「반복 안 함」 한 칸뿐이고, 고를 때만 횟수 칸이 나온다.
+      // (일정 추가는 간단해야 한다 — 헌법 「일정 화면 불변 원칙」)
+      + (isNew
+        ? '<div class="pop-row"><select class="input" id="pop-rep" style="flex:1">'
+          + '<option value="">반복 안 함</option><option value="week">매주</option>'
+          + '<option value="2week">격주</option><option value="day">매일</option>'
+          + '<option value="month">매월</option></select>'
+          + '<select class="input" id="pop-rep-n" hidden>'
+          + [2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 26, 52].map(function (n) {
+            return '<option value="' + n + '"' + (n === 4 ? " selected" : "") + ">" + n + "회</option>";
+          }).join("") + "</select></div>"
+        : "")
       + '<div class="pop-row"><button class="btn primary" id="pop-save">저장</button>'
       + (isNew ? "" : '<button class="btn" id="pop-del">삭제</button>')
       + '<button class="btn" id="pop-close">닫기</button></div>';
@@ -1570,6 +1582,10 @@
       p.style.left = Math.max(8, left) + "px";
       p.style.top = (r.bottom + window.scrollY + 4) + "px";
     }
+
+    if (isNew) p.querySelector("#pop-rep").addEventListener("change", function () {
+      p.querySelector("#pop-rep-n").hidden = !this.value;
+    });
 
     var kind = o.kind || "상담";
     p.querySelector(".kpicks").addEventListener("click", function (e) {
@@ -1587,6 +1603,10 @@
         title: p.querySelector("#pop-title").value.trim(),
         place: p.querySelector("#pop-place").value.trim()
       };
+      if (isNew) {
+        var every = p.querySelector("#pop-rep").value;
+        if (every) body.repeat = { every: every, count: Number(p.querySelector("#pop-rep-n").value) };
+      }
       var req = isNew
         ? api("/events", { method: "POST", body: Object.assign({ teamId: myTeamId() }, body) })
         : api("/events/" + o.id, { method: "POST", body: body });
