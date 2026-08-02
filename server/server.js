@@ -228,7 +228,7 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
   // 조직도는 지점 전체가 다 보인다 (2026-08-02 사용자 지시) — 팀·구성원 명단은 가리지 않는다.
   // 가리는 것은 자료(일정·업적·TA·공지)이고, 그건 각 엔드포인트가 팀 단위로 막는다.
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at FROM members ORDER BY team_id, name").all();
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at, sort_order FROM members ORDER BY team_id, name").all();
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user) },
@@ -934,6 +934,48 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
       ? (b.recruiterEmail ? String(b.recruiterEmail).toLowerCase() : null)
       : (prev.recruiter_email ?? null)
   );
+  send(res, 200, { ok: true });
+});
+
+// 조직도 자리에 계정 붙이기 — 「미연결」 자리를 실제 로그인 계정으로 만든다.
+// 초대·승인은 새로 들어오는 사람의 길이고, 이건 이미 계정이 있는 사람의 길이다
+// (총관리자 본인처럼 명단 자리와 계정이 따로 노는 경우).
+route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
+  const b = await readJson(req);
+  const seatEmail = String(b.seatEmail || "").toLowerCase();
+  const accEmail = String(b.accountEmail || "").toLowerCase();
+  if (!seatEmail || !accEmail) return send(res, 400, { error: "자리와 계정이 필요합니다" });
+  const seat = getMember(db, seatEmail);
+  if (!seat) return send(res, 404, { error: "자리가 없습니다" });
+  if (!seat.email.includes("@미등록.local")) return send(res, 400, { error: "이미 계정이 붙은 자리입니다" });
+  if (!canWriteTeam(user, seat.team_id)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  // 계정은 실제로 존재해야 한다 — 없는 주소를 붙이면 아무도 못 들어오는 유령 자리가 된다
+  const acc = authDb.prepare("SELECT email, name FROM accounts WHERE lower(email) = ?").get(accEmail);
+  if (!acc) return send(res, 404, { error: "그 계정으로 로그인한 적이 없습니다" });
+  // 자리의 팀·직급·도입자를 그대로 계정에 옮긴다
+  db.prepare(
+    `INSERT INTO members (email, name, team_id, role, recruiter_email, sort_order) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
+       role = excluded.role, recruiter_email = excluded.recruiter_email, sort_order = excluded.sort_order`
+  ).run(accEmail, seat.name, seat.team_id, seat.role, seat.recruiter_email, seat.sort_order);
+  mergeMember(seat.email, accEmail);          // 기록을 옮기고 빈 자리는 지운다
+  db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
+  send(res, 200, { ok: true });
+});
+
+// 조직도 순서 — 끌어서 놓은 결과를 그대로 저장한다. 팀 하나 단위로 받는다.
+route("POST", /^\/admin\/members\/order$/, true, async (req, res, user) => {
+  const b = await readJson(req);
+  const teamId = b.teamId ?? null;
+  if (!Array.isArray(b.emails)) return send(res, 400, { error: "순서가 없습니다" });
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  const up = db.prepare("UPDATE members SET sort_order = ?, team_id = ? WHERE email = ?");
+  b.emails.forEach((em, i) => {
+    const t = getMember(db, String(em).toLowerCase());
+    // 다른 팀에서 끌어온 사람은 원래 팀에 대한 쓰기 권한도 있어야 한다
+    if (!t || !canWriteTeam(user, t.team_id)) return;
+    up.run(i, teamId, t.email);
+  });
   send(res, 200, { ok: true });
 });
 

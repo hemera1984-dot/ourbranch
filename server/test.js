@@ -534,7 +534,42 @@ async function main() {
   // 후보자 이름·연락처가 새어나가지 않는다
   assert.ok(!JSON.stringify(rc).includes("가"));
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황 확인 완료");
+  // 27) 조직도 자리에 계정 붙이기 — 「미연결」 자리를 실제 계정으로
+  await api("t-super", "POST", "/admin/members", { email: "빈자리@미등록.local", name: "안창민", teamId: 1, role: "부팀장" });
+  await api("t-fc1", "POST", "/ta", { rows: [{ date: "2027-07-01", cand_name: "이관확인" }] });
+  // 자리 이름으로 남긴 일정도 함께 옮겨지는지
+  await api("t-super", "POST", "/events", { date: "2027-07-02", memberEmail: "빈자리@미등록.local", kind: "상담", title: "자리 일정", teamId: 1 });
+  assert.equal((await api("t-fc1", "POST", "/admin/members/link",
+    { seatEmail: "빈자리@미등록.local", accountEmail: "bm@x.com" })).status, 403);   // 팀원은 불가
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "빈자리@미등록.local", accountEmail: "없는사람@x.com" })).status, 404);  // 로그인한 적 없는 계정
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "빈자리@미등록.local", accountEmail: "bm@x.com" })).status, 200);
+  const afterLink = await (await api("t-super", "GET", "/bootstrap")).json();
+  assert.ok(!afterLink.members.some(m => m.email === "빈자리@미등록.local"));   // 빈 자리는 사라진다
+  const linked = afterLink.members.filter(m => m.email === "bm@x.com")[0];
+  assert.equal(linked.role, "부팀장");                    // 자리의 직급·팀을 물려받는다
+  assert.equal(linked.team_id, 1);
+  const movedEv = await (await api("t-super", "GET", "/events?from=2027-07-02&to=2027-07-02")).json();
+  assert.equal(movedEv.filter(e => e.member_email === "bm@x.com").length, 1);   // 기록도 따라온다
+  // 이미 계정이 붙은 자리에는 다시 붙이지 못한다
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "bm@x.com", accountEmail: "new@x.com" })).status, 400);
+
+  // 28) 조직도 순서 — 끌어서 놓은 순서를 그대로 저장한다
+  assert.equal((await api("t-fc1", "POST", "/admin/members/order",
+    { teamId: 1, emails: ["fc1@x.com"] })).status, 403);          // 팀원은 불가
+  assert.equal((await api("t-esl1", "POST", "/admin/members/order",
+    { teamId: 2, emails: ["fc2@x.com"] })).status, 403);          // 남의 팀은 불가
+  assert.equal((await api("t-esl1", "POST", "/admin/members/order",
+    { teamId: 1, emails: ["fc1@x.com", "bm@x.com", "esl1@x.com"] })).status, 200);
+  const ordered = await (await api("t-super", "GET", "/bootstrap")).json();
+  const byEmail = Object.fromEntries(ordered.members.map(m => [m.email, m.sort_order]));
+  assert.equal(byEmail["fc1@x.com"], 0);
+  assert.equal(byEmail["bm@x.com"], 1);
+  assert.equal(byEmail["esl1@x.com"], 2);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

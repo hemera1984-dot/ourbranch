@@ -245,7 +245,9 @@ export function openDb(file) {
     // TA 일지 주의 표시 — 알바몬 등에서 걸러야 할 상대를 지점 전체가 공유한다
     "ALTER TABLE ta_logs ADD COLUMN flag TEXT NOT NULL DEFAULT ''",
     // 도입 단계 — 통화 → 면접 → 위촉. 어디서 끊기는지 봐야 도입이 는다.
-    "ALTER TABLE ta_logs ADD COLUMN stage TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE ta_logs ADD COLUMN stage TEXT NOT NULL DEFAULT ''",
+    // 조직도 수동 정렬 — 끌어서 놓은 순서. NULL이면 직급·이름 순(기존 동작).
+    "ALTER TABLE members ADD COLUMN sort_order INTEGER"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)
