@@ -25,20 +25,24 @@
 </div>
 
 <div id="gate" class="gate" hidden>
-  <div class="card"><div class="card-pad">
+  <video class="gate-bg" id="gate-video" poster="assets/intro-poster.jpg"
+         autoplay muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video>
+  <div class="gate-scrim"></div>
+  <div class="gate-inner">
+    <img class="gate-mark" src="assets/icon-512.png" alt="">
     <p class="eyebrow" id="gate-eyebrow">지점 팀 관리</p>
     <h1 id="gate-title">로그인</h1>
-    <p class="page-desc" id="gate-title-note">구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
-    <div id="g-signin" style="margin-bottom:12px"></div>
-    <div id="gate-go" hidden style="margin-bottom:12px">
-      <button class="btn primary" id="gate-go-btn" style="font-size:15px;padding:10px 22px">메인화면으로 가기</button>
-      <button class="btn" id="gate-logout">다른 계정으로</button>
+    <p class="gate-note" id="gate-title-note">구글 계정으로 로그인합니다. 별도 가입·비밀번호가 없습니다.</p>
+    <div id="g-signin"></div>
+    <div id="gate-go" hidden>
+      <button class="btn primary" id="gate-go-btn">메인화면으로 가기</button>
+      <button class="btn ghost" id="gate-logout">다른 계정 로그인</button>
     </div>
     <div class="toolbar" id="gate-dev" hidden>
       <input id="gate-token" class="input" style="flex:1" type="password" placeholder="개발용 토큰 (팀원은 사용하지 않습니다)">
       <button id="gate-enter" class="btn primary">들어가기</button>
     </div>
-  </div></div>
+  </div>
 </div>
 
 <div id="app" class="shell" hidden>
@@ -568,9 +572,21 @@
     });
   }
 
+  // 배경 영상은 시작 화면을 실제로 볼 때만 내려받는다 (588KB).
+  // 모션 줄이기 설정이면 포스터 한 장으로 끝낸다.
+  function startGateVideo() {
+    var v = $("gate-video");
+    if (v.getAttribute("src")) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    v.setAttribute("src", "assets/intro.mp4");
+    var play = v.play();
+    if (play && play.catch) play.catch(function () { /* 자동재생 차단 시 포스터로 남는다 */ });
+  }
+
   var gateShown = false;
   function showGate() {
     $("gate").hidden = false; $("app").hidden = true;
+    startGateVideo();
     if (inviteCode) {
       $("gate-eyebrow").textContent = "초대";
       $("gate-title").textContent = "초대를 받으셨습니다";
@@ -595,6 +611,7 @@
   // 바로 들여보내지 않고 「메인화면으로 가기」를 누르게 한다 (2026-08-02 사용자 지시).
   function showWelcome() {
     $("gate").hidden = false; $("app").hidden = true;
+    startGateVideo();
     $("gate-eyebrow").textContent = BOOT.branchName || "지점 팀 관리";
     $("gate-title").textContent = BOOT.me.name + "님, 안녕하세요";
     $("gate-title-note").textContent = "로그인되어 있습니다. 바로 들어가시면 됩니다.";
@@ -631,6 +648,7 @@
   // 승인 대기 화면 — 로그인은 됐지만 아직 명단에 없는 사람
   function showWaiting() {
     $("gate").hidden = false; $("app").hidden = true;
+    startGateVideo();
     $("gate-eyebrow").textContent = "승인 대기";
     $("gate-title").textContent = "신청이 접수됐습니다";
     $("gate-title-note").textContent =
