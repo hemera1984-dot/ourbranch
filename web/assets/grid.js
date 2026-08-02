@@ -5,7 +5,11 @@
 "use strict";
 
 function makeGrid(root, opts) {
-  // opts: { cols: [{key, label, num?, width?}], rows: [{...,_id?}], canEditRow(row) -> bool,
+  // opts: { cols: [{key, label, num?, width?, opts?: [..], sticky?: true}], rows: [{...,_id?}],
+  //         canEditRow(row) -> bool,
+  //         opts: 정해진 값은 치지 않고 고른다 (칸을 누르면 칩이 뜬다).
+  //         sticky: 마지막에 넣은 값을 기억해 새 줄에 미리 채운다.
+  //         memoryKey: sticky 값을 저장할 이름 (화면마다 따로 기억한다),
   //         rowClass(row) -> string — 줄 전체에 붙일 클래스 (TA 일지 주의 표시 등),
   //         fixed: {key: value} — 새 줄에 자동으로 박는 값, onDeleteRow(row) }
   //
@@ -67,6 +71,52 @@ function makeGrid(root, opts) {
     root.innerHTML = h.join("");
   }
 
+  // ── 고르는 칸 ──
+  // 성별·단계처럼 값이 정해진 칸은 치지 않고 고른다. 타이핑도 그대로 된다.
+  function closeChips() {
+    var old = document.querySelector(".grid-chips");
+    if (old) old.remove();
+  }
+
+  function openChips(td, col) {
+    closeChips();
+    var box = document.createElement("div");
+    box.className = "grid-chips";
+    box.innerHTML = col.opts.map(function (o) {
+      return '<button type="button" class="gchip' + (td.innerText.trim() === o ? " on" : "") + '">' + esc(o) + "</button>";
+    }).join("") + '<button type="button" class="gchip clear">지우기</button>';
+    document.body.appendChild(box);
+    var r = td.getBoundingClientRect();
+    box.style.left = Math.max(6, Math.min(r.left + window.scrollX,
+      window.scrollX + document.documentElement.clientWidth - box.offsetWidth - 6)) + "px";
+    box.style.top = (r.bottom + window.scrollY + 2) + "px";
+    box.addEventListener("mousedown", function (e) {
+      var b = e.target.closest(".gchip");
+      if (!b) return;
+      e.preventDefault();                     // 칸의 포커스를 뺏지 않는다
+      td.innerText = b.classList.contains("clear") ? "" : b.textContent;
+      commitCell(td);
+      closeChips();
+    });
+  }
+
+  document.addEventListener("mousedown", function (e) {
+    if (!e.target.closest(".grid-chips") && !e.target.closest("td[contenteditable]")) closeChips();
+  });
+
+  // 마지막에 넣은 값 기억 — 거주지처럼 하루 종일 같은 값을 다시 치지 않게
+  var MEM = "grid_sticky_" + (opts.memoryKey || "기본");
+  function readMem() {
+    try { return JSON.parse(localStorage.getItem(MEM) || "{}"); } catch (e) { return {}; }
+  }
+  function writeMem(key, val) {
+    try {
+      var m = readMem();
+      if (val) m[key] = val; else delete m[key];
+      localStorage.setItem(MEM, JSON.stringify(m));
+    } catch (e) { /* 사파리 비공개 모드 */ }
+  }
+
   function cellAt(ri, ci) {
     return root.querySelector('tr[data-ri="' + ri + '"] td[data-ci="' + ci + '"]');
   }
@@ -78,12 +128,15 @@ function makeGrid(root, opts) {
     if (cols[ci].date) { v = normDate(v); td.innerText = v; }   // 눈앞에서 바로 고쳐 보여준다
     if (String(r[key] == null ? "" : r[key]) === v) return;
     r[key] = v;
+    if (cols[ci].sticky) writeMem(key, v);
     if (r._id != null) dirty.add(r._id); else added.add(r);
     td.parentNode.classList.add("dirty");
   }
 
   function addRow(preset) {
+    var mem = readMem();
     var r = Object.assign({}, opts.fixed || {}, preset || {});
+    cols.forEach(function (c) { if (r[c.key] == null && c.sticky && mem[c.key]) r[c.key] = mem[c.key]; });
     cols.forEach(function (c) { if (r[c.key] == null) r[c.key] = ""; });
     rows.push(r);
     added.add(r);
@@ -97,6 +150,16 @@ function makeGrid(root, opts) {
     var td = e.target.closest && e.target.closest("td[contenteditable]");
     if (td) commitCell(td);
   });
+
+  // 칸에 들어오면 칩을 띄운다. 눌러서 들어오든 Tab으로 넘어오든 같게 동작해야 한다.
+  function chipsFor(target) {
+    var td = target.closest && target.closest("td[contenteditable]");
+    if (!td) { closeChips(); return; }
+    var col = cols[Number(td.dataset.ci)];
+    if (col && col.opts) openChips(td, col); else closeChips();
+  }
+  root.addEventListener("focusin", function (e) { chipsFor(e.target); });
+  root.addEventListener("click", function (e) { chipsFor(e.target); });
 
   root.addEventListener("keydown", function (e) {
     var td = e.target.closest && e.target.closest("td[contenteditable]");

@@ -339,6 +339,7 @@
         </div>
         <div class="toolbar" style="margin-top:12px">
           <button class="btn primary" id="rep-save">저장</button>
+          <button class="btn" id="rep-last">지난 보고 불러오기</button>
           <button class="btn" id="rep-copy">카톡 문구 복사</button>
           <span class="note" id="rep-msg"></span>
         </div>
@@ -766,6 +767,17 @@
     show(screen);
   }
   function monthLabel() { var p = month.split("-"); return Number(p[0]) + "년 " + Number(p[1]) + "월"; }
+
+  // ── 마지막 값 기억 ──
+  // 같은 값을 매번 다시 치지 않게 한다. 화면·항목마다 따로 기억한다.
+  // (2026-08-02 원칙: 입력을 「치는 것」에서 「고르는 것·기억하는 것」으로)
+  function recall(key, fallback) {
+    try { return localStorage.getItem("ob_last_" + key) || fallback || ""; }
+    catch (e) { return fallback || ""; }
+  }
+  function remember(key, val) {
+    try { if (val) localStorage.setItem("ob_last_" + key, val); } catch (e) { /* 사파리 비공개 */ }
+  }
 
   // 조직도 순서 — 손으로 정한 순서(sort_order)가 있으면 그게 먼저다.
   // 아직 정하지 않은 사람은 종전대로 직급·이름 순으로 뒤에 붙는다.
@@ -1865,7 +1877,14 @@
       p.querySelector("#pop-rep-n").hidden = !this.value;
     });
 
-    var kind = o.kind || "상담";
+    // 새 일정은 지난번에 쓴 구분·시간으로 시작한다 — 대부분 그대로 저장한다
+    var kind = o.kind || recall("일정구분", "상담");
+    if (isNew && !o.start) {
+      var lastS = recall("일정시작"), lastE = recall("일정끝");
+      if (lastS) p.querySelector("#pop-start").value = lastS;
+      if (lastE) p.querySelector("#pop-end").value = lastE;
+    }
+    p.querySelectorAll(".kpick").forEach(function (x) { x.classList.toggle("sel", x.dataset.k === kind); });
     p.querySelector(".kpicks").addEventListener("click", function (e) {
       var b = e.target.closest(".kpick"); if (!b) return;
       kind = b.dataset.k;
@@ -1882,6 +1901,9 @@
         place: p.querySelector("#pop-place").value.trim()
       };
       if (isNew) {
+        remember("일정구분", kind);
+        remember("일정시작", body.start || "");
+        remember("일정끝", body.end || "");
         var every = p.querySelector("#pop-rep").value;
         if (every) body.repeat = { every: every, count: Number(p.querySelector("#pop-rep-n").value) };
       }
@@ -1909,7 +1931,7 @@
     }
     var cell = e.target.closest(".week-cell");
     if (cell && cell.classList.contains("can-add"))
-      openPop(cell, { em: cell.dataset.em, date: cell.dataset.date, kind: "상담" });
+      openPop(cell, { em: cell.dataset.em, date: cell.dataset.date });
   });
   document.addEventListener("mousedown", function (e) {
     if (!e.target.closest(".pop") && !e.target.closest(".week-cell")) closePop();
@@ -1971,7 +1993,7 @@
     s.querySelector("#sheet-close").addEventListener("click", closeSheet);
     s.querySelector("#sheet-add").addEventListener("click", function () {
       closeSheet();
-      openPop(null, { em: BOOT.me.email, date: ds, kind: "상담", pickMember: true, onDone: loadDay });
+      openPop(null, { em: BOOT.me.email, date: ds, pickMember: true, onDone: loadDay });
     });
     s.addEventListener("click", function (e) {
       dayListClick(e, function () { closeSheet(); loadDay(); });
@@ -1990,7 +2012,7 @@
   $("m-cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadDay(); });
   $("m-cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadDay(); });
   $("day-add").addEventListener("click", function () {
-    openPop(null, { em: BOOT.me.email, date: selDate, kind: "상담", pickMember: true, onDone: loadDay });
+    openPop(null, { em: BOOT.me.email, date: selDate, pickMember: true, onDone: loadDay });
   });
   $("day-view").addEventListener("click", function (e) { dayListClick(e, loadDay); });
 
@@ -2123,7 +2145,7 @@
   });
   $("cal-day").addEventListener("click", function (e) {
     if (e.target.id === "cal-day-add") {
-      openPop(e.target, { em: BOOT.me.email, date: selDate, kind: "상담", pickMember: true, onDone: loadCal });
+      openPop(e.target, { em: BOOT.me.email, date: selDate, pickMember: true, onDone: loadCal });
       return;
     }
     dayListClick(e, loadCal);
@@ -2262,6 +2284,13 @@
       $("rep-lunch").value = myRep.lunch || "";
       $("rep-afternoon").value = myRep.afternoon || "";
       $("rep-note").value = myRep.note || "";
+      // 오늘 아직 안 썼으면 출근 상태만 지난번 값으로 — 나머지는 날마다 다르다
+      if (myRep.id == null) {
+        var last = recall("출근상태");
+        if (last === "출근") $("rep-yes").checked = true;
+        else if (last === "미출근") $("rep-no").checked = true;
+      }
+      $("rep-last").hidden = myRep.id != null;
     });
     loadAttTable(ds, teamId);
   }
@@ -2281,7 +2310,22 @@
     });
   }
 
+  // 지난 보고 그대로 가져오기 — 매일 비슷한 일정을 다시 치지 않게.
+  // 자동으로 채우지는 않는다. 누른 사람만 가져간다(엉뚱한 내용이 저장되는 사고 방지).
+  $("rep-last").addEventListener("click", function () {
+    api("/attendance/last?date=" + fmtDate(attBase)).then(function (r) {
+      if (!r || r.id == null) { $("rep-msg").textContent = "가져올 지난 보고가 없습니다."; return; }
+      $("rep-work").value = r.work || "";
+      $("rep-lunch").value = r.lunch || "";
+      $("rep-afternoon").value = r.afternoon || "";
+      $("rep-note").value = r.note || "";
+      if (r.present) $("rep-yes").checked = true; else $("rep-no").checked = true;
+      $("rep-msg").textContent = (r.date || "") + " 보고를 가져왔습니다. 고쳐서 저장하세요.";
+    });
+  });
+
   function saveReport() {
+    remember("출근상태", $("rep-yes").checked ? "출근" : "미출근");
     return api("/attendance", { method: "POST", body: {
       date: fmtDate(attBase),
       present: $("rep-yes").checked,
@@ -2578,20 +2622,22 @@
   });
 
   // ── TA 일지 ──
+  // opts가 있는 칸은 치지 않고 고른다. sticky는 마지막 값을 기억해 새 줄에 미리 채운다.
+  // (2026-08-02 원칙: 입력을 「치는 것」에서 「고르는 것·기억하는 것」으로)
   var TA_COLS = [
-    { key: "flag", label: "주의", width: 52 },
-    { key: "stage", label: "단계", width: 56 },
+    { key: "flag", label: "주의", width: 52, opts: ["주의"] },
+    { key: "stage", label: "단계", width: 56, opts: ["통화", "면접", "위촉", "거절"] },
     { key: "author", label: "담당자", width: 70 },
     { key: "date", label: "날짜", width: 90, date: true },
     { key: "cand_name", label: "이름", width: 70 },
-    { key: "gender", label: "성별", width: 40 },
+    { key: "gender", label: "성별", width: 40, opts: ["남", "여"] },
     { key: "age", label: "나이", width: 40 },
-    { key: "region", label: "거주지", width: 130 },
+    { key: "region", label: "거주지", width: 130, sticky: true },
     { key: "safe_phone", label: "안심번호", width: 110 },
     { key: "real_phone", label: "실제번호", width: 110 },
     { key: "result", label: "통화내용", width: 200 },
-    { key: "reject_sms", label: "거절 문자", width: 90 },
-    { key: "cis_sms", label: "CIS 약속문자", width: 120 },
+    { key: "reject_sms", label: "거절 문자", width: 90, opts: ["O", "X"] },
+    { key: "cis_sms", label: "CIS 약속문자", width: 120, opts: ["O", "X"] },
     { key: "note", label: "특이사항", width: 140 }
   ];
 
@@ -2628,6 +2674,7 @@
       renderTaStats(rows);
       taGrid = makeGrid($("ta-grid"), {
         cols: TA_COLS,
+        memoryKey: "ta",
         year: Number(month.slice(0, 4)),
         rows: rows,
         fixed: { author: BOOT.me.name, authorEmail: BOOT.me.email, date: fmtDate(new Date()) },

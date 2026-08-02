@@ -597,6 +597,21 @@ route("GET", /^\/recruit$/, false, (req, res, user) => {
   });
 });
 
+// 지난 보고 — 지금 쓰고 있는 날짜 말고, 가장 가까운 날의 내 보고 한 건.
+// 「전날 저녁에 다음날 보고를 미리 쓴다」가 실제 습관이라 미래 날짜도 후보다.
+// 가까운 과거를 먼저 보고, 없으면 가까운 미래를 본다. 본인 것만.
+route("GET", /^\/attendance\/last$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const from = isDate(q.get("date")) ? q.get("date") : today();
+  const row = db.prepare(
+    `SELECT * FROM attendance
+     WHERE email = ? AND date <> ? AND (work <> '' OR lunch <> '' OR afternoon <> '' OR note <> '')
+     ORDER BY CASE WHEN date < ? THEN 0 ELSE 1 END, ABS(julianday(date) - julianday(?))
+     LIMIT 1`
+  ).get(user.email, from, from, from);
+  send(res, 200, row || {});
+});
+
 route("POST", /^\/ta$/, false, async (req, res, user) => {
   if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const b = await readJson(req);                          // { teamId?, rows: [...] }

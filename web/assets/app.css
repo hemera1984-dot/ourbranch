@@ -584,3 +584,20 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-member.dragging { opacity: .4; }
 .oc-member.drop-before { box-shadow: inset 0 3px 0 var(--blue); }
 .oc-member.drop-after { box-shadow: inset 0 -3px 0 var(--blue); }
+
+/* 그리드 선택 칩 — 정해진 값은 치지 않고 고른다 */
+.grid-chips {
+  position: absolute; z-index: 60; display: flex; gap: 4px; flex-wrap: wrap;
+  max-width: 260px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line-input); border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(23,32,51,.14);
+}
+.gchip {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 5px 12px; border: 1px solid var(--line-input); border-radius: 3px;
+  background: var(--surface); color: var(--ink);
+  transition: background .14s, border-color .14s, color .14s;
+}
+.gchip:hover { border-color: var(--blue); color: var(--blue); }
+.gchip.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.gchip.clear { color: var(--ter); }

@@ -569,7 +569,19 @@ async function main() {
   assert.equal(byEmail["bm@x.com"], 1);
   assert.equal(byEmail["esl1@x.com"], 2);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서 확인 완료");
+  // 29) 지난 보고 불러오기 — 남의 보고가 아니라 본인 것, 오늘 것 말고 지난 것
+  await api("t-fc1", "POST", "/attendance", { date: "2027-09-01", present: true, work: "오전 조회", lunch: "팀 점심" });
+  await api("t-fc2", "POST", "/attendance", { date: "2027-09-02", present: true, work: "남의 보고" });
+  const last = await (await api("t-fc1", "GET", "/attendance/last?date=2027-09-03")).json();
+  assert.equal(last.work, "오전 조회");
+  assert.equal(last.email, "fc1@x.com");         // 남의 보고는 오지 않는다
+  // 지금 쓰고 있는 날짜 자신은 후보가 아니다
+  const other = await (await api("t-fc1", "GET", "/attendance/last?date=2027-09-01")).json();
+  assert.notEqual(other.date, "2027-09-01");
+  const none = await (await api("t-new", "GET", "/attendance/last")).json();
+  assert.equal(none.id, undefined);              // 쓴 적 없으면 빈 값
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
