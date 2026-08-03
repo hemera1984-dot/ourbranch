@@ -547,7 +547,8 @@
     // 외근·내근도 무엇 때문인지가 내용1이 된다 (2026-08-03 사용자)
     "외근": {
       label: "", line2: "세부 내용 (직접 입력)",
-      picks: [{ key: "종류", label: "종류", opts: ["개인일정", "도입미팅", "영업미팅", "교육", "기타"] }]
+      // 교육은 구분 자체가 따로 있으므로 여기서는 뺀다
+      picks: [{ key: "종류", label: "종류", opts: ["개인일정", "도입미팅", "영업미팅", "기타"] }]
     },
     "내근": {
       label: "", line2: "세부 내용 (직접 입력)",
@@ -555,8 +556,9 @@
     },
     // 면접은 면접관(따로 관리하는 명단)과 도입자(우리 팀원)를 함께 적는다.
     // TS1은 시간이 나중에 정해지므로 받지 않는다 (2026-08-03 사용자).
-    "TS1": { label: "1차 면접", who: "면접관", people: "도입자", noTime: true },
-    "TS2": { label: "2차 면접", who: "면접관", people: "도입자" },
+    // 면접은 장소가 정해져 있어 받지 않는다 (2026-08-03 사용자)
+    "TS1": { label: "1차 면접", who: "면접관", people: "도입자", noTime: true, noPlace: true },
+    "TS2": { label: "2차 면접", who: "면접관", people: "도입자", noPlace: true },
     "GROW": {
       label: "GROW", people: "도입자", noTime: true, fixedPlace: "신한 L 타워",
       picks: [{ key: "stage", label: "차수", opts: ["1차", "2차"] }]
@@ -568,8 +570,11 @@
         { key: "반", label: "반 (선택)", opts: ["MASTER", "POTENTIAL"] }
       ]
     },
-    // 교육은 종류가 많다(도입교육·ESL 교육 등). 구분을 고르고 옆에 이름을 쳐 넣는다.
-    "교육": { label: "교육", text: "무슨 교육인지 (예: 도입교육, ESL 교육)" },
+    // 교육은 정해진 스터디 셋 중에서 고른다 (2026-08-03 사용자)
+    "교육": {
+      label: "", line2: "세부 내용 (직접 입력)",
+      picks: [{ key: "종류", label: "종류", opts: ["메가스터디", "수금스터디", "목요스터디"] }]
+    },
     // 시험은 종목을 고른다 (2026-08-03 사용자)
     "시험": {
       label: "시험", people: "대상",
@@ -2127,6 +2132,9 @@
       if (f && f.noTime) { p.querySelector("#pop-start").value = ""; p.querySelector("#pop-end").value = ""; }
       // 장소가 정해진 구분은 장소 칸을 잠근다 — 매번 같은 곳을 다시 치지 않게
       var placeEl = p.querySelector("#pop-place");
+      // 장소를 아예 받지 않는 구분은 칸을 숨긴다
+      placeEl.parentNode.hidden = !!(f && f.noPlace);
+      if (f && f.noPlace) placeEl.value = "";
       placeEl.readOnly = !!(f && f.fixedPlace);
       placeEl.style.background = f && f.fixedPlace ? "var(--canvas)" : "";
       if (f && f.fixedPlace) { placeEl.value = f.fixedPlace; placeEl.dataset.auto = "1"; }
