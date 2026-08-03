@@ -538,6 +538,12 @@
   //   people  : 팀원 명단에서 여럿 고르기
   //   noTime  : 시간 칸을 아예 감춘다   fixedPlace: 장소를 잠근다
   var KIND_FORM = {
+    // 밸류업/이관: 고른 값이 곧 내용1이 된다. 내용2는 조인웍 동행 —
+    // 우리 팀원일 수도, 지점 밖 사람일 수도 있어 명단에서 고르지 않고 직접 친다.
+    "밸류업/이관": {
+      label: "", line2: "조인웍 — 사수 이름, 혼자면 「혼자」",
+      picks: [{ key: "종류", label: "종류", opts: ["밸류업", "이관"] }]
+    },
     // 면접은 면접관(따로 관리하는 명단)과 도입자(우리 팀원)를 함께 적는다.
     // TS1은 시간이 나중에 정해지므로 받지 않는다 (2026-08-03 사용자).
     "TS1": { label: "1차 면접", who: "면접관", people: "도입자", noTime: true },
@@ -565,7 +571,9 @@
     var f = KIND_FORM[kind];
     if (!f) return null;
     var head = (f.text && det.text) ? det.text : f.label;
-    (f.picks || []).forEach(function (pk) { if (det[pk.key]) head += " " + det[pk.key]; });
+    (f.picks || []).forEach(function (pk) {
+      if (det[pk.key]) head = head ? head + " " + det[pk.key] : det[pk.key];
+    });
     var bits = [];
     if (f.who && (det.who || []).length) bits.push(f.who + " " + det.who.join(", "));
     if ((det.people || []).length)
@@ -2112,8 +2120,8 @@
       else if (placeEl.dataset.auto) { placeEl.value = ""; delete placeEl.dataset.auto; }
 
       // 내용 아랫줄 — 모든 구분에 붙는다 (2026-08-03 사용자)
-      var line2Row = '<div class="pop-row"><input type="text" class="input" id="pop-line2" placeholder="내용2 (아랫줄)" value="'
-        + esc(detail.line2 || "") + '"></div>';
+      var line2Row = '<div class="pop-row"><input type="text" class="input" id="pop-line2" placeholder="'
+        + esc((f && f.line2) || "내용2 (아랫줄)") + '" value="' + esc(detail.line2 || "") + '"></div>';
 
       if (!f) {
         box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용1 (윗줄)" value="'
@@ -2164,25 +2172,27 @@
           function (it) { return 'data-em="' + esc(it.em) + '"'; });
       box.innerHTML = html + line2Row;
 
-      box.addEventListener("click", function (e) {
-        var pk = e.target.closest("[data-pick]");
-        if (pk) {   // 차수·차월·반은 하나만 고른다. 다시 누르면 꺼진다.
-          var was = pk.classList.contains("on");
-          box.querySelectorAll('[data-pick="' + pk.dataset.pick + '"]')
+      // 하나만 고르는 칩(차수·차월·반·종류)
+      box.querySelectorAll("[data-pick]").forEach(function (btn) {
+        btn.onclick = function () {
+          var was = btn.classList.contains("on");
+          box.querySelectorAll('[data-pick="' + btn.dataset.pick + '"]')
             .forEach(function (x) { x.classList.remove("on"); });
-          if (!was) pk.classList.add("on");
-          return;
-        }
-        var b = e.target.closest("#pop-who .gchip, #pop-who2 .gchip");
-        if (b) { b.classList.toggle("on"); return; }
-        if (e.target.id === "pop-who-edit") {
-          var cur = interviewersOf(kind).join(", ");
-          var next = prompt(kind + " 면접관 명단 (쉼표로 구분)\n팀원이 아니라 따로 관리하는 이름입니다.", cur);
-          if (next == null) return;
-          api("/settings/interviewers", { method: "POST", body: { kind: kind, list: next.split(",") } })
-            .then(function (r) { INTERVIEWERS = r || {}; renderKindForm(); });
-        }
+          if (!was) btn.classList.add("on");
+        };
       });
+      // 여럿 고르는 칩 (면접관·도입자·교육 대상)
+      box.querySelectorAll("#pop-who .gchip, #pop-who2 .gchip").forEach(function (btn) {
+        btn.onclick = function () { btn.classList.toggle("on"); };
+      });
+      var editBtn = box.querySelector("#pop-who-edit");
+      if (editBtn) editBtn.onclick = function () {
+        var cur = interviewersOf(kind).join(", ");
+        var next = prompt(kind + " 면접관 명단 (쉼표로 구분)\n팀원이 아니라 따로 관리하는 이름입니다.", cur);
+        if (next == null) return;
+        api("/settings/interviewers", { method: "POST", body: { kind: kind, list: next.split(",") } })
+          .then(function (r) { INTERVIEWERS = r || {}; renderKindForm(); });
+      };
     }
     renderKindForm();
     p.querySelector(".kpicks").addEventListener("click", function (e) {
