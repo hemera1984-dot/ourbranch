@@ -240,7 +240,6 @@
       <h1 class="desktop-only">주간 확인표</h1>
       <h1 class="mobile-only">오늘 일정</h1>
       <p class="page-desc desktop-only">칸을 누르면 그 자리에서 바로 입력됩니다 — 팀원과 날짜는 칸이 정해줍니다. 등록된 일정을 누르면 수정·삭제. 관리자는 팀원 칸을 눌러 대신 넣을 수 있습니다.</p>
-      <p class="page-desc mobile-only">아래 단추로 바로 추가할 수 있습니다. 등록된 일정을 누르면 수정·삭제.</p>
 
       <div class="mobile-only">
         <div class="toolbar" style="margin-bottom:10px">
@@ -2447,7 +2446,11 @@
     if (v === "cal") loadCal(); else loadWeek();
   }
   function scopePass(e) {
-    if (calScope === "mine") return e.member_email === BOOT.me.email || !e.member_email;   // 내 일정 + 팀 공유·지점 공통
+    // 「내 일정」에도 공적 일정은 함께 보인다 (2026-08-03 사용자) —
+    // 부지점장이 팀원 몫으로 넣은 면접·교육·마감은 각자 자기 달력에서 봐야 한다.
+    // 달력이 위아래로 갈려 있어 개인 활동을 가리지 않는다.
+    if (calScope === "mine")
+      return e.member_email === BOOT.me.email || !e.member_email || isOfficial(e);
     if (calScope === "esl")
       return !e.member_email || e.team_id == null || roleOf(e.member_email) === "부지점장";  // 부지점장 기록 + 공통·지점 단위
     return true;   // team = 팀 전체
