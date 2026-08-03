@@ -10,6 +10,18 @@
 set -euo pipefail
 
 DEST=/var/backups/ourbranch
+STATUS=/var/lib/ourbranch/backup-status.json
+
+# 중간에 죽어도 상태는 남긴다 — 안 남기면 지난번 성공이 그대로 남아
+# 백업이 멈춘 것을 최대 하루 반 동안 모른다.
+write_status() {
+  local ok=$1
+  mkdir -p "$(dirname "$STATUS")" 2>/dev/null || true
+  printf '{"시각":"%s","성공":%s,"개수":%s,"용량":"%s"}
+'     "$(date -Iseconds)" "$ok"     "$(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l)"     "$(du -sh "$DEST" 2>/dev/null | cut -f1)" > "$STATUS"
+  chown myguardian:myguardian "$STATUS" 2>/dev/null || true
+}
+trap 'write_status false' ERR
 KEEP_DAYS=14
 DBS=("/var/lib/ourbranch/ourbranch.db" "/var/lib/myguardian/myguardian.db")
 
@@ -29,7 +41,13 @@ STAMP=$(date +%Y%m%d)
 DAY=$(date +%d)
 
 for SRC in "${DBS[@]}"; do
-  [ -f "$SRC" ] || continue
+  # 경로가 바뀌거나 파일이 사라진 것은 「건너뛸 일」이 아니라 실패다.
+  # 조용히 넘기면 백업이 없는데도 정상으로 보인다.
+  if [ ! -f "$SRC" ]; then
+    echo "$(date '+%F %T') 백업 대상 없음: $SRC"
+    FAILED=1
+    continue
+  fi
   NAME=$(basename "$SRC" .db)
   OUT="$DEST/${NAME}-${STAMP}.db"
   # WAL 안전 복사 — sqlite3가 없으면 node 내장 sqlite로 대신한다
@@ -69,11 +87,7 @@ echo "$(date '+%F %T') 보관 중: $(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l)�
 
 # 결과를 파일로 남긴다 — 앱이 읽어서 총관리자에게 보여준다.
 # (알림은 앱 안에서만 한다는 원칙이라 메일·문자를 쓰지 않는다)
-STATUS=/var/lib/ourbranch/backup-status.json
-cat > "$STATUS" <<JSON
-{"시각":"$(date -Iseconds)","성공":$([ "$FAILED" = "0" ] && echo true || echo false),"개수":$(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l),"용량":"$(du -sh "$DEST" | cut -f1)"}
-JSON
-chown myguardian:myguardian "$STATUS" 2>/dev/null || true
+write_status $([ "$FAILED" = "0" ] && echo true || echo false)
 
 # 남은 일: 외부 저장소 복사. 서버·디스크가 통째로 나가면 여기 백업도 같이 사라진다.
 # NCP 오브젝트 스토리지 자격증명을 받으면 이 자리에 s3 동기화를 넣는다.

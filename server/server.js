@@ -60,7 +60,15 @@ function readJson(req) {
 
 // 날짜는 YYYY-MM-DD만 받는다. 다른 모양을 그대로 저장하면 월 조회에서 빠져
 // "저장은 됐는데 화면에서 사라진" 것처럼 보인다 (조용한 데이터 유실).
-const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+// 모양만 맞고 달력에 없는 날(2026-99-99, 2월 30일)이 들어오면 월 조회에서 빠져
+// 「저장은 됐는데 사라진」 것처럼 보인다. 실제 날짜인지까지 본다.
+const isDate = v => {
+  const t = String(v || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+  const [y, mo, d] = t.split("-").map(Number);
+  const dt = new Date(y, mo - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d;
+};
 
 // 엑셀에서 붙여넣은 "1,000"·"1,000원"도 숫자로 받는다 (Number()는 NaN → 0이 되어 금액이 사라진다)
 function num(v) {
@@ -410,6 +418,8 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
     const t = getMember(db, nextEmail);
     if (!t || !canWriteTeam(user, t.team_id)) return send(res, 403, { error: "다른 팀 구성원입니다" });
   }
+  if (b.date !== undefined && !isDate(b.date))
+    return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + b.date });
   const nextDetail = b.detail !== undefined ? JSON.stringify(b.detail).slice(0, 2000) : e.detail;
   db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ?, detail = ? WHERE id = ?")
     .run(nextEmail, b.date ?? e.date, b.start ?? e.start, b.end ?? e.end,
@@ -510,10 +520,11 @@ route("POST", /^\/tasks$/, true, async (req, res, user) => {
 route("POST", /^\/tasks\/(\d+)\/status$/, false, async (req, res, user, m) => {
   const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
   if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
-  // 상태 변경은 미션 대상 본인 또는 관리자만
+  // 상태 변경은 미션 대상 본인 또는 자기 팀 관리자만 (전체열람은 보는 권한일 뿐)
   const targets = JSON.parse(t.targets);
   const isTarget = targets === "전체" || (Array.isArray(targets) && targets.includes(user.email));
-  if (!isTarget && !user.isManager) return send(res, 403, { error: "대상 본인만" });
+  if (!isTarget && !(user.isManager && canWriteTeam(user, t.team_id)))
+    return send(res, 403, { error: "대상 본인만" });
   const b = await readJson(req);
   if (!["요청", "진행중", "완료"].includes(b.status)) return send(res, 400, { error: "상태 값 오류" });
   db.prepare("UPDATE tasks SET status = ? WHERE id = ?").run(b.status, t.id);
@@ -628,8 +639,10 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
 route("GET", /^\/recruit$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
+  // 숫자만 주더라도 「누가 몇 건」은 자료다 — 열람 범위를 지킨다(자기 팀, 전체열람이면 전 팀)
   const rows = db.prepare("SELECT team_id, author, author_email, stage FROM ta_logs WHERE date >= ? AND date <= ?")
-    .all(month + "-00", month + "-99");
+    .all(month + "-00", month + "-99")
+    .filter(r => canSeeTeam(user, r.team_id));
   const blank = () => Object.fromEntries(STAGES.map(s => [s, 0]));
   const total = blank(), byTeam = {}, byMember = {};
   for (const r of rows) {
@@ -701,8 +714,9 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
 route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
   if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
-  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (!isOwner(user, row.author_email, row.author) && !user.isManager)
+  // 읽기는 지점 전체지만 고치는 것은 자기 팀만. can_view_all은 「보는」 권한이다.
+  if (!row) return send(res, 404, { error: "없음" });
+  if (!isOwner(user, row.author_email, row.author) && !(user.isManager && canWriteTeam(user, row.team_id)))
     return send(res, 403, { error: "본인 기록만" });
   const b = await readJson(req);
   const sets = TA_FIELDS.filter(f => b[f] != null);
@@ -723,8 +737,8 @@ route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
 route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
   if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
   const row = db.prepare("SELECT * FROM ta_logs WHERE id = ?").get(Number(m[1]));
-  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (!isOwner(user, row.author_email, row.author) && !user.isManager)
+  if (!row) return send(res, 404, { error: "없음" });
+  if (!isOwner(user, row.author_email, row.author) && !(user.isManager && canWriteTeam(user, row.team_id)))
     return send(res, 403, { error: "본인 기록만" });
   db.prepare("DELETE FROM ta_logs WHERE id = ?").run(row.id);
   send(res, 200, { ok: true });
@@ -771,10 +785,12 @@ route("POST", /^\/perf$/, false, async (req, res, user) => {
 
 route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
-  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (!isOwner(user, row.member_email, row.member) && !user.isManager)
+  if (!row) return send(res, 404, { error: "없음" });
+  if (!isOwner(user, row.member_email, row.member) && !(user.isManager && canWriteTeam(user, row.team_id)))
     return send(res, 403, { error: "본인 업적만" });
   const b = await readJson(req);
+  if (b.contract_date !== undefined && b.contract_date && !isDate(b.contract_date))
+    return send(res, 400, { error: "계약일은 2026-08-01 형식으로 넣어 주세요: " + b.contract_date });
   db.prepare("UPDATE perf SET contract_date = ?, premium = ?, canp = ?, note = ? WHERE id = ?")
     .run(b.contract_date ?? row.contract_date, num(b.premium ?? row.premium),
          num(b.canp ?? row.canp), b.note ?? row.note, row.id);
@@ -783,8 +799,8 @@ route("POST", /^\/perf\/(\d+)$/, false, async (req, res, user, m) => {
 
 route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
   const row = db.prepare("SELECT * FROM perf WHERE id = ?").get(Number(m[1]));
-  if (!row || !canSeeTeam(user, row.team_id)) return send(res, 403, { error: "권한 없음" });
-  if (!isOwner(user, row.member_email, row.member) && !user.isManager)
+  if (!row) return send(res, 404, { error: "없음" });
+  if (!isOwner(user, row.member_email, row.member) && !(user.isManager && canWriteTeam(user, row.team_id)))
     return send(res, 403, { error: "본인 업적만" });
   db.prepare("DELETE FROM perf WHERE id = ?").run(row.id);
   send(res, 200, { ok: true });
@@ -896,6 +912,14 @@ function mergeMember(fromEmail, toEmail) {
   ]) {
     db.prepare(sql).run(toEmail, fromEmail);
     db.prepare(del).run(fromEmail);
+  }
+  // 일정 세부(면접관·교육 대상)도 JSON 안에 이메일이 들어 있다
+  for (const e of db.prepare("SELECT id, detail FROM events WHERE detail <> ''").all()) {
+    let d;
+    try { d = JSON.parse(e.detail); } catch { continue; }
+    if (!d || !Array.isArray(d.people) || !d.people.includes(fromEmail)) continue;
+    d.people = d.people.map(x => (x === fromEmail ? toEmail : x)).filter((x, i, a) => a.indexOf(x) === i);
+    db.prepare("UPDATE events SET detail = ? WHERE id = ?").run(JSON.stringify(d), e.id);
   }
   // 미션 대상은 이메일 배열(JSON)이라 위 UPDATE로는 안 옮겨진다.
   // 안 옮기면 자리를 이어받은 사람의 미션이 사라지고 달성률 분모만 남는다.
@@ -1016,6 +1040,14 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   // 자기 열람 범위 밖 구성원은 손대지 못한다 (다른 팀 사람을 빼오거나 지우는 것 차단)
   if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
   const prev = getMember(db, email) || {};
+  // 직급이 곧 권한이다(GRADE_OF_ROLE). 관리자가 자기 직급을 올리면 스스로 지점장이 된다.
+  // 자기 직급은 총관리자만 바꾼다. 남에게도 자기보다 높은 직급은 주지 못한다.
+  if (b.role !== undefined && b.role !== (prev.role || "팀원") && !user.isSuper) {
+    if (email === user.email) return send(res, 403, { error: "자기 직급은 총관리자만 바꿉니다" });
+    const rankOfRole = r => rankOf(GRADE_OF_ROLE[r]);
+    if (rankOfRole(b.role) < rankOf(user.grade))
+      return send(res, 403, { error: "자기보다 높은 직급은 줄 수 없습니다" });
+  }
   // 보낸 값만 갱신 — 도입자만 바꾸려다 이름·팀·직급이 초기화되는 일이 없도록
   const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (prev.team_id ?? null);
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
@@ -1054,6 +1086,11 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
   // 계정은 실제로 존재해야 한다 — 없는 주소를 붙이면 아무도 못 들어오는 유령 자리가 된다
   const acc = authDb.prepare("SELECT email, name FROM accounts WHERE lower(email) = ?").get(accEmail);
   if (!acc) return send(res, 404, { error: "그 계정으로 로그인한 적이 없습니다" });
+  // 이미 다른 팀에 있는 계정을 끌어오지 못하게 — 연결은 빈 자리를 채우는 일이지
+  // 남의 팀 사람을 데려오는 일이 아니다
+  const already = getMember(db, accEmail);
+  if (already && !canWriteTeam(user, already.team_id))
+    return send(res, 403, { error: "이미 다른 팀에 있는 계정입니다" });
   // 자리의 팀·직급·도입자를 그대로 계정에 옮긴다
   db.prepare(
     `INSERT INTO members (email, name, team_id, role, recruiter_email, sort_order) VALUES (?, ?, ?, ?, ?, ?)
@@ -1071,13 +1108,13 @@ route("POST", /^\/admin\/members\/order$/, true, async (req, res, user) => {
   const teamId = b.teamId ?? null;
   if (!Array.isArray(b.emails)) return send(res, 400, { error: "순서가 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  const targets = b.emails.map(em => getMember(db, String(em).toLowerCase()));
+  // 하나라도 손댈 수 없는 사람이 섞여 있으면 아예 하지 않는다 —
+  // 일부만 바뀐 채 성공으로 돌아가면 순서가 어긋난 것을 아무도 모른다
+  if (targets.some(t => !t)) return send(res, 404, { error: "명단에 없는 사람이 있습니다" });
+  if (targets.some(t => !canWriteTeam(user, t.team_id))) return send(res, 403, { error: "권한 없는 팀이 섞여 있습니다" });
   const up = db.prepare("UPDATE members SET sort_order = ?, team_id = ? WHERE email = ?");
-  b.emails.forEach((em, i) => {
-    const t = getMember(db, String(em).toLowerCase());
-    // 다른 팀에서 끌어온 사람은 원래 팀에 대한 쓰기 권한도 있어야 한다
-    if (!t || !canWriteTeam(user, t.team_id)) return;
-    up.run(i, teamId, t.email);
-  });
+  tx(() => targets.forEach((t, i) => up.run(i, teamId, t.email)));
   send(res, 200, { ok: true });
 });
 
@@ -1090,7 +1127,11 @@ route("DELETE", /^\/admin\/members\/([^/]+)$/, true, (req, res, user, m) => {
   const has = ["SELECT COUNT(*) n FROM events WHERE member_email = ?",
                "SELECT COUNT(*) n FROM ta_logs WHERE author_email = ?",
                "SELECT COUNT(*) n FROM perf WHERE member_email = ?",
-               "SELECT COUNT(*) n FROM attendance WHERE email = ?"]
+               "SELECT COUNT(*) n FROM perf_goals WHERE member_email = ?",
+               "SELECT COUNT(*) n FROM attendance WHERE email = ?",
+               "SELECT COUNT(*) n FROM task_done WHERE email = ?",
+               "SELECT COUNT(*) n FROM tasks WHERE targets LIKE '%' || ? || '%'",
+               "SELECT COUNT(*) n FROM events WHERE detail LIKE '%' || ? || '%'"]
     .some(sql => db.prepare(sql).get(email).n > 0);
   if (!has) {
     db.prepare("DELETE FROM members WHERE email = ?").run(email);

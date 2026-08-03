@@ -2085,7 +2085,9 @@
     if (!isNew) p.querySelector("#pop-del").addEventListener("click", function () {
       api("/events/" + o.id, { method: "DELETE" }).then(function () { closePop(); refresh(); });
     });
-    p.querySelector("#pop-title").focus();
+    // 구분이 정해진 일정(TS1 등)에는 내용 칸이 없다 — 있을 때만 포커스
+    var t0 = p.querySelector("#pop-title");
+    if (t0) t0.focus(); else { var w0 = p.querySelector("#pop-who .gchip"); if (w0) w0.focus(); }
   }
   $("week-view").addEventListener("click", function (e) {
     if (e.target.closest("a.slot-title")) return;               // 딥링크는 그대로
@@ -2470,6 +2472,7 @@
     loadReportGoal();
     var teamId = myTeamId();
     api("/attendance?date=" + ds).then(function (list) {
+      if (fmtDate(attBase) !== ds) return;      // 그 사이 날짜를 옮겼으면 늦게 온 응답은 버린다
       myRep = list.filter(function (a) { return a.email === BOOT.me.email; })[0] || {};
       $("rep-yes").checked = !!myRep.present;
       $("rep-no").checked = myRep.id != null && !myRep.present;

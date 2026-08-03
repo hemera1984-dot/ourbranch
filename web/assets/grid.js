@@ -117,9 +117,13 @@ function makeGrid(root, opts) {
     });
   }
 
-  document.addEventListener("mousedown", function (e) {
-    if (!e.target.closest(".grid-chips") && !e.target.closest("td[contenteditable]")) closeChips();
-  });
+  // 표를 다시 그릴 때마다 붙이면 같은 처리기가 쌓인다 — 한 번만 단다
+  if (!window._gridChipsBound) {
+    window._gridChipsBound = true;
+    document.addEventListener("mousedown", function (e) {
+      if (!e.target.closest(".grid-chips") && !e.target.closest("td[contenteditable]")) closeChips();
+    });
+  }
 
   // 마지막에 넣은 값 기억 — 거주지처럼 하루 종일 같은 값을 다시 치지 않게
   var MEM = "grid_sticky_" + (opts.memoryKey || "기본");

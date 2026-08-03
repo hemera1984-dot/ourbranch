@@ -704,10 +704,49 @@ async function main() {
   assert.ok(!mts.targets.includes("이어받을자리@미등록.local"));      // 빈 자리는 빠졌다
 
   // 37) TA 비밀번호를 계속 찍어보면 잠깐 막힌다
-  for (let i = 0; i < 5; i++) await api("t-fc2", "POST", "/ta/unlock", { password: "틀림" + i });
-  assert.equal((await api("t-fc2", "POST", "/ta/unlock", { password: "harang25" })).status, 429);
+  for (let i = 0; i < 5; i++) await api("t-new", "POST", "/ta/unlock", { password: "틀림" + i });
+  assert.equal((await api("t-new", "POST", "/ta/unlock", { password: "harang25" })).status, 429);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한 확인 완료");
+  // 38) 직급이 곧 권한이다 — 관리자가 자기 직급을 올려 지점장이 되지 못한다 (코덱스 지적)
+  assert.equal((await api("t-esl1", "POST", "/admin/members",
+    { email: "esl1@x.com", role: "지점장" })).status, 403);
+  // 남에게도 자기보다 높은 직급은 못 준다
+  assert.equal((await api("t-esl1", "POST", "/admin/members",
+    { email: "fc1@x.com", role: "지점장" })).status, 403);
+  // 총관리자는 된다
+  assert.equal((await api("t-super", "POST", "/admin/members",
+    { email: "fc1@x.com", role: "팀장" })).status, 200);
+
+  // 39) 전체열람은 「보는」 권한이다 — 남의 팀 기록을 고치거나 지우지 못한다 (코덱스 지적)
+  await api("t-super", "POST", "/admin/members", { email: "esl1@x.com", name: "부지점장1", teamId: 1, role: "부지점장", canViewAll: true });
+  // 앞선 동명이인 테스트가 fc2를 1팀으로 옮겨 놨다 — 다시 2팀으로 돌려놓고 시작한다
+  await api("t-super", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, role: "팀원" });
+  await api("t-fc2", "POST", "/ta/unlock", { password: "harang25" });
+  await api("t-esl1", "POST", "/ta/unlock", { password: "harang25" });
+  await api("t-fc2", "POST", "/ta", { rows: [{ date: "2027-08-03", cand_name: "2팀후보" }] });
+  const taAug = await (await api("t-esl1", "GET", "/ta?month=2027-08")).json();
+  const otherTa2 = taAug.filter(r => r.team_id === 2)[0];
+  assert.ok(otherTa2, "전체열람이면 남의 팀 일지가 보이긴 한다");
+  assert.equal((await api("t-esl1", "POST", "/ta/" + otherTa2.id, { note: "침범" })).status, 403);
+  assert.equal((await api("t-esl1", "DELETE", "/ta/" + otherTa2.id)).status, 403);
+  const pf2 = await (await api("t-fc2", "POST", "/perf", { month: "2027-08", rows: [{ member: "팀원2", memberEmail: "fc2@x.com", canp: 10 }] })).json();
+  assert.equal((await api("t-esl1", "POST", "/perf/" + pf2.ids[0], { canp: 999 })).status, 403);
+  assert.equal((await api("t-esl1", "DELETE", "/perf/" + pf2.ids[0])).status, 403);
+
+  // 40) 계정 연결이 남의 팀 사람을 끌어오지 못한다 (코덱스 지적)
+  await api("t-super", "POST", "/admin/members", { email: "빈자리2@미등록.local", name: "빈자리2", teamId: 1, role: "팀원" });
+  assert.equal((await api("t-esl1", "POST", "/admin/members/link",
+    { seatEmail: "빈자리2@미등록.local", accountEmail: "fc2@x.com" })).status, 403);
+
+  // 41) 달력에 없는 날짜는 거절한다 — 모양만 맞으면 통과하던 것 (코덱스 지적)
+  await api("t-fc1", "POST", "/ta/unlock", { password: "harang25" });
+  assert.equal((await api("t-fc1", "POST", "/ta", { rows: [{ date: "2026-99-99", cand_name: "가짜날짜" }] })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/events", { date: "2027-02-30", memberEmail: "fc1@x.com", kind: "상담" })).status, 400);
+  // 수정 경로에도 검증이 있다
+  const okEv = await (await api("t-fc1", "POST", "/events", { date: "2027-02-28", memberEmail: "fc1@x.com", kind: "상담" })).json();
+  assert.equal((await api("t-fc1", "POST", "/events/" + okEv.id, { date: "8/1" })).status, 400);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
