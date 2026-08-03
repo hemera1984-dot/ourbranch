@@ -589,6 +589,28 @@ route("POST", /^\/ta\/password$/, false, async (req, res, user) => {
 
 // 열람 기록 — 지점장·총관리자만 본다
 // 백업 상태 — 총관리자·지점장만. 백업이 조용히 멈춰 있는 것을 모르는 게 가장 위험하다.
+// 면접관 명단 — 팀원이 아니라 따로 관리하는 이름 목록(본부 면접관 등).
+// 조직도에 넣으면 팀 인원이 되어 집계·권한이 어긋나므로 설정값으로 둔다.
+// 1차와 2차의 면접관이 다르다 — 구분마다 따로 담는다 { TS1: [...], TS2: [...] }
+function interviewerMap() {
+  try { return JSON.parse(getSetting(db, "면접관명단") || "{}") || {}; } catch { return {}; }
+}
+route("GET", /^\/settings\/interviewers$/, false, (req, res) => {
+  send(res, 200, interviewerMap());
+});
+
+route("POST", /^\/settings\/interviewers$/, false, async (req, res, user) => {
+  if (!user.isManager) return send(res, 403, { error: "관리자만" });
+  const b = await readJson(req);
+  if (!b.kind || !Array.isArray(b.list)) return send(res, 400, { error: "구분과 명단이 필요합니다" });
+  const names = b.list.map(x => String(x).trim()).filter(Boolean)
+    .filter((x, i, a) => a.indexOf(x) === i).slice(0, 100);
+  const map = interviewerMap();
+  map[String(b.kind)] = names;
+  setSetting(db, "면접관명단", JSON.stringify(map));
+  send(res, 200, map);
+});
+
 route("GET", /^\/admin\/backup$/, false, (req, res, user) => {
   if (!isBranchHead(user)) return send(res, 403, { error: "지점장·총관리자만" });
   try {
@@ -1191,11 +1213,18 @@ const server = createServer(async (req, res) => {
         };
         const ct = types[extname(file)] || "application/octet-stream";
         const binary = /^(image|font)\//.test(ct) || ct === "application/octet-stream";
-        res.writeHead(200, { "Content-Type": ct + (binary ? "" : "; charset=utf-8") });
+        // 화면·설정 파일은 매번 서버에 물어본다. 안 그러면 배포해도 옛 화면이 그대로 남는다
+        // (부지점장 화면만 옛 구분이 보이던 사고 — 2026-08-03).
+        // 그림·영상은 잘 바뀌지 않으니 하루 정도 들고 있게 둔다.
+        const fresh = [".html", ".css", ".js", ".webmanifest", ".json"].includes(extname(file));
+        res.writeHead(200, {
+          "Content-Type": ct + (binary ? "" : "; charset=utf-8"),
+          "Cache-Control": fresh ? "no-cache" : "public, max-age=86400"
+        });
         return res.end(readFileSync(file));
       }
       if (path === "/") {
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
         return res.end(readFileSync(normalize(join(WEB_DIR, "index.html"))));
       }
     } catch {

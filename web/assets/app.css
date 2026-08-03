@@ -703,3 +703,6 @@ a.slot-title:hover { text-decoration: underline; }
 .dot.k-시험 { background: #8a63d2; }
 .dot.k-입과교육, .dot.k-입과전교육생일정 { background: var(--amber); }
 .dot.k-지점일정, .dot.k-본부일정 { background: var(--cyan); }
+
+/* 일정 내용 아랫줄 — 윗줄과 구분되게 한 단 낮춘다 */
+.slot-line2 { flex-basis: 100%; font-size: 13px; color: var(--sub); }

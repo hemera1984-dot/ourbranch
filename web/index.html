@@ -521,34 +521,64 @@
   // 「상담」은 외근에 들어가므로 「밸류업/이관」으로 바꿨다.
   var KINDS = [
     "밸류업/이관", "외근", "내근",
-    "TS1", "TS2", "시험",
+    "TS1", "TS2", "GROW", "시험",
     "입과전교육생일정", "입과교육", "차월교육", "교육",
     "지점일정", "본부일정", "회의", "마감", "휴가", "기타"
   ];
   // 예전에 저장된 구분(상담·강의·면접·GROW)도 색·형식은 그대로 읽는다.
   // 목록에서만 뺐다 — 지난 기록을 깨뜨리지 않기 위해서다.
-  var OLD_KINDS = ["상담", "강의", "면접", "GROW"];
+  var OLD_KINDS = ["상담", "강의", "면접"];
   function knownKind(k) { return KINDS.indexOf(k) >= 0 || OLD_KINDS.indexOf(k) >= 0; }
 
   // 구분마다 필요한 항목이 다르다. 여기 한 곳에서만 정한다.
   // people: 팀원 명단에서 고르는 칸 / num: 숫자 한 칸 / place: 장소 / title: 자유 입력
+  // 구분마다 받는 것이 다르다. 여기 한 곳에서만 정한다 — 화면·제목·표가 함께 따라온다.
+  //   picks   : 하나만 고르는 칩 묶음 (차수·차월·반)
+  //   who     : 설정 명단(면접관)에서 여럿 고르기
+  //   people  : 팀원 명단에서 여럿 고르기
+  //   noTime  : 시간 칸을 아예 감춘다   fixedPlace: 장소를 잠근다
   var KIND_FORM = {
-    "TS1":    { label: "1차 면접", people: "면접관", place: true },
-    "TS2":    { label: "2차 면접", people: "면접관", place: true },
-    "시험":    { label: "시험", people: "대상", place: true },
-    "입과전교육생일정": { label: "입과 전 교육생", people: "교육생", place: true },
-    "입과교육": { label: "입과 교육", people: "교육 대상", place: true },
-    "차월교육": { label: "차월 교육", num: "차월", people: "교육 대상", place: true },
-    "GROW":   { label: "GROW 교육", people: "교육 대상", place: true }   // 예전 기록용
+    // 면접은 면접관(따로 관리하는 명단)과 도입자(우리 팀원)를 함께 적는다.
+    // TS1은 시간이 나중에 정해지므로 받지 않는다 (2026-08-03 사용자).
+    "TS1": { label: "1차 면접", who: "면접관", people: "도입자", noTime: true },
+    "TS2": { label: "2차 면접", who: "면접관", people: "도입자" },
+    "GROW": {
+      label: "GROW", people: "도입자", noTime: true, fixedPlace: "신한 L 타워",
+      picks: [{ key: "stage", label: "차수", opts: ["1차", "2차"] }]
+    },
+    "차월교육": {
+      label: "차월 교육", people: "교육 대상", noTime: true,
+      picks: [
+        { key: "차월", label: "차월", opts: ["1차월", "2차월", "3차월", "4차월", "7차월", "10차월"] },
+        { key: "반", label: "반 (선택)", opts: ["MASTER", "POTENTIAL"] }
+      ]
+    },
+    // 교육은 종류가 많다(도입교육·ESL 교육 등). 구분을 고르고 옆에 이름을 쳐 넣는다.
+    "교육": { label: "교육", text: "무슨 교육인지 (예: 도입교육, ESL 교육)" },
+    "시험": { label: "시험", people: "대상" },
+    "입과전교육생일정": { label: "입과 전 교육생", people: "교육생" },
+    "입과교육": { label: "입과 교육", people: "교육 대상" }
   };
 
-  // 목록에 뜰 제목을 세부 항목에서 만든다 — 화면 어디서나 한 줄로 읽히게
+  // 목록에 뜰 제목을 세부 항목에서 만든다 — 제목을 손으로 쓰지 않는다.
   function composeTitle(kind, det) {
     var f = KIND_FORM[kind];
     if (!f) return null;
-    var who = (det.people || []).map(function (em) { return nameOf(em) || em; }).join(", ");
-    var head = f.num && det.num ? det.num + "차월 교육" : f.label;
-    return head + (who ? " · " + f.people + " " + who : "");
+    var head = (f.text && det.text) ? det.text : f.label;
+    (f.picks || []).forEach(function (pk) { if (det[pk.key]) head += " " + det[pk.key]; });
+    var bits = [];
+    if (f.who && (det.who || []).length) bits.push(f.who + " " + det.who.join(", "));
+    if ((det.people || []).length)
+      bits.push(f.people + " " + det.people.map(function (em) { return nameOf(em) || em; }).join(", "));
+    return head + (bits.length ? " · " + bits.join(" · ") : "");
+  }
+
+  // 면접관 명단 — 팀원이 아니라 설정값이고, 1차와 2차가 다르다.
+  var INTERVIEWERS = {};
+  function interviewersOf(kind) { return INTERVIEWERS[kind] || []; }
+  function loadInterviewers() {
+    return api("/settings/interviewers").then(function (r) { INTERVIEWERS = r || {}; })
+      .catch(function () { INTERVIEWERS = {}; });
   }
 
   function $(id) { return document.getElementById(id); }
@@ -655,6 +685,7 @@
   function enterApp() {
     $("gate").hidden = true; $("app").hidden = false;
     renderShell();
+    loadInterviewers();
     // 승인 직후 첫 접속 — 실명 확인부터. 안 하면 구글 이름으로 조직도·업적에 남는다.
     var mine = BOOT.members.filter(function (x) { return x.email === BOOT.me.email; })[0];
     show(mine && !mine.profile_done ? "me" : screen);
@@ -743,7 +774,7 @@
     }
   }
   function refreshBoot() {
-    return api("/bootstrap").then(function (b) { BOOT = b; renderShell(); });
+    return api("/bootstrap").then(function (b) { BOOT = b; renderShell(); }).then(loadInterviewers);
   }
 
   // 미확인 공지·미달성 미션을 탭에 점으로 — 홈을 건너뛰어도 놓치지 않게 (앱 내 알림)
@@ -1793,8 +1824,18 @@
     { key: "start", label: "시작", width: 55 },
     { key: "end", label: "종료", width: 55 },
     { key: "kind", label: "구분", width: 70, opts: KINDS },
-    { key: "num", label: "차월", width: 48 },
-    { key: "people", label: "면접관 · 교육 대상", width: 170, opts: rosterNames, multi: true },
+    { key: "차월", label: "차월", width: 62, opts: ["1차월", "2차월", "3차월", "4차월", "7차월", "10차월"] },
+    { key: "stage", label: "차수", width: 56, opts: ["1차", "2차"] },
+    { key: "반", label: "반", width: 76, opts: ["MASTER", "POTENTIAL"] },
+    { key: "text", label: "무슨 교육", width: 120 },
+    // 면접관은 구분마다 명단이 다르다. 빠른 입력 표에서는 두 명단을 합쳐 보여준다.
+    { key: "who", label: "면접관", width: 130, multi: true,
+      opts: function () {
+        return Object.keys(INTERVIEWERS).reduce(function (all, k) {
+          return all.concat(INTERVIEWERS[k].filter(function (n) { return all.indexOf(n) < 0; }));
+        }, []);
+      } },
+    { key: "people", label: "도입자 · 교육 대상", width: 170, opts: rosterNames, multi: true },
     { key: "title", label: "내용 (구분이 정해지면 자동)", width: 170 },
     { key: "place", label: "장소", width: 120, sticky: true }
   ];
@@ -1831,7 +1872,8 @@
         try { d = e.detail ? JSON.parse(e.detail) : {}; } catch (err) { d = {}; }
         return { _id: e.id, member: e.member_email ? nameOf(e.member_email) : "", date: e.date,
                  start: e.start || "", end: e.end || "", kind: e.kind, title: e.title, place: e.place || "",
-                 num: d.num || "",
+                 "차월": d["차월"] || "", stage: d.stage || "", "반": d["반"] || "", text: d.text || "",
+                 who: (d.who || []).join(", "),
                  people: (d.people || []).map(function (em) { return nameOf(em) || em; }).join(", ") };
       });
       evGrid = makeGrid($("ev-grid"), {
@@ -1862,6 +1904,12 @@
         ? '<a class="slot-title" target="_blank" href="https://app.insurguard.life/web/customers/?code=' + encodeURIComponent(e.customer_code) + '">' + esc(e.title) + "</a>"
         : '<span class="slot-title">' + esc(e.title) + "</span>")
       : "";
+    // 내용 아랫줄 — 있으면 제목 밑에 한 줄 더
+    var line2 = "";
+    try {
+      var d2 = e.detail ? JSON.parse(e.detail) : null;
+      if (d2 && d2.line2) line2 = '<span class="slot-line2">' + esc(d2.line2) + "</span>";
+    } catch (err) { /* 옛 자료는 세부가 없다 */ }
     // 강의: 지점 전체 대상 — 신청 인원과 원탭 신청 버튼
     var lecture = "";
     if (e.kind === "강의") {
@@ -1876,6 +1924,7 @@
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
       + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
       + title
+      + line2
       + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "")
       + lecture
       + "</div>";
@@ -2051,28 +2100,88 @@
     function renderKindForm() {
       var f = KIND_FORM[kind];
       var box = p.querySelector("#pop-form");
+      // 시간을 받지 않는 구분은 칸 자체를 숨긴다 — 빈 칸을 두면 채워야 할 것처럼 보인다
+      var timeRow = p.querySelector("#pop-start").parentNode;
+      timeRow.hidden = !!(f && f.noTime);
+      if (f && f.noTime) { p.querySelector("#pop-start").value = ""; p.querySelector("#pop-end").value = ""; }
+      // 장소가 정해진 구분은 장소 칸을 잠근다 — 매번 같은 곳을 다시 치지 않게
+      var placeEl = p.querySelector("#pop-place");
+      placeEl.readOnly = !!(f && f.fixedPlace);
+      placeEl.style.background = f && f.fixedPlace ? "var(--canvas)" : "";
+      if (f && f.fixedPlace) { placeEl.value = f.fixedPlace; placeEl.dataset.auto = "1"; }
+      else if (placeEl.dataset.auto) { placeEl.value = ""; delete placeEl.dataset.auto; }
+
+      // 내용 아랫줄 — 모든 구분에 붙는다 (2026-08-03 사용자)
+      var line2Row = '<div class="pop-row"><input type="text" class="input" id="pop-line2" placeholder="내용2 (아랫줄)" value="'
+        + esc(detail.line2 || "") + '"></div>';
+
       if (!f) {
-        box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="'
-          + esc(o.title || "") + '"></div>';
+        box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용1 (윗줄)" value="'
+          + esc(o.title || "") + '"></div>' + line2Row;
         return;
       }
+
       var roster = rosterOf(o.pickMember ? myTeamId() : (BOOT.me.teamId || myTeamId()));
       var picked = detail.people || [];
-      box.innerHTML =
-        (f.num
-          ? '<div class="pop-row"><input type="number" min="1" max="60" class="input" id="pop-num" placeholder="'
-            + f.num + ' (숫자)" value="' + esc(detail.num || "") + '" style="width:110px">'
-            + '<span class="note">차월</span></div>'
-          : "")
-        + '<div class="pop-row" style="display:block"><span class="note" style="display:block;margin-bottom:4px">'
-        + f.people + '</span><div class="whopick" id="pop-who">'
-        + roster.map(function (m) {
-          return '<button type="button" class="gchip' + (picked.indexOf(m.email) >= 0 ? " on" : "") + '"'
-            + ' data-em="' + esc(m.email) + '">' + esc(memberLabel(m)) + "</button>";
-        }).join("") + "</div></div>";
-      box.querySelector("#pop-who").addEventListener("click", function (e) {
-        var b = e.target.closest(".gchip"); if (!b) return;
-        b.classList.toggle("on");
+      var pickedWho = detail.who || [];
+      function chipRow(label, id, items, isOn, attr) {
+        return '<div class="pop-row" style="display:block">'
+          + '<span class="note" style="display:block;margin-bottom:4px">' + label + "</span>"
+          + '<div class="whopick" id="' + id + '">'
+          + items.map(function (it) {
+              return '<button type="button" class="gchip' + (isOn(it) ? " on" : "") + '" '
+                + attr(it) + ">" + esc(it.text) + "</button>";
+            }).join("") + "</div></div>";
+      }
+
+      var html = "";
+      if (f.text)
+        html += '<div class="pop-row"><input type="text" class="input" id="pop-text" placeholder="'
+          + esc(f.text) + '" value="' + esc(detail.text || "") + '"></div>';
+      (f.picks || []).forEach(function (pk) {
+        html += chipRow(pk.label, "pick-" + pk.key,
+          pk.opts.map(function (v) { return { text: v }; }),
+          function (it) { return detail[pk.key] === it.text; },
+          function (it) { return 'data-pick="' + esc(pk.key) + '" data-val="' + esc(it.text) + '"'; });
+      });
+      if (f.who) {
+        var iv = interviewersOf(kind);
+        html += '<div class="pop-row" style="display:block"><span class="note" style="display:block;margin-bottom:4px">'
+          + f.who + (BOOT.me.isManager ? ' <button type="button" class="btn fold-btn" id="pop-who-edit">명단 고치기</button>' : "")
+          + '</span><div class="whopick" id="pop-who2">'
+          + (iv.length
+            ? iv.map(function (n) {
+                return '<button type="button" class="gchip' + (pickedWho.indexOf(n) >= 0 ? " on" : "")
+                  + '" data-nm="' + esc(n) + '">' + esc(n) + "</button>";
+              }).join("")
+            : '<span class="note">명단이 비어 있습니다' + (BOOT.me.isManager ? " — 「명단 고치기」로 넣어 주세요." : "") + "</span>")
+          + "</div></div>";
+      }
+      if (f.people)
+        html += chipRow(f.people, "pop-who",
+          roster.map(function (m) { return { text: memberLabel(m), em: m.email }; }),
+          function (it) { return picked.indexOf(it.em) >= 0; },
+          function (it) { return 'data-em="' + esc(it.em) + '"'; });
+      box.innerHTML = html + line2Row;
+
+      box.addEventListener("click", function (e) {
+        var pk = e.target.closest("[data-pick]");
+        if (pk) {   // 차수·차월·반은 하나만 고른다. 다시 누르면 꺼진다.
+          var was = pk.classList.contains("on");
+          box.querySelectorAll('[data-pick="' + pk.dataset.pick + '"]')
+            .forEach(function (x) { x.classList.remove("on"); });
+          if (!was) pk.classList.add("on");
+          return;
+        }
+        var b = e.target.closest("#pop-who .gchip, #pop-who2 .gchip");
+        if (b) { b.classList.toggle("on"); return; }
+        if (e.target.id === "pop-who-edit") {
+          var cur = interviewersOf(kind).join(", ");
+          var next = prompt(kind + " 면접관 명단 (쉼표로 구분)\n팀원이 아니라 따로 관리하는 이름입니다.", cur);
+          if (next == null) return;
+          api("/settings/interviewers", { method: "POST", body: { kind: kind, list: next.split(",") } })
+            .then(function (r) { INTERVIEWERS = r || {}; renderKindForm(); });
+        }
       });
     }
     renderKindForm();
@@ -2088,14 +2197,20 @@
       var det = null, ttl = "";
       if (KIND_FORM[kind]) {
         det = {
-          people: [].map.call(p.querySelectorAll("#pop-who .gchip.on"), function (b) { return b.dataset.em; })
+          people: [].map.call(p.querySelectorAll("#pop-who .gchip.on"), function (b) { return b.dataset.em; }),
+          who: [].map.call(p.querySelectorAll("#pop-who2 .gchip.on"), function (b) { return b.dataset.nm; })
         };
-        var numEl = p.querySelector("#pop-num");
-        if (numEl && numEl.value) det.num = Number(numEl.value);
+        var textEl = p.querySelector("#pop-text");
+        if (textEl && textEl.value.trim()) det.text = textEl.value.trim();
+        [].forEach.call(p.querySelectorAll("[data-pick].on"), function (b) { det[b.dataset.pick] = b.dataset.val; });
         ttl = composeTitle(kind, det);
       } else {
         ttl = p.querySelector("#pop-title").value.trim();
       }
+      var l2 = p.querySelector("#pop-line2");
+      if (l2 && l2.value.trim()) { det = det || {}; det.line2 = l2.value.trim(); }
+      else if (det) delete det.line2;
+      else if (l2) det = {};      // 아랫줄을 지운 것도 저장돼야 한다
       var body = {
         memberEmail: em || null, date: o.date, kind: kind,
         start: p.querySelector("#pop-start").value || null,
@@ -2454,7 +2569,11 @@
       };
       if (KIND_FORM[body.kind]) {
         var det = { people: emailsOf(r.people) };
-        if (r.num) det.num = Number(r.num) || 0;
+        det.who = String(r.who || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+        ["차월", "stage", "반", "text"].forEach(function (k) {
+          if (String(r[k] || "").trim()) det[k] = String(r[k]).trim();
+        });
+        if (KIND_FORM[body.kind].fixedPlace) body.place = KIND_FORM[body.kind].fixedPlace;
         body.detail = det;
         body.title = composeTitle(body.kind, det);
       }
