@@ -250,10 +250,6 @@
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="m-cal-copy">지난달 가져오기</button>
         </div>
-        <div class="toolbar" style="margin-bottom:8px">
-          <button class="btn seg-btn" id="m-stamp-toggle">빠른 입력</button>
-          <span id="m-stamp-kinds" class="kpicks" hidden></span>
-        </div>
         <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
           <button class="btn seg-btn" data-scope="esl" hidden>부지점장</button>
           <button class="btn seg-btn" data-scope="team">팀 전체</button>
@@ -282,11 +278,6 @@
           <button class="btn" id="cal-next">다음 달</button>
           <strong id="cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
-        </span>
-        <span id="stamp-bar" class="toolbar" style="width:100%;margin-top:4px">
-          <button class="btn seg-btn" id="stamp-toggle">빠른 입력</button>
-          <span id="stamp-kinds" class="kpicks" hidden></span>
-          <span class="note" id="stamp-hint" hidden>날짜를 누를 때마다 내 일정으로 바로 들어갑니다. 같은 걸 다시 누르면 지워집니다.</span>
         </span>
         <span id="week-controls" hidden>
           <button class="btn" id="week-prev">이전 주</button>
@@ -592,6 +583,13 @@
     },
     "입과전교육생일정": { label: "입과 전 교육생", people: "교육생" },
     "입과교육": { label: "입과 교육", people: "교육 대상" },
+    // 마감은 종류를 고르고 세부는 직접. 시간·장소는 받지 않는다 (2026-08-03 사용자)
+    "마감": {
+      label: "", noTime: true, noPlace: true, line2: "세부 내용 (직접 입력)",
+      picks: [{ key: "종류", label: "종류", opts: [
+        "1차입과(신인)", "1차입과(경력)", "2차입과(신인)", "2차입과(경력)", "보완마감", "본인계약마감"
+      ] }]
+    },
     // 지점일정 — 무엇인지 고르고 세부는 직접, 장소도 받는다 (2026-08-03 사용자)
     "지점일정": {
       label: "", line2: "세부 내용 (직접 입력)",
@@ -2168,9 +2166,10 @@
       if (f && f.fixedPlace) { placeEl.value = f.fixedPlace; placeEl.dataset.auto = "1"; }
       else if (placeEl.dataset.auto) { placeEl.value = ""; delete placeEl.dataset.auto; }
 
-      // 내용 아랫줄 — 모든 구분에 붙는다 (2026-08-03 사용자)
-      var line2Row = '<div class="pop-row"><input type="text" class="input" id="pop-line2" placeholder="'
-        + esc((f && f.line2) || "내용2 (아랫줄)") + '" value="' + esc(detail.line2 || "") + '"></div>';
+      // 내용 아랫줄 — 기본으로 붙되, 필요 없는 구분은 뺀다 (2026-08-03 사용자)
+      var line2Row = (f && f.noLine2) ? ""
+        : '<div class="pop-row"><input type="text" class="input" id="pop-line2" placeholder="'
+          + esc((f && f.line2) || "내용2 (아랫줄)") + '" value="' + esc(detail.line2 || "") + '"></div>';
 
       if (!f) {
         box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용1 (윗줄)" value="'
@@ -2192,6 +2191,10 @@
       }
 
       var html = "";
+      // 고를 것도 사람도 없는 구분(마감)은 내용1을 그냥 치게 한다
+      if (!f.picks && !f.who && !f.people && !f.text)
+        html += '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="'
+          + esc(o.title || "") + '"></div>';
       if (f.text)
         html += '<div class="pop-row"><input type="text" class="input" id="pop-text" placeholder="'
           + esc(f.text) + '" value="' + esc(detail.text || "") + '"></div>';
@@ -2266,6 +2269,9 @@
       } else {
         ttl = p.querySelector("#pop-title").value.trim();
       }
+      // 내용1 칸이 있는 구분(마감·옛 구분)은 친 글자가 곧 제목이다
+      var t0 = p.querySelector("#pop-title");
+      if (t0) ttl = t0.value.trim();
       var l2 = p.querySelector("#pop-line2");
       if (l2 && l2.value.trim()) { det = det || {}; det.line2 = l2.value.trim(); }
       else if (det) delete det.line2;
@@ -2322,7 +2328,6 @@
   function loadDay() {
     initScope();
     $("m-cal-label").textContent = calBase.getFullYear() + "년 " + (calBase.getMonth() + 1) + "월";
-    renderStampBar();
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
@@ -2382,7 +2387,6 @@
   $("m-cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
-    if (stampOn) { stampDate(cell.dataset.date, loadDay); return; }   // 찍기 모드
     selDate = cell.dataset.date;
     renderCalGrid("m-cal-view", true);
     renderMobileDay();
@@ -2453,7 +2457,6 @@
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     $("cal-label").textContent = y + "년 " + (mo + 1) + "월";
     $("cal-copy-month").hidden = false;
-    renderStampBar();
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
     api("/events?from=" + from + "&to=" + to).then(function (evs) {
@@ -2524,7 +2527,6 @@
   $("cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
-    if (stampOn) { stampDate(cell.dataset.date, loadCal); return; }   // 찍기 모드
     selDate = cell.dataset.date;
     renderCalGrid();
     renderCalDay();
@@ -2538,55 +2540,8 @@
   });
   $("view-cal").addEventListener("click", function () { setSchedView("cal"); });
   $("view-week").addEventListener("click", function () { setSchedView("week"); });
-  // ── 빠른 입력 — 구분을 하나 골라두고 날짜를 눌러 찍는다 ──
-  // 반복되는 일정(상담·외근·교육)을 한 달치 넣을 때 창을 매번 열지 않게 한다.
-  // 달력에서 날짜만 눌러 바로 찍는 구분 — 개인이 자주 쓰는 것만
-  var stampOn = false, stampKind = "외근";
-  var STAMP_KINDS = ["밸류업/이관", "외근", "내근", "교육", "지점일정", "휴가"];
-
-  function renderStampBar() {
-    [["stamp-toggle", "stamp-kinds", "stamp-hint"], ["m-stamp-toggle", "m-stamp-kinds", null]]
-      .forEach(function (ids) {
-        var btn = $(ids[0]), box = $(ids[1]), hint = ids[2] ? $(ids[2]) : null;
-        if (!btn) return;
-        btn.classList.toggle("active", stampOn);
-        box.hidden = !stampOn;
-        if (hint) hint.hidden = !stampOn;
-        if (stampOn) {
-          box.innerHTML = STAMP_KINDS.map(function (k) {
-            return '<button type="button" class="kpick' + (k === stampKind ? " sel" : "") + '" data-k="' + k + '">' + k + "</button>";
-          }).join("");
-        }
-      });
-  }
-  function toggleStamp() { stampOn = !stampOn; renderStampBar(); }
-  function pickStamp(e) {
-    var b = e.target.closest(".kpick");
-    if (!b) return;
-    stampKind = b.dataset.k;
-    renderStampBar();
-  }
-  ["stamp-toggle", "m-stamp-toggle"].forEach(function (id) {
-    var el = $(id); if (el) el.addEventListener("click", toggleStamp);
-  });
-  ["stamp-kinds", "m-stamp-kinds"].forEach(function (id) {
-    var el = $(id); if (el) el.addEventListener("click", pickStamp);
-  });
-
-  // 날짜 칸 하나에 찍기 — 이미 같은 구분의 내 일정이 있으면 지운다(토글)
-  function stampDate(ds, after) {
-    var mine = calEvs.filter(function (e) {
-      return e.date === ds && e.member_email === BOOT.me.email
-        && e.kind === stampKind && !e.title && e.source !== "myguardian";
-    })[0];
-    if (mine) {
-      api("/events/" + mine.id, { method: "DELETE" }).then(after);
-      return;
-    }
-    api("/events", { method: "POST", body: {
-      teamId: myTeamId(), memberEmail: BOOT.me.email, date: ds, kind: stampKind, title: "", place: ""
-    } }).then(after);
-  }
+  // 「빠른 입력」(날짜 찍기)은 걷어냈다 (2026-08-03 사용자).
+  // 구분마다 내용1을 고르게 된 뒤로는, 제목 없이 찍힌 일정이 오히려 읽기 어려웠다.
 
   // 지난달 일정 가져오기 — 반복 일정을 매달 다시 넣지 않게
   function copyPrevMonth() {
