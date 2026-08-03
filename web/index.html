@@ -1213,8 +1213,8 @@
   function renderOrg() {
     $("ro-team-add-btn").hidden = !BOOT.me.isBranchHead;
     $("org-hint").textContent = BOOT.me.isManager
-      ? "칸을 눌러 바로 고칩니다 — 팀 이름·팀원을 누르면 수정, 「+ 팀원」으로 추가."
-      : "";
+      ? "부지점장 밑으로 도입 계보가 갈립니다. 도입자는 팀원 창에서 정하고, 칸을 누르면 수정합니다."
+      : "부지점장 밑으로 도입 계보가 갈립니다.";
     renderOrgChart();
   }
 
@@ -1384,6 +1384,58 @@
       || '<div class="empty">등록된 구성원이 없습니다.</div>';
   }
 
+  function memberBox(m, teamId, mg, depth) {
+    return '<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
+      + (mg && !depth ? ' draggable="true"' : "")
+      + (depth ? ' style="margin-left:' + (depth * 16) + 'px"' : "")
+      + ' data-team="' + teamId + '" data-email="' + esc(m.email) + '">'
+      + (depth ? '<span class="oc-line"></span>' : "")
+      // 부지점장이 직접 뽑으면 직도, 그 밑에서 또 뽑으면 간도 (현장 용어)
+      + (depth === 1 ? '<span class="oc-deg 직도">직도</span>'
+         : depth >= 2 ? '<span class="oc-deg 간도">간도</span>' : "")
+      + '<span class="r">' + esc(m.role) + "</span>"
+      + "<span>" + esc(memberLabel(m)) + "</span>"
+      + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
+      + "</div>";
+  }
+
+  // 팀은 피라미드다 — 부지점장이 꼭대기, 그 밑으로 도입 계보가 갈린다.
+  // 보험 조직은 「누가 누구를 도입했나」가 팀 안에서 또 줄기를 만든다(계파).
+  // 도입자가 지정되지 않은 사람은 부지점장 바로 밑에 붙는다.
+  function lineageHtml(list, teamId, mg) {
+    var byEmail = {};
+    list.forEach(function (m) { byEmail[m.email] = m; });
+    var rank = function (m) { return ROLE_RANK[m.role] == null ? 9 : ROLE_RANK[m.role]; };
+    var lead = list.filter(function (m) { return m.role === "부지점장"; })[0];
+    var kids = {}, loose = [];
+    list.forEach(function (m) {
+      if (lead && m.email === lead.email) return;
+      var up = m.recruiter_email;
+      if (up && byEmail[up] && up !== m.email) (kids[up] = kids[up] || []).push(m);
+      else loose.push(m);
+    });
+    var order = function (a, b) {
+      return rank(a) - rank(b) || (a.sort_order == null ? 99 : a.sort_order) - (b.sort_order == null ? 99 : b.sort_order);
+    };
+    var out = [], seen = {};
+    function walk(nodes, depth) {
+      nodes.sort(order).forEach(function (m) {
+        if (seen[m.email]) return;          // 도입자가 서로를 가리키는 고리 방지
+        seen[m.email] = true;
+        out.push(memberBox(m, teamId, mg, depth));
+        if (kids[m.email]) walk(kids[m.email], depth + 1);
+      });
+    }
+    if (lead) {
+      seen[lead.email] = true;
+      out.push(memberBox(lead, teamId, mg, 0));
+      walk((kids[lead.email] || []).concat(loose), 1);
+    } else {
+      walk(loose, 0);
+    }
+    return out.join("");
+  }
+
   function renderOrgChart() {
     var mg = BOOT.me.isManager;
     var teams = BOOT.teams;
@@ -1417,15 +1469,7 @@
       h.push('<div class="oc-members">');
       var shown = (lead ? [lead] : []).concat(rest);
       if (shown.length) {
-        shown.forEach(function (m) {
-          h.push('<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
-            + (mg ? ' draggable="true"' : "")
-            + ' data-team="' + t.id + '" data-email="' + esc(m.email) + '">'
-            + '<span class="r">' + esc(m.role) + "</span>"
-            + "<span>" + esc(memberLabel(m)) + "</span>"
-            + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
-            + "</div>");
-        });
+        h.push(lineageHtml(list, t.id, mg));
       } else h.push('<div class="oc-empty">팀원 없음</div>');
       if (mg) h.push('<div class="oc-add" data-team="' + t.id + '">+ 팀원</div>');
       h.push("</div></div>");
