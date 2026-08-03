@@ -692,3 +692,14 @@ a.slot-title:hover { text-decoration: underline; }
 .k-GROW, .k-차월교육 { background: var(--amber-bg); color: var(--amber); }
 .dot.k-TS1, .dot.k-TS2 { background: #8a63d2; }
 .dot.k-GROW, .dot.k-차월교육 { background: var(--amber); }
+
+/* 현장 어휘로 바꾼 구분 색 (2026-08-03) — 색은 신호로만, 계열끼리 같은 색 */
+.k-밸류업\/이관 { background: var(--blue-bg); color: var(--blue); }
+.k-외근 { background: var(--green-bg); color: var(--green); }
+.k-시험 { background: var(--k-int-bg); color: var(--k-int-fg); }
+.k-입과교육, .k-입과전교육생일정 { background: var(--amber-bg); color: var(--amber); }
+.k-지점일정, .k-본부일정 { background: var(--k-lec-bg); color: var(--k-lec-fg); }
+.dot.k-밸류업\/이관 { background: var(--blue); }
+.dot.k-시험 { background: #8a63d2; }
+.dot.k-입과교육, .dot.k-입과전교육생일정 { background: var(--amber); }
+.dot.k-지점일정, .dot.k-본부일정 { background: var(--cyan); }

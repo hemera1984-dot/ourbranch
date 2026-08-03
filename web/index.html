@@ -517,15 +517,29 @@
     var g = GRADES.filter(function (x) { return x.name === name; })[0];
     return g ? g.code : "";
   }
-  var KINDS = ["TS1", "TS2", "GROW", "차월교육", "상담", "외근", "내근", "교육", "강의", "면접", "회의", "휴가", "마감", "기타"];
+  // 현장에서 쓰는 말 그대로 (2026-08-03 부지점장 확인).
+  // 「상담」은 외근에 들어가므로 「밸류업/이관」으로 바꿨다.
+  var KINDS = [
+    "밸류업/이관", "외근", "내근",
+    "TS1", "TS2", "시험",
+    "입과전교육생일정", "입과교육", "차월교육", "교육",
+    "지점일정", "본부일정", "회의", "마감", "휴가", "기타"
+  ];
+  // 예전에 저장된 구분(상담·강의·면접·GROW)도 색·형식은 그대로 읽는다.
+  // 목록에서만 뺐다 — 지난 기록을 깨뜨리지 않기 위해서다.
+  var OLD_KINDS = ["상담", "강의", "면접", "GROW"];
+  function knownKind(k) { return KINDS.indexOf(k) >= 0 || OLD_KINDS.indexOf(k) >= 0; }
 
   // 구분마다 필요한 항목이 다르다. 여기 한 곳에서만 정한다.
   // people: 팀원 명단에서 고르는 칸 / num: 숫자 한 칸 / place: 장소 / title: 자유 입력
   var KIND_FORM = {
     "TS1":    { label: "1차 면접", people: "면접관", place: true },
     "TS2":    { label: "2차 면접", people: "면접관", place: true },
-    "GROW":   { label: "GROW 교육", people: "교육 대상", place: true },
-    "차월교육": { label: "차월 교육", num: "차월", people: "교육 대상", place: true }
+    "시험":    { label: "시험", people: "대상", place: true },
+    "입과전교육생일정": { label: "입과 전 교육생", people: "교육생", place: true },
+    "입과교육": { label: "입과 교육", people: "교육 대상", place: true },
+    "차월교육": { label: "차월 교육", num: "차월", people: "교육 대상", place: true },
+    "GROW":   { label: "GROW 교육", people: "교육 대상", place: true }   // 예전 기록용
   };
 
   // 목록에 뜰 제목을 세부 항목에서 만든다 — 화면 어디서나 한 줄로 읽히게
@@ -993,7 +1007,7 @@
       function evLine(e) {
         return '<div class="tile-row">'
           + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
-          + '<span class="chip k-' + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타") + '">' + esc(e.kind) + "</span>"
+          + '<span class="chip k-' + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타") + '">' + esc(e.kind) + "</span>"
           + '<span class="slot-title">' + esc((e.member_email && e.member_email !== BOOT.me.email ? nameOf(e.member_email) + " · " : "") + (e.title || "")) + "</span>"
           + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "") + "</div>";
       }
@@ -1825,7 +1839,7 @@
         cols: EV_COLS,
         year: days[0].getFullYear(),
         rows: rows,
-        fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "상담" },
+        fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "외근" },
         canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.isManager; },
         onDeleteRow: function (r, done) { api("/events/" + r._id, { method: "DELETE" }).then(done).then(loadWeek); }
       });
@@ -1839,7 +1853,7 @@
     return em ? (em === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager;
   }
   function slotHtml(e) {
-    var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+    var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
     // 고객미팅(마이가디언 연동)은 여기서 수정하지 않는다 — 코드 표기 + 고객 상세 딥링크만
     var fromMg = e.source === "myguardian";
     var editable = !fromMg && (e.member_email ? (e.member_email === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager);
@@ -2021,7 +2035,7 @@
     });
 
     // 새 일정은 지난번에 쓴 구분·시간으로 시작한다 — 대부분 그대로 저장한다
-    var kind = o.kind || recall("일정구분", "상담");
+    var kind = o.kind || recall("일정구분", "외근");
     if (isNew && !o.start) {
       var lastS = recall("일정시작"), lastE = recall("일정끝");
       if (lastS) p.querySelector("#pop-start").value = lastS;
@@ -2298,7 +2312,7 @@
       var cell = ['<div class="cal-cell' + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
       cell.push('<span class="cal-daynum">' + d + "</span>");
       function kindClsOf(e) {
-        return "k-" + (e.kind === "고객미팅" ? "고객미팅" : KINDS.indexOf(e.kind) >= 0 ? e.kind : "기타");
+        return "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
       }
       if (compact) {
         // 소형 달력: 색 점만 (최대 4)
@@ -2346,8 +2360,9 @@
   $("view-week").addEventListener("click", function () { setSchedView("week"); });
   // ── 빠른 입력 — 구분을 하나 골라두고 날짜를 눌러 찍는다 ──
   // 반복되는 일정(상담·외근·교육)을 한 달치 넣을 때 창을 매번 열지 않게 한다.
-  var stampOn = false, stampKind = "상담";
-  var STAMP_KINDS = ["상담", "외근", "내근", "교육", "회의", "휴가"];
+  // 달력에서 날짜만 눌러 바로 찍는 구분 — 개인이 자주 쓰는 것만
+  var stampOn = false, stampKind = "외근";
+  var STAMP_KINDS = ["밸류업/이관", "외근", "내근", "교육", "회의", "휴가"];
 
   function renderStampBar() {
     [["stamp-toggle", "stamp-kinds", "stamp-hint"], ["m-stamp-toggle", "m-stamp-kinds", null]]
