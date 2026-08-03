@@ -659,7 +659,40 @@ async function main() {
   assert.ok(moved, "복사된 일정이 있어야 한다");
   assert.equal(new Date(moved.date + "T00:00:00").getDay(), 1);   // 여전히 월요일
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사 확인 완료");
+  // 35) 일정 세부 — 면접관·교육 대상·차월이 저장되고 그대로 돌아온다
+  const evTS1 = await (await api("t-esl1", "POST", "/events", {
+    date: "2027-06-07", kind: "TS1", title: "1차 면접 · 면접관 부지점장1", teamId: 1,
+    place: "본부 회의실", detail: { people: ["esl1@x.com", "fc1@x.com"] }
+  })).json();
+  let evs6 = await (await api("t-esl1", "GET", "/events?from=2027-06-01&to=2027-06-30")).json();
+  let rowTS1 = evs6.filter(e => e.id === evTS1.id)[0];
+  assert.equal(JSON.parse(rowTS1.detail).people.length, 2);
+  assert.equal(rowTS1.place, "본부 회의실");
+  // 차월교육 — 숫자도 함께
+  const evCha = await (await api("t-esl1", "POST", "/events", {
+    date: "2027-06-14", kind: "차월교육", title: "3차월 교육", teamId: 1,
+    detail: { num: 3, people: ["fc1@x.com"] }
+  })).json();
+  evs6 = await (await api("t-esl1", "GET", "/events?from=2027-06-01&to=2027-06-30")).json();
+  assert.equal(JSON.parse(evs6.filter(e => e.id === evCha.id)[0].detail).num, 3);
+  // 수정해도 세부가 남는다 (보내지 않으면 그대로)
+  assert.equal((await api("t-esl1", "POST", "/events/" + evTS1.id, { start: "14:00" })).status, 200);
+  evs6 = await (await api("t-esl1", "GET", "/events?from=2027-06-01&to=2027-06-30")).json();
+  rowTS1 = evs6.filter(e => e.id === evTS1.id)[0];
+  assert.equal(JSON.parse(rowTS1.detail).people.length, 2);
+  assert.equal(rowTS1.start, "14:00");
+  // 반복으로 한 달치 — 세부가 모든 회차에 붙는다
+  const rep6 = await (await api("t-esl1", "POST", "/events", {
+    date: "2027-07-05", kind: "GROW", title: "GROW 교육", teamId: 1,
+    detail: { people: ["fc1@x.com"] }, repeat: { every: "week", count: 4 }
+  })).json();
+  assert.equal(rep6.count, 4);
+  const jul = await (await api("t-esl1", "GET", "/events?from=2027-07-01&to=2027-07-31")).json();
+  const grows = jul.filter(e => e.kind === "GROW");
+  assert.equal(grows.length, 4);
+  grows.forEach(e => assert.equal(JSON.parse(e.detail).people[0], "fc1@x.com"));
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

@@ -517,7 +517,25 @@
     var g = GRADES.filter(function (x) { return x.name === name; })[0];
     return g ? g.code : "";
   }
-  var KINDS = ["상담", "외근", "내근", "교육", "강의", "면접", "회의", "휴가", "마감", "기타"];
+  var KINDS = ["TS1", "TS2", "GROW", "차월교육", "상담", "외근", "내근", "교육", "강의", "면접", "회의", "휴가", "마감", "기타"];
+
+  // 구분마다 필요한 항목이 다르다. 여기 한 곳에서만 정한다.
+  // people: 팀원 명단에서 고르는 칸 / num: 숫자 한 칸 / place: 장소 / title: 자유 입력
+  var KIND_FORM = {
+    "TS1":    { label: "1차 면접", people: "면접관", place: true },
+    "TS2":    { label: "2차 면접", people: "면접관", place: true },
+    "GROW":   { label: "GROW 교육", people: "교육 대상", place: true },
+    "차월교육": { label: "차월 교육", num: "차월", people: "교육 대상", place: true }
+  };
+
+  // 목록에 뜰 제목을 세부 항목에서 만든다 — 화면 어디서나 한 줄로 읽히게
+  function composeTitle(kind, det) {
+    var f = KIND_FORM[kind];
+    if (!f) return null;
+    var who = (det.people || []).map(function (em) { return nameOf(em) || em; }).join(", ");
+    var head = f.num && det.num ? det.num + "차월 교육" : f.label;
+    return head + (who ? " · " + f.people + " " + who : "");
+  }
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -1928,7 +1946,7 @@
       }).join("") + "</div>"
       + '<div class="pop-row"><input type="time" class="input" id="pop-start" value="' + esc(o.start || "") + '">'
       + '<input type="time" class="input" id="pop-end" value="' + esc(o.end || "") + '"></div>'
-      + '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="' + esc(o.title || "") + '"></div>'
+      + '<div id="pop-form"></div>'
       + '<div class="pop-row"><input type="text" class="input" id="pop-place" placeholder="장소" value="' + esc(o.place || "") + '"></div>'
       // 반복 — 평소엔 「반복 안 함」 한 칸뿐이고, 고를 때만 횟수 칸이 나온다.
       // (일정 추가는 간단해야 한다 — 헌법 「일정 화면 불변 원칙」)
@@ -1953,6 +1971,9 @@
       p.style.top = (r.bottom + window.scrollY + 4) + "px";
     }
 
+    // 구분별 입력칸 — 고른 구분에 필요한 것만 보여준다.
+    // TS1·TS2는 면접관, GROW는 교육 대상, 차월교육은 차월까지.
+
     if (isNew) p.querySelector("#pop-rep").addEventListener("change", function () {
       p.querySelector("#pop-rep-n").hidden = !this.value;
     });
@@ -1965,21 +1986,68 @@
       if (lastE) p.querySelector("#pop-end").value = lastE;
     }
     p.querySelectorAll(".kpick").forEach(function (x) { x.classList.toggle("sel", x.dataset.k === kind); });
+
+    // 구분이 정해진 뒤에 칸을 그린다 — 앞에서 그리면 kind가 아직 undefined다
+    var detail = (function () {
+      try { return o.detail ? (typeof o.detail === "string" ? JSON.parse(o.detail) : o.detail) : {}; }
+      catch (e) { return {}; }
+    })();
+    function renderKindForm() {
+      var f = KIND_FORM[kind];
+      var box = p.querySelector("#pop-form");
+      if (!f) {
+        box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용" value="'
+          + esc(o.title || "") + '"></div>';
+        return;
+      }
+      var roster = rosterOf(o.pickMember ? myTeamId() : (BOOT.me.teamId || myTeamId()));
+      var picked = detail.people || [];
+      box.innerHTML =
+        (f.num
+          ? '<div class="pop-row"><input type="number" min="1" max="60" class="input" id="pop-num" placeholder="'
+            + f.num + ' (숫자)" value="' + esc(detail.num || "") + '" style="width:110px">'
+            + '<span class="note">차월</span></div>'
+          : "")
+        + '<div class="pop-row" style="display:block"><span class="note" style="display:block;margin-bottom:4px">'
+        + f.people + '</span><div class="whopick" id="pop-who">'
+        + roster.map(function (m) {
+          return '<button type="button" class="gchip' + (picked.indexOf(m.email) >= 0 ? " on" : "") + '"'
+            + ' data-em="' + esc(m.email) + '">' + esc(memberLabel(m)) + "</button>";
+        }).join("") + "</div></div>";
+      box.querySelector("#pop-who").addEventListener("click", function (e) {
+        var b = e.target.closest(".gchip"); if (!b) return;
+        b.classList.toggle("on");
+      });
+    }
+    renderKindForm();
     p.querySelector(".kpicks").addEventListener("click", function (e) {
       var b = e.target.closest(".kpick"); if (!b) return;
       kind = b.dataset.k;
       p.querySelectorAll(".kpick").forEach(function (x) { x.classList.toggle("sel", x === b); });
+      renderKindForm();
     });
     p.querySelector("#pop-close").addEventListener("click", closePop);
     p.querySelector("#pop-save").addEventListener("click", function () {
       var em = o.pickMember ? p.querySelector("#pop-member").value : o.em;
+      var det = null, ttl = "";
+      if (KIND_FORM[kind]) {
+        det = {
+          people: [].map.call(p.querySelectorAll("#pop-who .gchip.on"), function (b) { return b.dataset.em; })
+        };
+        var numEl = p.querySelector("#pop-num");
+        if (numEl && numEl.value) det.num = Number(numEl.value);
+        ttl = composeTitle(kind, det);
+      } else {
+        ttl = p.querySelector("#pop-title").value.trim();
+      }
       var body = {
         memberEmail: em || null, date: o.date, kind: kind,
         start: p.querySelector("#pop-start").value || null,
         end: p.querySelector("#pop-end").value || null,
-        title: p.querySelector("#pop-title").value.trim(),
+        title: ttl,
         place: p.querySelector("#pop-place").value.trim()
       };
+      if (det) body.detail = det;
       if (isNew) {
         remember("일정구분", kind);
         remember("일정시작", body.start || "");
@@ -2006,7 +2074,7 @@
       var em = ev.member_email || "";
       if (!canWriteCell(em)) return;
       e.stopPropagation();
-      openPop(slot, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place });
+      openPop(slot, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, detail: ev.detail });
       return;
     }
     var cell = e.target.closest(".week-cell");

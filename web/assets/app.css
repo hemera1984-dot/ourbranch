@@ -682,3 +682,13 @@ a.slot-title:hover { text-decoration: underline; }
   background: var(--surface); box-shadow: 1px 0 0 var(--line);
 }
 #att-table thead th:first-child { background: var(--canvas); z-index: 2; }
+
+/* 일정 세부 — 면접관·교육 대상은 명단에서 고른다 (이름을 치지 않는다) */
+.whopick { display: flex; flex-wrap: wrap; gap: 4px; max-height: 132px; overflow-y: auto; }
+.whopick .gchip { font-size: 12px; padding: 5px 10px; }
+
+/* 새 구분 색 — 면접 계열은 보라, 교육 계열은 황갈 */
+.k-TS1, .k-TS2 { background: var(--k-int-bg); color: var(--k-int-fg); }
+.k-GROW, .k-차월교육 { background: var(--amber-bg); color: var(--amber); }
+.dot.k-TS1, .dot.k-TS2 { background: #8a63d2; }
+.dot.k-GROW, .dot.k-차월교육 { background: var(--amber); }

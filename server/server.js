@@ -344,7 +344,8 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   const byMonth = rep.every === "month";            // 매월 같은 날짜 (교육·정기 회의)
   const count = stepDays || byMonth ? Math.min(Math.max(Number(rep.count) || 1, 1), 52) : 1;
 
-  const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  const detail = b.detail ? JSON.stringify(b.detail).slice(0, 2000) : "";
   const base = new Date(b.date + "T00:00:00");
   const ids = [];
   for (let i = 0; i < count; i++) {
@@ -355,7 +356,7 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
       : new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i);
     const ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     ids.push(Number(ins.run(teamId, memberEmail, ds, b.start || null, b.end || null,
-      b.kind || "기타", b.title || "", b.place || "").lastInsertRowid));
+      b.kind || "기타", b.title || "", b.place || "", detail).lastInsertRowid));
   }
   send(res, 200, { id: ids[0], ids, count: ids.length });
 });
@@ -409,9 +410,10 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
     const t = getMember(db, nextEmail);
     if (!t || !canWriteTeam(user, t.team_id)) return send(res, 403, { error: "다른 팀 구성원입니다" });
   }
-  db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ? WHERE id = ?")
+  const nextDetail = b.detail !== undefined ? JSON.stringify(b.detail).slice(0, 2000) : e.detail;
+  db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ?, detail = ? WHERE id = ?")
     .run(nextEmail, b.date ?? e.date, b.start ?? e.start, b.end ?? e.end,
-         b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, e.id);
+         b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, nextDetail, e.id);
   send(res, 200, { ok: true });
 });
 

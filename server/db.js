@@ -250,7 +250,9 @@ export function openDb(file) {
     "ALTER TABLE members ADD COLUMN sort_order INTEGER",
     // 나간 사람은 지우지 않고 내린다 — 지우면 그 사람의 일정·일지·업적이 고아가 된다
     "ALTER TABLE members ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
-    "ALTER TABLE members ADD COLUMN left_at TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE members ADD COLUMN left_at TEXT NOT NULL DEFAULT ''",
+    // 일정 세부 — 구분마다 필요한 항목이 다르다 (면접관·대상자·차월). JSON으로 담는다.
+    "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)
