@@ -71,6 +71,16 @@
     </div>
   </aside>
 
+  <!-- 폰 하단 탭 — 자주 쓰는 넷만. 나머지는 「더보기」.
+       상단 가로 스크롤 메뉴는 항목이 11개라 폰에서 오른쪽 절반이 보이지 않았다. -->
+  <nav class="tabbar" id="tabbar" hidden>
+    <a href="#home" data-screen="home"><span>홈</span></a>
+    <a href="#sched" data-screen="sched"><span>일정</span></a>
+    <a href="#att" data-screen="att"><span>일일보고</span></a>
+    <a href="#board" data-screen="board"><span>미션·공지</span><i class="tab-dot" id="tab-dot" hidden></i></a>
+    <button type="button" id="tab-more"><span>더보기</span></button>
+  </nav>
+
   <main class="main">
     <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
       <select id="team-pick" class="input" hidden></select>
@@ -687,6 +697,7 @@
     return isNaN(v) || !v ? (BOOT.teams[0] ? BOOT.teams[0].id : null) : v;
   }
   function renderShell() {
+    $("tabbar").hidden = !isMobile();
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
     $("me-name").textContent = BOOT.me.name;
@@ -720,6 +731,7 @@
       var link = document.querySelector('#nav a[data-screen="board"]');
       if (!link) return;
       var n = unread + undone;
+      $("tab-dot").hidden = !(n > 0);
       link.textContent = "미션·공지";
       if (n > 0) {
         var b = document.createElement("span");
@@ -736,7 +748,8 @@
   // 창을 닫으면 조용히 사라진다 — 하루치 TA를 통째로 잃는 사고가 된다.
   function pendingGrid() {
     if (screen === "ta" && taGrid && taGrid.hasChanges()) return taGrid;
-    if (screen === "perf" && perfGrids && perfGrids.some(function (g) { return g && g.hasChanges(); })) return true;
+    // perfGrids 항목은 그리드 자체가 아니라 {member, grid, ...} 묶음이다
+    if (screen === "perf" && perfGrids && perfGrids.some(function (g) { return g && g.grid && g.grid.hasChanges(); })) return true;
     return null;
   }
   function confirmLeave() {
@@ -756,9 +769,10 @@
     }
     screen = name;
     SCREENS.forEach(function (s) { $("screen-" + s).hidden = s !== name; });
-    document.querySelectorAll("#nav a").forEach(function (a) {
+    document.querySelectorAll("#nav a, #tabbar a").forEach(function (a) {
       a.classList.toggle("active", a.dataset.screen === name);
     });
+    document.body.classList.remove("more-open");
     $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit");
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
@@ -774,6 +788,17 @@
     if (name === "perf") loadPerf();
     if (name === "recruit") loadRecruit();
   }
+  // 폰 하단 탭 — 넷은 바로, 나머지는 「더보기」로 사이드 메뉴를 연다
+  $("tabbar").addEventListener("click", function (e) {
+    var a = e.target.closest("a"); if (!a) return;
+    e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
+  });
+  $("tab-more").addEventListener("click", function () {
+    document.body.classList.toggle("more-open");
+  });
+  // 메뉴에서 고르면 더보기는 닫는다
+  $("nav").addEventListener("click", function () { document.body.classList.remove("more-open"); });
+
   $("nav").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
     e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);

@@ -493,8 +493,15 @@ route("POST", /^\/tasks$/, true, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.title) return send(res, 400, { error: "팀·제목이 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
+  // 「전체」를 그대로 저장하면 분모가 「지금 인원」이 된다 — 팀원이 늘면 지난달 100%가
+  // 80%로 떨어진다. 부여하는 순간의 명단을 박아 둔다.
+  let targets = b.targets;
+  if (!targets || targets === "전체") {
+    targets = db.prepare("SELECT email FROM members WHERE team_id = ? AND active = 1").all(teamId).map(x => x.email);
+    if (!targets.length) targets = "전체";        // 명단이 비었으면 옛 방식으로 둔다
+  }
   const r = db.prepare("INSERT INTO tasks (team_id, title, content, targets, status, assigned, due) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(teamId, b.title, b.content || "", JSON.stringify(b.targets || "전체"), "요청", today(), b.due || null);
+    .run(teamId, b.title, b.content || "", JSON.stringify(targets), "요청", today(), b.due || null);
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
@@ -812,16 +819,26 @@ route("POST", /^\/events\/copy-month$/, false, async (req, res, user) => {
     // 관리자가 아니면 자기 일정만 옮긴다
     .filter(e => user.isManager || e.member_email === user.email);
 
-  const lastDay = new Date(Number(to.slice(0, 4)), Number(to.slice(5, 7)), 0).getDate();
+  // 날짜(3일 → 3일)로 옮기면 요일이 어긋난다 — 월요일 조회가 수요일로 간다.
+  // 「그 달의 몇째 주 무슨 요일」을 지켜서 옮긴다. 다섯째 주가 없으면 마지막 같은 요일로.
+  function moveByWeekday(dateStr, toMonth) {
+    const d = new Date(dateStr + "T00:00:00");
+    const nth = Math.floor((d.getDate() - 1) / 7);        // 0-based 몇째 주
+    const dow = d.getDay();
+    const y = Number(toMonth.slice(0, 4)), mo = Number(toMonth.slice(5, 7)) - 1;
+    const first = new Date(y, mo, 1);
+    let day = 1 + ((dow - first.getDay() + 7) % 7) + nth * 7;
+    const last = new Date(y, mo + 1, 0).getDate();
+    while (day > last) day -= 7;                          // 다섯째 주가 없으면 한 주 당긴다
+    return y + "-" + String(mo + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  }
   const exists = db.prepare(
     "SELECT 1 FROM events WHERE date = ? AND team_id = ? AND kind = ? AND title = ? AND IFNULL(member_email,'') = IFNULL(?,'')"
   );
   const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
   let copied = 0, skipped = 0;
   for (const e of src) {
-    const day = Number(e.date.slice(8, 10));
-    if (day > lastDay) { skipped++; continue; }            // 31일 → 30일뿐인 달
-    const nd = to + "-" + String(day).padStart(2, "0");
+    const nd = moveByWeekday(e.date, to);
     if (exists.get(nd, teamId, e.kind, e.title, e.member_email)) { skipped++; continue; }
     ins.run(teamId, e.member_email, nd, e.start, e.end, e.kind, e.title, e.place);
     copied++;

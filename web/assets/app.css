@@ -343,6 +343,25 @@ a.slot-title:hover { text-decoration: underline; }
   padding: 13px 22px; font-size: 15px; box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 
+/* ── 폰 하단 탭 ── */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+  display: flex; background: var(--navy);
+  border-top: 1px solid rgba(255,255,255,.12);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tabbar a, .tabbar button {
+  flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+  min-height: 54px; padding: 0; border: 0; background: none; cursor: pointer;
+  color: rgba(255,255,255,.68); font: inherit; font-size: 13px; font-weight: 600;
+  text-decoration: none; border-top: 3px solid transparent;
+}
+.tabbar a.active { color: #fff; border-top-color: var(--cyan); }
+.tab-dot {
+  position: absolute; top: 12px; right: 50%; margin-right: -26px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--cyan);
+}
+
 @media (max-width: 900px) {
   .shell { display: block; }
   .sidebar { width: 100%; border-top-width: 3px; }
@@ -367,6 +386,11 @@ a.slot-title:hover { text-decoration: underline; }
   }
   .btn { padding: 9px 16px; }
   .input, select.input { padding: 9px 12px; }
+  /* 상단 메뉴는 접어 두고 하단 탭으로 다닌다. 「더보기」를 누르면 펼쳐진다. */
+  .nav, .side-user { display: none; }
+  body.more-open .nav, body.more-open .side-user { display: block; }
+  body.more-open .nav { display: flex; flex-wrap: wrap; }
+  .main { padding-bottom: 74px; }
 }
 
 /* 홈 오늘 할 일 — 남은 항목 표시 점 */
@@ -651,3 +675,10 @@ a.slot-title:hover { text-decoration: underline; }
   .slot-title { font-size: 14px; }
   .slot-time, .slot-place { font-size: 13px; }
 }
+
+/* 일일보고 팀 표 — 가로로 밀어도 이름은 남아 있어야 한다 (누구 건지 잃지 않게) */
+#att-table th:first-child, #att-table td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--surface); box-shadow: 1px 0 0 var(--line);
+}
+#att-table thead th:first-child { background: var(--canvas); z-index: 2; }

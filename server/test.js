@@ -362,14 +362,17 @@ async function main() {
   assert.equal((await api("t-fc1", "POST", "/events", { date: "2026.9.1", memberEmail: "fc1@x.com", kind: "상담" })).status, 400);
   assert.equal((await api("t-fc1", "POST", "/perf", { month: "2026-09", rows: [{ member: "팀원1", contract_date: "9/2" }] })).status, 400);
 
-  // 16) 지난달 일정 복사 — 같은 날짜 위치로, 중복은 건너뛴다
+  // 16) 지난달 일정 복사 — 날짜가 아니라 「몇째 주 무슨 요일」을 지킨다.
+  // 10/5(첫째 주 월) → 11/2(첫째 주 월). 날짜로 옮기면 11/5는 목요일이라 조회가 엉뚱한 날로 간다.
   await api("t-esl1", "POST", "/events", { date: "2026-10-05", kind: "회의", title: "월간 조회", teamId: 1 });
   await api("t-esl1", "POST", "/events", { date: "2026-10-12", kind: "교육", title: "정기 교육", teamId: 1 });
   let cp = await (await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 1 })).json();
   assert.equal(cp.copied, 2);
   const nov = await (await api("t-esl1", "GET", "/events?from=2026-11-01&to=2026-11-30")).json();
-  assert.ok(nov.some(e => e.date === "2026-11-05" && e.title === "월간 조회"));
-  assert.ok(nov.some(e => e.date === "2026-11-12" && e.title === "정기 교육"));
+  assert.ok(nov.some(e => e.date === "2026-11-02" && e.title === "월간 조회"));
+  assert.ok(nov.some(e => e.date === "2026-11-09" && e.title === "정기 교육"));
+  nov.filter(e => ["월간 조회", "정기 교육"].includes(e.title))
+     .forEach(e => assert.equal(new Date(e.date + "T00:00:00").getDay(), 1));   // 전부 월요일
   // 다시 실행하면 전부 건너뛴다 (중복 생성 없음)
   cp = await (await api("t-esl1", "POST", "/events/copy-month", { from: "2026-10", to: "2026-11", teamId: 1 })).json();
   assert.equal(cp.copied, 0); assert.equal(cp.skipped, 2);
@@ -635,7 +638,28 @@ async function main() {
   assert.equal((await api("t-super", "POST", "/admin/members/" + encodeURIComponent("new@x.com") + "/restore")).status, 200);
   assert.equal((await api("t-new", "GET", "/bootstrap")).status, 200);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기 확인 완료");
+  // 33) 미션 대상은 부여 시점 명단으로 고정 — 팀원이 늘어도 지난 미션 달성률이 안 떨어진다
+  const tk = await (await api("t-esl1", "POST", "/tasks", { teamId: 1, title: "부여시점 확인" })).json();
+  let tasks = await (await api("t-esl1", "GET", "/tasks")).json();
+  let mine = tasks.filter(t => t.id === tk.id)[0];
+  assert.ok(Array.isArray(mine.targets));               // 「전체」가 아니라 명단이 박혀 있다
+  const targetCount = mine.targets.length;
+  await api("t-super", "POST", "/admin/members", { email: "나중에@x.com", name: "나중입사", teamId: 1, role: "팀원" });
+  tasks = await (await api("t-esl1", "GET", "/tasks")).json();
+  mine = tasks.filter(t => t.id === tk.id)[0];
+  assert.equal(mine.targets.length, targetCount);       // 사람이 늘어도 분모는 그대로
+
+  // 34) 지난달 일정 가져오기 — 날짜가 아니라 요일을 지킨다
+  // 2027-03-01은 월요일. 첫째 주 월요일 → 4월 첫째 주 월요일(2027-04-05)이어야 한다.
+  await api("t-esl1", "POST", "/events", { date: "2027-03-01", kind: "회의", title: "월요 조회", teamId: 1 });
+  const cpw = await (await api("t-esl1", "POST", "/events/copy-month", { from: "2027-03", to: "2027-04", teamId: 1 })).json();
+  assert.ok(cpw.copied > 0);
+  const aprEvs = await (await api("t-esl1", "GET", "/events?from=2027-04-01&to=2027-04-30")).json();
+  const moved = aprEvs.filter(e => e.title === "월요 조회")[0];
+  assert.ok(moved, "복사된 일정이 있어야 한다");
+  assert.equal(new Date(moved.date + "T00:00:00").getDay(), 1);   // 여전히 월요일
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
