@@ -1391,6 +1391,8 @@
       + '<span class="r">' + esc(m.role) + "</span>"
       + "<span>" + esc(memberLabel(m)) + "</span>"
       + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
+      + (mg ? '<button type="button" class="oc-under" title="이 사람이 뽑은 사람 추가" data-under="'
+              + esc(m.email) + '" data-team="' + teamId + '">+</button>' : "")
       + "</div>";
   }
 
@@ -1587,9 +1589,10 @@
       + BOOT.teams.map(function (t) {
         return '<option value="' + t.id + '"' + (teamId === t.id ? " selected" : "") + ">" + esc(t.name) + "</option>";
       }).join("");
+    var preUp = (m && m.recruiter_email) || opts.recruiter || "";
     $("mp-recruiter").innerHTML = '<option value="">도입자 없음</option>'
       + BOOT.members.filter(function (x) { return !m || x.email !== m.email; }).map(function (x) {
-        return '<option value="' + esc(x.email) + '"' + (m && m.recruiter_email === x.email ? " selected" : "")
+        return '<option value="' + esc(x.email) + '"' + (preUp === x.email ? " selected" : "")
           + ">도입자: " + esc(memberLabel(x)) + "</option>";
       }).join("");
 
@@ -1693,8 +1696,8 @@
   var dragEmail = null;
 
   function clearDropMarks() {
-    document.querySelectorAll(".oc-member.drop-before, .oc-member.drop-after")
-      .forEach(function (e) { e.classList.remove("drop-before", "drop-after"); });
+    document.querySelectorAll(".oc-member.drop-under")
+      .forEach(function (e) { e.classList.remove("drop-under"); });
   }
 
   // 끌어 놓은 결과대로 팀 하나의 순서를 통째로 저장한다
@@ -1703,13 +1706,28 @@
       .then(refreshBoot).then(renderOrg);
   }
 
-  function moveWithin(email, teamId, before) {
-    var list = rosterOf(teamId).map(function (m) { return m.email; })
-      .filter(function (e) { return e !== email; });
-    var at = before ? list.indexOf(before) : list.length;
-    if (at < 0) at = list.length;
-    list.splice(at, 0, email);
-    return saveOrder(teamId, list);
+  // 피라미드에서 드래그는 「누구 밑으로 옮기나」다. 순서가 아니라 계보를 바꾼다.
+  // 자기 아래 사람 밑으로는 못 옮긴다 — 그러면 줄기가 끊겨 사라진다.
+  function isBelow(email, maybeChildEmail) {
+    var up = (BOOT.members.filter(function (m) { return m.email === maybeChildEmail; })[0] || {}).recruiter_email;
+    var guard = 0;
+    while (up && guard++ < 50) {
+      if (up === email) return true;
+      up = (BOOT.members.filter(function (m) { return m.email === up; })[0] || {}).recruiter_email;
+    }
+    return false;
+  }
+  function moveUnder(email, upEmail) {
+    if (email === upEmail) return;
+    if (upEmail && isBelow(email, upEmail)) {
+      alert("자기 아래 사람 밑으로는 옮길 수 없습니다.");
+      return;
+    }
+    var t = BOOT.members.filter(function (m) { return m.email === upEmail; })[0];
+    return api("/admin/members", { method: "POST", body: {
+      email: email, recruiterEmail: upEmail || "",
+      teamId: t ? t.team_id : undefined
+    } }).then(refreshBoot).then(renderOrg);
   }
 
   $("org-chart").addEventListener("dragstart", function (e) {
@@ -1725,43 +1743,33 @@
     clearDropMarks();
     document.querySelectorAll(".oc-member.dragging").forEach(function (e) { e.classList.remove("dragging"); });
   });
+  // 사람 위에 놓으면 그 사람이 도입자가 된다
   $("org-chart").addEventListener("dragover", function (e) {
     if (!dragEmail) return;
     var over = e.target.closest(".oc-member");
-    var box = e.target.closest(".oc-members");
-    if (!box) return;
+    if (!over) return;
     e.preventDefault();
     clearDropMarks();
-    if (over && over.dataset.email !== dragEmail) {
-      var r = over.getBoundingClientRect();
-      over.classList.add(e.clientY < r.top + r.height / 2 ? "drop-before" : "drop-after");
-    }
+    if (over.dataset.email !== dragEmail) over.classList.add("drop-under");
   });
   $("org-chart").addEventListener("drop", function (e) {
     if (!dragEmail) return;
-    var box = e.target.closest(".oc-members");
-    if (!box) return;
-    e.preventDefault();
-    var teamId = Number(box.parentNode.querySelector(".oc-team-head").dataset.team);
     var over = e.target.closest(".oc-member");
-    var before = null;
-    if (over && over.dataset.email !== dragEmail) {
-      var r = over.getBoundingClientRect();
-      if (e.clientY < r.top + r.height / 2) before = over.dataset.email;
-      else {
-        var list = rosterOf(teamId);
-        var i = list.findIndex(function (m) { return m.email === over.dataset.email; });
-        before = list[i + 1] ? list[i + 1].email : null;
-      }
-    }
-    var em = dragEmail;
+    if (!over) return;
+    e.preventDefault();
+    var em = dragEmail, up = over.dataset.email;
     clearDropMarks();
     dragEmail = null;
-    moveWithin(em, teamId, before);
+    if (up !== em) moveUnder(em, up);
   });
 
   // 차트 클릭 — 팀 헤더 / 팀원 / 추가
   $("org-chart").addEventListener("click", function (e) {
+    var under = e.target.closest(".oc-under");
+    if (under) {   // 그 사람이 뽑은 사람으로 새로 만든다 — 도입자를 빼먹지 않게
+      openMemberPop(under, { teamId: Number(under.dataset.team), recruiter: under.dataset.under });
+      return;
+    }
     var add = e.target.closest(".oc-add");
     if (add) { openMemberPop(add, { teamId: Number(add.dataset.team) }); return; }
     if (e.target.closest(".oc-add-direct")) { openMemberPop(e.target, { teamId: null }); return; }
