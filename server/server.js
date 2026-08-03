@@ -517,19 +517,9 @@ route("POST", /^\/tasks$/, true, async (req, res, user) => {
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
-route("POST", /^\/tasks\/(\d+)\/status$/, false, async (req, res, user, m) => {
-  const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
-  if (!t || !canSeeTeam(user, t.team_id)) return send(res, 403, { error: "권한 없음" });
-  // 상태 변경은 미션 대상 본인 또는 자기 팀 관리자만 (전체열람은 보는 권한일 뿐)
-  const targets = JSON.parse(t.targets);
-  const isTarget = targets === "전체" || (Array.isArray(targets) && targets.includes(user.email));
-  if (!isTarget && !(user.isManager && canWriteTeam(user, t.team_id)))
-    return send(res, 403, { error: "대상 본인만" });
-  const b = await readJson(req);
-  if (!["요청", "진행중", "완료"].includes(b.status)) return send(res, 400, { error: "상태 값 오류" });
-  db.prepare("UPDATE tasks SET status = ? WHERE id = ?").run(b.status, t.id);
-  send(res, 200, { ok: true });
-});
+// 미션 상태(요청/진행중/완료) API는 걷어냈다 (2026-08-03).
+// 화면에서 쓴 적이 없고, 달성 여부는 task_done(사람마다 「확인」을 눌렀는지)이 판정한다.
+// 「완료」가 두 군데서 각각 정해지면 어느 쪽이 맞는지 아무도 모르게 된다.
 
 route("DELETE", /^\/tasks\/(\d+)$/, true, (req, res, user, m) => {
   const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(Number(m[1]));
@@ -909,9 +899,25 @@ function mergeMember(fromEmail, toEmail) {
     ["UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?"]
   ];
   for (const [sql] of moves) db.prepare(sql).run(toEmail, fromEmail);
-  // 출석·확인·달성은 같은 날짜/항목에 두 줄이 생기지 않게 옮긴 뒤 남은 것을 지운다
+  // 출석·일일보고는 내용이 있는 기록이다. 같은 날 두 줄이 있으면 그냥 버리지 않고
+  // 빈 칸만 채운다 — 버리면 그날 오전·점심·오후·특이사항이 통째로 사라진다.
+  const attFields = ["reason", "work", "lunch", "afternoon", "note"];
+  for (const from of db.prepare("SELECT * FROM attendance WHERE email = ?").all(fromEmail)) {
+    const to = db.prepare("SELECT * FROM attendance WHERE email = ? AND date = ?").get(toEmail, from.date);
+    if (!to) {
+      db.prepare("UPDATE attendance SET email = ? WHERE id = ?").run(toEmail, from.id);
+      continue;
+    }
+    const fill = attFields.filter(f => !String(to[f] || "").trim() && String(from[f] || "").trim());
+    if (fill.length)
+      db.prepare(`UPDATE attendance SET ${fill.map(f => f + " = ?").join(", ")} WHERE id = ?`)
+        .run(...fill.map(f => from[f]), to.id);
+    if (!to.present && from.present)
+      db.prepare("UPDATE attendance SET present = 1, checked_at = ? WHERE id = ?").run(from.checked_at, to.id);
+    db.prepare("DELETE FROM attendance WHERE id = ?").run(from.id);
+  }
+  // 확인·달성·참석은 「눌렀다」는 표시뿐이라 겹치면 하나만 남기면 된다
   for (const [sql, del] of [
-    ["UPDATE OR IGNORE attendance SET email = ? WHERE email = ?", "DELETE FROM attendance WHERE email = ?"],
     ["UPDATE OR IGNORE notice_reads SET email = ? WHERE email = ?", "DELETE FROM notice_reads WHERE email = ?"],
     ["UPDATE OR IGNORE task_done SET email = ? WHERE email = ?", "DELETE FROM task_done WHERE email = ?"],
     ["UPDATE OR IGNORE event_attendees SET email = ? WHERE email = ?", "DELETE FROM event_attendees WHERE email = ?"]

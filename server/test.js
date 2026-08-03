@@ -210,14 +210,12 @@ async function main() {
   assert.equal(perf.goals[0].goal, "1,000(100)");
   assert.equal((await (await api("t-fc2", "GET", "/perf?month=2026-08")).json()).rows.length, 0);
 
-  // 10-1) 미션: 대상 본인만 상태 변경, 삭제는 관리자만
+  // 10-1) 미션: 삭제는 관리자만.
+  // 미션 상태(요청/진행중/완료) API는 걷어냈다 — 달성 여부는 task_done이 판정한다.
   const t1 = await (await api("t-esl1", "POST", "/tasks", { title: "개인 미션", targets: ["fc1@x.com"], due: "2026-08-10" })).json();
   const t2 = await (await api("t-esl1", "POST", "/tasks", { title: "팀 미션", targets: "전체" })).json();
-  assert.equal((await api("t-fc1", "POST", "/tasks/" + t1.id + "/status", { status: "진행중" })).status, 200);
-  assert.equal((await api("t-fc1", "POST", "/tasks/" + t2.id + "/status", { status: "진행중" })).status, 200);
-  // fc1이 아닌 대상의 미션: 만들어서 fc1이 못 바꾸는지 — esl 대상 미션
-  const t3 = await (await api("t-super", "POST", "/tasks", { teamId: 1, title: "부지점장 개인 미션", targets: ["esl1@x.com"] })).json();
-  assert.equal((await api("t-fc1", "POST", "/tasks/" + t3.id + "/status", { status: "완료" })).status, 403);
+  assert.ok(t2.id);
+  assert.equal((await api("t-fc1", "POST", "/tasks/" + t1.id + "/status", { status: "진행중" })).status, 404);
   assert.equal((await api("t-fc1", "DELETE", "/tasks/" + t1.id)).status, 403);
   assert.equal((await api("t-esl1", "DELETE", "/tasks/" + t1.id)).status, 200);
 
@@ -762,7 +760,29 @@ async function main() {
   assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].goal, "B목표");
   assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].intro, 2);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인 확인 완료");
+  // 43) 자리 이어받기가 같은 날 출석을 버리지 않는다 — 빈 칸만 채운다 (코덱스 지적)
+  await api("t-super", "POST", "/admin/members", { email: "겹치는자리@미등록.local", name: "겹침", teamId: 1, role: "팀원" });
+  // 자리 쪽 출석은 API로 못 넣는다(각자 본인 것만 쓴다) — DB에 직접 넣어 상황을 만든다
+  {
+    const d = new DatabaseSync(DATA);
+    d.prepare(`INSERT INTO attendance (email, date, present, work, afternoon, checked_at)
+               VALUES (?, ?, 1, ?, ?, ?)`)
+      .run("겹치는자리@미등록.local", "2027-03-10", "자리쪽 오전", "자리쪽 오후", "2027-03-10T08:40:00+09:00");
+    d.close();
+  }
+  // 계정 쪽에는 같은 날 점심만 있다
+  await api("t-bm", "POST", "/attendance", { date: "2027-03-10", present: false, lunch: "계정쪽 점심" });
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "겹치는자리@미등록.local", accountEmail: "bm@x.com" })).status, 200);
+  const merged = (await (await api("t-super", "GET", "/attendance?date=2027-03-10")).json())
+    .filter(a => a.email === "bm@x.com");
+  assert.equal(merged.length, 1, "같은 날 두 줄이 남으면 안 된다");
+  assert.equal(merged[0].lunch, "계정쪽 점심");     // 원래 있던 값은 지키고
+  assert.equal(merged[0].work, "자리쪽 오전");      // 빈 칸은 자리 쪽에서 채운다
+  assert.equal(merged[0].afternoon, "자리쪽 오후");
+  assert.equal(merged[0].present, 1);               // 한쪽이라도 출근이면 출근
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
