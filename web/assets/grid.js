@@ -80,10 +80,13 @@ function makeGrid(root, opts) {
 
   function openChips(td, col) {
     closeChips();
+    var col = Object.assign({}, col, { opts: typeof col.opts === "function" ? col.opts() : col.opts });
+    if (!col.opts || !col.opts.length) return;
     var box = document.createElement("div");
     box.className = "grid-chips";
+    var cur = td.innerText.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
     box.innerHTML = col.opts.map(function (o) {
-      return '<button type="button" class="gchip' + (td.innerText.trim() === o ? " on" : "") + '">' + esc(o) + "</button>";
+      return '<button type="button" class="gchip' + (cur.indexOf(o) >= 0 ? " on" : "") + '">' + esc(o) + "</button>";
     }).join("") + '<button type="button" class="gchip clear">지우기</button>';
     document.body.appendChild(box);
     var r = td.getBoundingClientRect();
@@ -94,7 +97,21 @@ function makeGrid(root, opts) {
       var b = e.target.closest(".gchip");
       if (!b) return;
       e.preventDefault();                     // 칸의 포커스를 뺏지 않는다
-      td.innerText = b.classList.contains("clear") ? "" : b.textContent;
+      if (b.classList.contains("clear")) {
+        td.innerText = "";
+        box.querySelectorAll(".gchip.on").forEach(function (x) { x.classList.remove("on"); });
+        commitCell(td);
+        if (!col.multi) closeChips();
+        return;
+      }
+      if (col.multi) {
+        // 면접관처럼 여럿 고르는 칸 — 창을 열어둔 채로 켜고 끈다
+        b.classList.toggle("on");
+        td.innerText = [].map.call(box.querySelectorAll(".gchip.on"), function (x) { return x.textContent; }).join(", ");
+        commitCell(td);
+        return;
+      }
+      td.innerText = b.textContent;
       commitCell(td);
       closeChips();
     });

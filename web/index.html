@@ -1751,15 +1751,31 @@
     for (var i = 0; i < 5; i++) days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
     return days;
   }
+  // 면접관은 날마다 바뀐다 — 반복으로는 안 되고 여러 줄을 한 번에 넣어야 한다.
+  // 그래서 일괄 입력 표에 구분·차월·면접관 칸을 둔다 (2026-08-03 사용자 요청).
   var EV_COLS = [
-    { key: "member", label: "팀원 (비우면 팀 공유)", width: 110 },
+    { key: "member", label: "팀원 (비우면 팀 공유)", width: 110, opts: rosterNames },
     { key: "date", label: "날짜", width: 95, date: true },
     { key: "start", label: "시작", width: 55 },
     { key: "end", label: "종료", width: 55 },
-    { key: "kind", label: "구분", width: 55 },
-    { key: "title", label: "내용", width: 180 },
-    { key: "place", label: "장소", width: 120 }
+    { key: "kind", label: "구분", width: 70, opts: KINDS },
+    { key: "num", label: "차월", width: 48 },
+    { key: "people", label: "면접관 · 교육 대상", width: 170, opts: rosterNames, multi: true },
+    { key: "title", label: "내용 (구분이 정해지면 자동)", width: 170 },
+    { key: "place", label: "장소", width: 120, sticky: true }
   ];
+
+  function rosterNames() {
+    return rosterOf(myTeamId()).map(function (m) { return memberLabel(m); });
+  }
+  // 표에 적힌 이름들 → 이메일. 명단에 없으면 그대로 두고 저장 때 걸러낸다.
+  function emailsOf(text) {
+    return String(text || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean)
+      .map(function (n) {
+        var m = BOOT.members.filter(function (x) { return memberLabel(x) === n || x.name === n; })[0];
+        return m ? m.email : null;
+      }).filter(Boolean);
+  }
 
   function loadWeek() {
     var days = weekDays();
@@ -1776,10 +1792,16 @@
       });
       renderWeekView(evs, days);
       var rows = evs.map(function (e) {
+        // 저장된 세부(JSON)를 표에서 읽고 고칠 수 있는 글자로 편다
+        var d = {};
+        try { d = e.detail ? JSON.parse(e.detail) : {}; } catch (err) { d = {}; }
         return { _id: e.id, member: e.member_email ? nameOf(e.member_email) : "", date: e.date,
-                 start: e.start || "", end: e.end || "", kind: e.kind, title: e.title, place: e.place || "" };
+                 start: e.start || "", end: e.end || "", kind: e.kind, title: e.title, place: e.place || "",
+                 num: d.num || "",
+                 people: (d.people || []).map(function (em) { return nameOf(em) || em; }).join(", ") };
       });
       evGrid = makeGrid($("ev-grid"), {
+        memoryKey: "ev",
         cols: EV_COLS,
         year: days[0].getFullYear(),
         rows: rows,
@@ -2383,27 +2405,41 @@
     var jobs = [];
     function resolve(r) {
       if (!r.member) return { memberEmail: null };            // 팀 공유
-      var email = emailOf(r.member);
+      var email = emailOf(r.member) || emailsOf(r.member)[0];
       if (!email) { alert("명단에 없는 이름입니다: " + r.member); return null; }
       return { memberEmail: email };
     }
-    evGrid.newRows().filter(function (r) { return r.date && (r.title || r.place || r.start); }).forEach(function (r) {
+    // 구분이 정해진 것(TS1·GROW·차월교육 등)은 세부와 제목을 만들어 준다
+    function shape(r) {
+      var body = {
+        date: r.date, start: r.start || null, end: r.end || null,
+        kind: r.kind || "기타", title: r.title, place: r.place || ""
+      };
+      if (KIND_FORM[body.kind]) {
+        var det = { people: emailsOf(r.people) };
+        if (r.num) det.num = Number(r.num) || 0;
+        body.detail = det;
+        body.title = composeTitle(body.kind, det);
+      }
+      return body;
+    }
+    evGrid.newRows().filter(function (r) {
+      return r.date && (r.title || r.place || r.start || r.people || KIND_FORM[r.kind]);
+    }).forEach(function (r) {
       var who = resolve(r); if (!who) return;
-      jobs.push(api("/events", { method: "POST", body: {
-        teamId: teamId, memberEmail: who.memberEmail,
-        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title, place: r.place || ""
-      } }));
+      jobs.push(api("/events", { method: "POST",
+        body: Object.assign({ teamId: teamId, memberEmail: who.memberEmail }, shape(r)) }));
     });
     evGrid.dirtyRows().forEach(function (r) {
       var who = resolve(r); if (!who) return;
-      jobs.push(api("/events/" + r._id, { method: "POST", body: {
-        memberEmail: who.memberEmail,
-        date: r.date, start: r.start || null, end: r.end || null, kind: r.kind || "기타", title: r.title, place: r.place || ""
-      } }));
+      jobs.push(api("/events/" + r._id, { method: "POST",
+        body: Object.assign({ memberEmail: who.memberEmail }, shape(r)) }));
     });
     if (!jobs.length) return;
     Promise.all(jobs).then(function () { evGrid.markSaved(); loadWeek(); })
-      .catch(function () { loadWeek(); });   // 일부 실패해도 화면을 새로 읽어 중복 저장을 막는다
+      .catch(function (err) {
+        alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
+      });
   });
 
   // ── 일일보고 (하루 한 줄: 출석 + 오전·점심·오후·특이사항) ──
