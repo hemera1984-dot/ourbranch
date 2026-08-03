@@ -811,11 +811,15 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.goals)) return send(res, 400, { error: "팀·월·목표가 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  const prevOf = db.prepare("SELECT * FROM perf_goals WHERE team_id = ? AND month = ? AND member = ?");
+  // 목표의 주인은 이메일이다 — 같은 팀에 동명이인이 있어도 서로를 덮어쓰지 않는다.
+  // 이메일이 없는 자리(명단 밖 이름)는 「이름:홍길동」을 열쇠로 쓴다.
+  const keyOf = (email, name) => email || ("이름:" + name);
+  const prevOf = db.prepare("SELECT * FROM perf_goals WHERE team_id = ? AND month = ? AND member_key = ?");
   const up = db.prepare(
-    `INSERT INTO perf_goals (team_id, month, member, member_email, goal, intro) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(team_id, month, member) DO UPDATE SET
-       member_email = excluded.member_email, goal = excluded.goal, intro = excluded.intro`
+    `INSERT INTO perf_goals (team_id, month, member_key, member, member_email, goal, intro) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(team_id, month, member_key) DO UPDATE SET
+       member = excluded.member, member_email = excluded.member_email,
+       goal = excluded.goal, intro = excluded.intro`
   );
   // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다.
   // 화면은 「바뀐 항목만」 보낸다. 빈 칸을 그대로 보내 목표가 조용히 지워지던 사고를 막는다.
@@ -823,9 +827,10 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
     for (const g of b.goals) {
       if (!g.member) continue;
       if (g.goal === undefined && g.intro === undefined) continue;   // 바뀐 게 없으면 건드리지 않는다
-      const prev = prevOf.get(teamId, b.month, g.member) || {};
-      const em = g.memberEmail || emailForName(g.member) || prev.member_email || null;
-      up.run(teamId, b.month, g.member, em,
+      const em = g.memberEmail || emailForName(g.member) || null;
+      const key = keyOf(em, g.member);
+      const prev = prevOf.get(teamId, b.month, key) || {};
+      up.run(teamId, b.month, key, g.member, em,
         g.goal !== undefined ? g.goal : (prev.goal || ""),
         g.intro !== undefined ? (num(g.intro) || 0) : (prev.intro || 0));
     }
@@ -900,6 +905,7 @@ function mergeMember(fromEmail, toEmail) {
     ["UPDATE ta_logs SET author_email = ? WHERE author_email = ?"],
     ["UPDATE perf SET member_email = ? WHERE member_email = ?"],
     ["UPDATE perf_goals SET member_email = ? WHERE member_email = ?"],
+    ["UPDATE OR REPLACE perf_goals SET member_key = ? WHERE member_key = ?"],
     ["UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?"]
   ];
   for (const [sql] of moves) db.prepare(sql).run(toEmail, fromEmail);

@@ -252,6 +252,14 @@ function makeGrid(root, opts) {
     newRows: function () { return rows.filter(function (r) { return added.has(r); }); },
     dirtyRows: function () { return rows.filter(function (r) { return r._id != null && dirty.has(r._id); }); },
     hasChanges: function () { return added.size > 0 || dirty.size > 0; },
-    markSaved: function () { dirty.clear(); added.clear(); render(); }
+    markSaved: function () { dirty.clear(); added.clear(); render(); },
+    // 한 줄만 저장됐다고 표시한다. 여러 건을 따로 보낼 때 일부만 성공하면
+    // 성공한 줄을 남겨둬야 다시 눌렀을 때 중복 저장되지 않는다.
+    markRowSaved: function (r, id) {
+      if (id != null && r._id == null) r._id = id;
+      added.delete(r);
+      if (r._id != null) dirty.delete(r._id);
+      render();
+    }
   };
 }

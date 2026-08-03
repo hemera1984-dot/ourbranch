@@ -837,6 +837,26 @@
   }
   function monthLabel() { var p = month.split("-"); return Number(p[0]) + "년 " + Number(p[1]) + "월"; }
 
+  // 여러 건을 각각 보낼 때, 일부만 성공하면 성공한 줄은 「저장됨」으로 바꿔 둔다.
+  // 안 그러면 다시 눌렀을 때 이미 들어간 줄이 한 번 더 저장돼 중복이 생긴다.
+  function saveEach(grid, jobs, onAllDone) {
+    return Promise.allSettled(jobs.map(function (j) { return j.p; })).then(function (res) {
+      var failed = 0;
+      res.forEach(function (x, i) {
+        if (x.status === "fulfilled") {
+          var id = x.value && (x.value.id != null ? x.value.id : (x.value.ids && x.value.ids[0]));
+          grid.markRowSaved(jobs[i].r, id);
+        } else failed++;
+      });
+      if (!failed) { onAllDone(); return; }
+      // 실패한 요청마다 서버 메시지가 이미 한 번 뜬다 — 한 건이면 그걸로 충분하다.
+      // 여러 건일 때만 「무엇이 저장됐고 무엇이 남았는지」를 덧붙인다.
+      if (failed > 1)
+        alert(failed + "건을 저장하지 못했습니다.\n\n저장된 줄은 표시가 사라졌고 남은 줄은 그대로 있습니다."
+          + "\n고친 뒤 다시 「저장」을 누르면 됩니다.");
+    });
+  }
+
   // ── 마지막 값 기억 ──
   // 같은 값을 매번 다시 치지 않게 한다. 화면·항목마다 따로 기억한다.
   // (2026-08-02 원칙: 입력을 「치는 것」에서 「고르는 것·기억하는 것」으로)
@@ -2429,19 +2449,16 @@
       return r.date && (r.title || r.place || r.start || r.people || KIND_FORM[r.kind]);
     }).forEach(function (r) {
       var who = resolve(r); if (!who) return;
-      jobs.push(api("/events", { method: "POST",
-        body: Object.assign({ teamId: teamId, memberEmail: who.memberEmail }, shape(r)) }));
+      jobs.push({ r: r, p: api("/events", { method: "POST",
+        body: Object.assign({ teamId: teamId, memberEmail: who.memberEmail }, shape(r)) }) });
     });
     evGrid.dirtyRows().forEach(function (r) {
       var who = resolve(r); if (!who) return;
-      jobs.push(api("/events/" + r._id, { method: "POST",
-        body: Object.assign({ memberEmail: who.memberEmail }, shape(r)) }));
+      jobs.push({ r: r, p: api("/events/" + r._id, { method: "POST",
+        body: Object.assign({ memberEmail: who.memberEmail }, shape(r)) }) });
     });
     if (!jobs.length) return;
-    Promise.all(jobs).then(function () { evGrid.markSaved(); loadWeek(); })
-      .catch(function (err) {
-        alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
-      });
+    saveEach(evGrid, jobs, function () { evGrid.markSaved(); loadWeek(); });
   });
 
   // ── 일일보고 (하루 한 줄: 출석 + 오전·점심·오후·특이사항) ──
@@ -2982,16 +2999,17 @@
     });
     var edits = taGrid.dirtyRows();
     var jobs = [];
-    if (news.length) jobs.push(api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }));
-    edits.forEach(function (r) { jobs.push(api("/ta/" + r._id, { method: "POST", body: r })); });
+    // 새 줄은 한 요청으로 묶여 서버에서 전부 되거나 전부 안 된다.
+    // 수정은 줄마다 따로 가므로 성공한 줄만 저장 표시한다.
+    if (news.length) news.forEach(function (r, i) {
+      if (i === 0) jobs.push({ r: r, p: api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }) });
+      else jobs.push({ r: r, p: jobs[0].p });
+    });
+    edits.forEach(function (r) { jobs.push({ r: r, p: api("/ta/" + r._id, { method: "POST", body: r }) }); });
     if (!jobs.length) return;
     // 실패하면 화면을 다시 그리지 않는다 — 방금 친 내용이 눈앞에서 사라지면
     // 다시 칠 방법이 없다. 입력은 그대로 두고 무엇이 잘못됐는지만 알린다.
-    Promise.all(jobs)
-      .then(function () { taGrid.markSaved(); loadTaRows(); })
-      .catch(function (err) {
-        alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
-      });
+    saveEach(taGrid, jobs, function () { taGrid.markSaved(); loadTaRows(); });
   });
 
   // ── 업적현황 ──

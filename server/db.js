@@ -172,13 +172,16 @@ export function openDb(file) {
     CREATE INDEX IF NOT EXISTS idx_perf_team_month ON perf(team_id, month);
 
     -- 팀원별 월 목표·도입 실적 (시트의 "목표 1,000(100) 도입4명" 줄)
+    -- 목표의 주인은 이메일이다 (동명이인 원칙). 이메일이 없는 자리는 「이름:홍길동」을 열쇠로.
     CREATE TABLE IF NOT EXISTS perf_goals (
-      team_id INTEGER NOT NULL REFERENCES teams(id),
-      month   TEXT NOT NULL,
-      member  TEXT NOT NULL,
-      goal    TEXT NOT NULL DEFAULT '',
-      intro   INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (team_id, month, member)
+      team_id      INTEGER NOT NULL REFERENCES teams(id),
+      month        TEXT NOT NULL,
+      member_key   TEXT NOT NULL,
+      member       TEXT NOT NULL,
+      member_email TEXT,
+      goal         TEXT NOT NULL DEFAULT '',
+      intro        INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (team_id, month, member_key)
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -254,6 +257,36 @@ export function openDb(file) {
     // 일정 세부 — 구분마다 필요한 항목이 다르다 (면접관·대상자·차월). JSON으로 담는다.
     "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
+
+  // 목표의 주인을 이름에서 이메일로 옮긴다 (동명이인 원칙).
+  // 옛 표는 PRIMARY KEY(team_id, month, member)라 같은 팀 동명이인의 목표가 서로를 덮어썼다.
+  // 이메일이 없는 옛 줄은 「이름:홍길동」을 임시 열쇠로 써서 잃지 않는다.
+  try {
+    const cols = db.prepare("PRAGMA table_info(perf_goals)").all();
+    const pk = cols.filter(c => c.pk > 0).map(c => c.name).join(",");
+    if (pk === "team_id,month,member") {
+      db.exec(`
+        CREATE TABLE perf_goals_new (
+          team_id      INTEGER NOT NULL REFERENCES teams(id),
+          month        TEXT NOT NULL,
+          member_key   TEXT NOT NULL,
+          member       TEXT NOT NULL,
+          member_email TEXT,
+          goal         TEXT NOT NULL DEFAULT '',
+          intro        INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (team_id, month, member_key)
+        );
+        INSERT OR REPLACE INTO perf_goals_new (team_id, month, member_key, member, member_email, goal, intro)
+          SELECT team_id, month,
+                 COALESCE(NULLIF(member_email, ''), '이름:' || member),
+                 member, member_email, goal, intro
+          FROM perf_goals;
+        DROP TABLE perf_goals;
+        ALTER TABLE perf_goals_new RENAME TO perf_goals;
+      `);
+      console.log("[이관] 목표의 주인을 이메일 기준으로 옮겼다");
+    }
+  } catch (e) { console.error("[이관] 목표 키 이관 실패:", e && e.message); }
 
   // 기존 기록에 이메일 채우기 — 이름이 유일한 사람만 (동명이인은 사람이 판단해야 한다)
   try {

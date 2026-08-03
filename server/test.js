@@ -746,7 +746,23 @@ async function main() {
   const okEv = await (await api("t-fc1", "POST", "/events", { date: "2027-02-28", memberEmail: "fc1@x.com", kind: "상담" })).json();
   assert.equal((await api("t-fc1", "POST", "/events/" + okEv.id, { date: "8/1" })).status, 400);
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜 확인 완료");
+  // 42) 목표의 주인이 이메일이다 — 같은 팀 동명이인의 목표가 서로를 덮어쓰지 않는다 (코덱스 지적)
+  await api("t-super", "POST", "/admin/members", { email: "동명A@x.com", name: "홍길동", teamId: 1, role: "팀원" });
+  await api("t-super", "POST", "/admin/members", { email: "동명B@x.com", name: "홍길동", teamId: 1, role: "팀원" });
+  await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2027-12", goals: [
+    { member: "홍길동", memberEmail: "동명A@x.com", goal: "A목표", intro: 1 }
+  ] });
+  await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2027-12", goals: [
+    { member: "홍길동", memberEmail: "동명B@x.com", goal: "B목표", intro: 2 }
+  ] });
+  const twins = (await (await api("t-esl1", "GET", "/perf?month=2027-12")).json())
+    .goals.filter(g => g.member === "홍길동");
+  assert.equal(twins.length, 2, "두 사람의 목표가 각각 남아야 한다");
+  assert.equal(twins.filter(g => g.member_email === "동명A@x.com")[0].goal, "A목표");
+  assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].goal, "B목표");
+  assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].intro, 2);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
