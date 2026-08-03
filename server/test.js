@@ -692,7 +692,22 @@ async function main() {
   assert.equal(grows.length, 4);
   grows.forEach(e => assert.equal(JSON.parse(e.detail).people[0], "fc1@x.com"));
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부 확인 완료");
+  // 36) 자리 이어받기가 미션 대상도 옮긴다 — 안 옮기면 미션이 사라지고 분모만 남는다
+  await api("t-super", "POST", "/admin/members", { email: "이어받을자리@미등록.local", name: "이어받을사람", teamId: 1, role: "팀원" });
+  const mtk = await (await api("t-esl1", "POST", "/tasks", { teamId: 1, title: "대상 이관 확인" })).json();
+  let mts = (await (await api("t-esl1", "GET", "/tasks")).json()).filter(t => t.id === mtk.id)[0];
+  assert.ok(mts.targets.includes("이어받을자리@미등록.local"));
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "이어받을자리@미등록.local", accountEmail: "wait@x.com" })).status, 200);
+  mts = (await (await api("t-esl1", "GET", "/tasks")).json()).filter(t => t.id === mtk.id)[0];
+  assert.ok(mts.targets.includes("wait@x.com"));                     // 계정으로 옮겨졌다
+  assert.ok(!mts.targets.includes("이어받을자리@미등록.local"));      // 빈 자리는 빠졌다
+
+  // 37) TA 비밀번호를 계속 찍어보면 잠깐 막힌다
+  for (let i = 0; i < 5; i++) await api("t-fc2", "POST", "/ta/unlock", { password: "틀림" + i });
+  assert.equal((await api("t-fc2", "POST", "/ta/unlock", { password: "harang25" })).status, 429);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })

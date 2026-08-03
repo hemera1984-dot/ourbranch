@@ -554,9 +554,22 @@ route("GET", /^\/ta\/lock$/, false, (req, res, user) => {
   });
 });
 
+// 비밀번호를 계속 찍어보는 것을 막는다. 짧은 공용 비밀번호라 시도를 자유롭게 두면
+// 명단에 있는 누구든(또는 로그인된 기기를 주운 사람이) 결국 맞힌다.
+const unlockTries = new Map();          // 이메일 → { n, until }
 route("POST", /^\/ta\/unlock$/, false, async (req, res, user) => {
+  const now = Date.now();
+  const t = unlockTries.get(user.email) || { n: 0, until: 0 };
+  if (t.until > now)
+    return send(res, 429, { error: "너무 여러 번 틀렸습니다. " + Math.ceil((t.until - now) / 60000) + "분 뒤에 다시 시도해 주세요." });
   const b = await readJson(req);
-  if (!checkTaPassword(b.password || "")) return send(res, 403, { error: "비밀번호가 맞지 않습니다" });
+  if (!checkTaPassword(b.password || "")) {
+    t.n++;
+    if (t.n >= 5) { t.until = now + 10 * 60e3; t.n = 0; }
+    unlockTries.set(user.email, t);
+    return send(res, 403, { error: "비밀번호가 맞지 않습니다" });
+  }
+  unlockTries.delete(user.email);
   send(res, 200, { ok: true, until: unlockTa(user) });
 });
 
@@ -883,6 +896,15 @@ function mergeMember(fromEmail, toEmail) {
   ]) {
     db.prepare(sql).run(toEmail, fromEmail);
     db.prepare(del).run(fromEmail);
+  }
+  // 미션 대상은 이메일 배열(JSON)이라 위 UPDATE로는 안 옮겨진다.
+  // 안 옮기면 자리를 이어받은 사람의 미션이 사라지고 달성률 분모만 남는다.
+  for (const t of db.prepare("SELECT id, targets FROM tasks").all()) {
+    let arr;
+    try { arr = JSON.parse(t.targets); } catch { continue; }
+    if (!Array.isArray(arr) || !arr.includes(fromEmail)) continue;
+    const next = arr.map(e => (e === fromEmail ? toEmail : e)).filter((e, i, a) => a.indexOf(e) === i);
+    db.prepare("UPDATE tasks SET targets = ? WHERE id = ?").run(JSON.stringify(next), t.id);
   }
   db.prepare("DELETE FROM members WHERE email = ?").run(fromEmail);
 }
