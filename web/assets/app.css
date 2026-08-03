@@ -706,3 +706,16 @@ a.slot-title:hover { text-decoration: underline; }
 
 /* 일정 내용 아랫줄 — 윗줄과 구분되게 한 단 낮춘다 */
 .slot-line2 { flex-basis: 100%; font-size: 13px; color: var(--sub); }
+
+/* 달력 칸을 반으로 — 위는 개인 활동, 아래는 공적 일정 (2026-08-03) */
+.cal-half { min-height: 20px; }
+.cal-half.official { border-top: 1px dashed var(--line); margin-top: 3px; padding-top: 3px; }
+.cal-cell { display: flex; flex-direction: column; }
+
+/* 오른쪽 목록의 두 갈래 */
+.day-band + .day-band { margin-top: 12px; }
+.day-band-label {
+  margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--ter);
+}
+.day-band.official .day-band-label { color: var(--blue); }
+.day-band.official { border-top: 1px solid var(--line); padding-top: 10px; }

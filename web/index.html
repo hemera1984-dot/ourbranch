@@ -523,11 +523,21 @@
     "밸류업/이관", "외근", "내근",
     "TS1", "TS2", "GROW", "시험",
     "입과전교육생일정", "입과교육", "차월교육", "교육",
-    "지점일정", "본부일정", "회의", "마감", "휴가", "기타"
+    "지점일정", "본부일정", "마감", "휴가", "기타"
   ];
+  // 일정은 두 갈래다 (2026-08-03 사용자).
+  //   개인 활동 — 본인이 뛰는 것 (밸류업·외근·내근 등)
+  //   공적 일정 — 부지점장이 팀원 몫으로 한 달치 넣는 것 (면접·교육·지점·본부)
+  // 달력 칸과 오른쪽 목록이 이 둘로 나뉜다.
+  var OFFICIAL_KINDS = [
+    "TS1", "TS2", "GROW", "차월교육", "입과교육", "입과전교육생일정",
+    "시험", "교육", "지점일정", "본부일정"
+  ];
+  function isOfficial(e) { return OFFICIAL_KINDS.indexOf(e.kind) >= 0; }
+
   // 예전에 저장된 구분(상담·강의·면접·GROW)도 색·형식은 그대로 읽는다.
   // 목록에서만 뺐다 — 지난 기록을 깨뜨리지 않기 위해서다.
-  var OLD_KINDS = ["상담", "강의", "면접"];
+  var OLD_KINDS = ["상담", "강의", "면접", "회의"];
   function knownKind(k) { return KINDS.indexOf(k) >= 0 || OLD_KINDS.indexOf(k) >= 0; }
 
   // 구분마다 필요한 항목이 다르다. 여기 한 곳에서만 정한다.
@@ -581,7 +591,12 @@
       picks: [{ key: "종목", label: "종목", opts: ["변액", "손보", "생보"] }]
     },
     "입과전교육생일정": { label: "입과 전 교육생", people: "교육생" },
-    "입과교육": { label: "입과 교육", people: "교육 대상" }
+    "입과교육": { label: "입과 교육", people: "교육 대상" },
+    // 지점일정 — 무엇인지 고르고 세부는 직접, 장소도 받는다 (2026-08-03 사용자)
+    "지점일정": {
+      label: "", line2: "세부 내용 (직접 입력)",
+      picks: [{ key: "종류", label: "종류", opts: ["팀미팅", "지점조회", "지점행사"] }]
+    }
   };
 
   // 목록에 뜰 제목을 세부 항목에서 만든다 — 제목을 손으로 쓰지 않는다.
@@ -1957,7 +1972,7 @@
   }
 
   // 하루 상세 목록 — 모바일 하루 보기와 달력 우측 패널이 같이 쓴다
-  function dayGroupsHtml(evs, teamId) {
+  function dayGroupsHtml(evs, teamId, onlyWithItems) {
     var groups = [{ em: "", name: "팀 공유", sub: "" }];
     rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: memberLabel(m), sub: m.role }); });
     evs.forEach(function (e) {
@@ -1966,13 +1981,26 @@
     });
     return groups.map(function (g) {
       var items = evs.filter(function (e) { return (e.member_email || "") === g.em; });
-      if (!items.length && g.em !== BOOT.me.email && g.em !== "") return "";
+      if (!items.length && (onlyWithItems || (g.em !== BOOT.me.email && g.em !== ""))) return "";
       return '<div class="day-group"><div class="day-name">' + esc(g.name)
         + (g.sub ? '<span class="sub">' + esc(g.sub) + "</span>" : "") + "</div>"
         + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">일정 없음</span>')
         + "</div>";
     }).join("");
   }
+  // 오른쪽 목록도 개인 활동과 공적 일정으로 가른다 — 달력 칸과 같은 구분이다
+  function daySplitHtml(evs, teamId) {
+    var mineSide = evs.filter(function (e) { return !isOfficial(e); });
+    var offSide = evs.filter(isOfficial);
+    if (!evs.length) return '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+    var out = "";
+    out += '<div class="day-band"><p class="day-band-label">개인 활동</p>'
+      + (mineSide.length ? dayGroupsHtml(mineSide, teamId, true) : '<span class="cell-empty">없음</span>') + "</div>";
+    out += '<div class="day-band official"><p class="day-band-label">공적 일정</p>'
+      + (offSide.length ? dayGroupsHtml(offSide, teamId, true) : '<span class="cell-empty">없음</span>') + "</div>";
+    return out;
+  }
+
   // 목록 컨테이너 공통 클릭: 강의 신청 → 일정 수정 순으로 판정
   function dayListClick(e, refresh) {
     var att = e.target.closest(".att-btn");
@@ -2466,12 +2494,18 @@
           return '<span class="dot ' + kindClsOf(e) + '"></span>';
         }).join("") + "</span>");
       } else {
-        items.slice(0, 3).forEach(function (e) {
-          cell.push('<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
-            + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
-            + "<span>" + esc(e.title || e.kind) + "</span></div>");
-        });
-        if (items.length > 3) cell.push('<div class="cal-more">+' + (items.length - 3) + "건</div>");
+        // 칸을 반으로 — 위는 개인 활동, 아래는 공적 일정
+        var mineSide = items.filter(function (e) { return !isOfficial(e); });
+        var offSide = items.filter(isOfficial);
+        function evLines(list) {
+          return list.slice(0, 2).map(function (e) {
+            return '<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
+              + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
+              + "<span>" + esc(e.title || e.kind) + "</span></div>";
+          }).join("") + (list.length > 2 ? '<div class="cal-more">+' + (list.length - 2) + "건</div>" : "");
+        }
+        cell.push('<div class="cal-half">' + evLines(mineSide) + "</div>");
+        cell.push('<div class="cal-half official">' + evLines(offSide) + "</div>");
       }
       cell.push("</div>");
       h.push(cell.join(""));
@@ -2485,7 +2519,7 @@
     $("cal-day").innerHTML = '<div class="cal-day-head"><strong>'
       + (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()] + "</strong>"
       + '<button class="btn primary" id="cal-day-add">일정 추가</button></div>'
-      + (dayGroupsHtml(items, myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>');
+      + daySplitHtml(items, myTeamId());
   }
   $("cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
@@ -2508,7 +2542,7 @@
   // 반복되는 일정(상담·외근·교육)을 한 달치 넣을 때 창을 매번 열지 않게 한다.
   // 달력에서 날짜만 눌러 바로 찍는 구분 — 개인이 자주 쓰는 것만
   var stampOn = false, stampKind = "외근";
-  var STAMP_KINDS = ["밸류업/이관", "외근", "내근", "교육", "회의", "휴가"];
+  var STAMP_KINDS = ["밸류업/이관", "외근", "내근", "교육", "지점일정", "휴가"];
 
   function renderStampBar() {
     [["stamp-toggle", "stamp-kinds", "stamp-hint"], ["m-stamp-toggle", "m-stamp-kinds", null]]
