@@ -429,7 +429,7 @@ a.slot-title:hover { text-decoration: underline; }
   left: calc(50% / var(--n)); right: calc(50% / var(--n));
 }
 .oc-teams.one::before { display: none; }
-.oc-team { flex: 1 1 0; min-width: 168px; max-width: 240px; position: relative; }
+.oc-team { flex: 1 1 0; min-width: 168px; position: relative; }
 /* 가로선 → 각 팀 상자 연결 */
 .oc-team::before {
   content: ""; position: absolute; top: -18px; left: 50%; width: 1px; height: 18px;
@@ -754,10 +754,13 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .oc-under:hover { border-color: var(--blue); color: var(--blue); }
 
-/* 계보가 깊어지면 상자가 눌려 이름이 잘린다 — 최소 너비를 주고 팀 칸이 옆으로 밀리게 한다 */
-.oc-members { overflow-x: auto; }
-.ttree { min-width: max-content; }
-.tnode > .oc-member { min-width: 176px; }
+/* 가로 스크롤을 두지 않는다 — 한 화면에 다 보여야 조직이 읽힌다 (2026-08-04 사용자).
+   들여쓰기를 좁히고 이름이 길면 말줄임으로 접는다. */
+.oc-members { overflow: visible; }
+.tkids { margin-left: 8px; padding-left: 10px; }
+.oc-member > span:nth-of-type(2) {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 
 
