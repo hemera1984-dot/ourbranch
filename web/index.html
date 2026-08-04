@@ -1416,12 +1416,23 @@
       || '<div class="empty">등록된 구성원이 없습니다.</div>';
   }
 
+  // 차월 — 위촉한 달이 1차월이다. 위촉 년월만 있으면 자동으로 센다.
+  function monthsIn(joined) {
+    if (!joined) return 0;
+    var p = String(joined).split("-");
+    if (p.length < 2) return 0;
+    var now = new Date();
+    var n = (now.getFullYear() - Number(p[0])) * 12 + (now.getMonth() + 1 - Number(p[1])) + 1;
+    return n > 0 ? n : 0;
+  }
+
   function memberBox(m, teamId, mg, depth) {
     return '<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
       + (mg ? ' draggable="true"' : "")
       + ' data-team="' + teamId + '" data-email="' + esc(m.email) + '">'
       + '<span class="r">' + esc(m.role) + "</span>"
       + "<span>" + esc(memberLabel(m)) + "</span>"
+      + (monthsIn(m.joined_at) ? '<span class="oc-mm">' + monthsIn(m.joined_at) + "차월</span>" : "")
       + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
       + (mg ? '<button type="button" class="oc-under" title="이 사람이 뽑은 사람 추가" data-under="'
               + esc(m.email) + '" data-team="' + teamId + '">+</button>' : "")
@@ -1569,7 +1580,7 @@
       + line("소속", esc(tn) + " · " + esc(m.role))
       + line("연락처", m.phone ? '<a href="tel:' + esc(m.phone) + '">' + esc(m.phone) + "</a>" : "")
       + line("생일", m.birthday ? esc(mdLabel(m.birthday)) : "")
-      + line("위촉일", esc(m.joined_at || ""))
+      + line("위촉", m.joined_at ? esc(m.joined_at) + (monthsIn(m.joined_at) ? " · " + monthsIn(m.joined_at) + "차월" : "") : "")
       + (m.phone || m.birthday || m.joined_at ? "" : '<div class="pop-row"><span class="note">아직 「내 정보」를 채우지 않았습니다.</span></div>')
       + '<div class="pop-row"><button class="btn" id="mi-close">닫기</button></div>';
     document.body.appendChild(p);
@@ -1588,6 +1599,9 @@
       + '<div class="pop-row"><input type="text" class="input" id="mp-name" placeholder="이름" value="' + esc(m ? m.name : "") + '"></div>'
       + '<div class="pop-row"><select class="input" id="mp-role"></select></div>'
       + '<div class="pop-row"><select class="input" id="mp-team"></select></div>'
+      + '<div class="pop-row"><input type="month" class="input" id="mp-joined" title="위촉 년월"'
+      + ' value="' + esc((m && m.joined_at ? m.joined_at.slice(0, 7) : "")) + '">'
+      + '<span class="note" style="font-size:11px">위촉 년월 (차월 자동)</span></div>'
       + (m && !isUnlinked(m)
         ? '<div class="pop-row"><span class="note" style="font-size:11px">계정 ' + esc(m.email) + " (로그인 가능)</span></div>"
         : isNew
@@ -1675,7 +1689,8 @@
         name: name,
         role: $("mp-role").value,
         teamId: tv === "" ? null : Number(tv),
-        recruiterEmail: $("mp-recruiter").value || ""
+        recruiterEmail: $("mp-recruiter").value || "",
+        joinedAt: $("mp-joined").value || ""
       };
       if (BOOT.me.isSuper && !isNew) {
         body.isManager = $("mp-mgr").checked;

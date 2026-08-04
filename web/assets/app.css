@@ -807,3 +807,9 @@ body.day-off #cal-day { display: none; }
 body.day-off .cal-layout { grid-template-columns: 1fr; }
 
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+
+/* 차월 — 위촉 년월에서 자동으로 센다. 조직도 이름 옆에 붙는다. */
+.oc-mm {
+  flex: none; font-size: 11px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+  background: var(--blue-bg); color: var(--blue);
+}

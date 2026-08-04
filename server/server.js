@@ -1085,12 +1085,19 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   // 보낸 값만 갱신 — 도입자만 바꾸려다 이름·팀·직급이 초기화되는 일이 없도록
   const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (prev.team_id ?? null);
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  // 위촉 년월 — 차월을 여기서 센다. 「내 정보」에만 두면 실제로 일하지 않는 사람은
+  // 로그인을 안 해서 영영 비어 있다. 그래서 관리자가 조직도에서 직접 넣는다(2026-08-04 사용자).
+  let joined = b.joinedAt !== undefined ? String(b.joinedAt).trim() : undefined;
+  if (joined !== undefined && joined) {
+    if (/^\d{4}-\d{2}$/.test(joined)) joined += "-01";      // 년월만 받아도 된다
+    if (!isDate(joined)) return send(res, 400, { error: "위촉 년월은 2026-08 형식으로 넣어 주세요" });
+  }
   db.prepare(
-    `INSERT INTO members (email, name, team_id, role, is_manager, can_view_all, recruiter_email) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO members (email, name, team_id, role, is_manager, can_view_all, recruiter_email, joined_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET
        name = excluded.name, team_id = excluded.team_id, role = excluded.role,
        is_manager = excluded.is_manager, can_view_all = excluded.can_view_all,
-       recruiter_email = excluded.recruiter_email`
+       recruiter_email = excluded.recruiter_email, joined_at = excluded.joined_at`
   ).run(
     email,
     b.name !== undefined ? b.name : (prev.name || ""),
@@ -1100,7 +1107,8 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
     b.canViewAll != null ? (b.canViewAll ? 1 : 0) : (prev.can_view_all || 0),
     b.recruiterEmail !== undefined
       ? (b.recruiterEmail ? String(b.recruiterEmail).toLowerCase() : null)
-      : (prev.recruiter_email ?? null)
+      : (prev.recruiter_email ?? null),
+    joined !== undefined ? joined : (prev.joined_at || "")
   );
   send(res, 200, { ok: true });
 });

@@ -782,7 +782,19 @@ async function main() {
   assert.equal(merged[0].afternoon, "자리쪽 오후");
   assert.equal(merged[0].present, 1);               // 한쪽이라도 출근이면 출근
 
-  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합 확인 완료");
+  // 44) 위촉 년월 — 관리자가 조직도에서 넣는다 (실제로 일 안 하는 사람은 로그인을 안 한다)
+  await api("t-super", "POST", "/admin/members", { email: "차월@x.com", name: "차월확인", teamId: 1, role: "팀원", joinedAt: "2026-05" });
+  let joinRow = (await (await api("t-super", "GET", "/bootstrap")).json()).members.filter(m => m.email === "차월@x.com")[0];
+  assert.equal(joinRow.joined_at, "2026-05-01");            // 년월만 보내도 저장된다
+  // 보내지 않으면 그대로 둔다 (이름만 고쳐도 위촉일이 지워지지 않게)
+  await api("t-super", "POST", "/admin/members", { email: "차월@x.com", name: "이름만변경" });
+  joinRow = (await (await api("t-super", "GET", "/bootstrap")).json()).members.filter(m => m.email === "차월@x.com")[0];
+  assert.equal(joinRow.joined_at, "2026-05-01");
+  assert.equal(joinRow.name, "이름만변경");
+  // 형식이 틀리면 거절
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "차월@x.com", joinedAt: "2026년 5월" })).status, 400);
+
+  console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 
 main().catch(e => { console.error(e); process.exitCode = 1; })
