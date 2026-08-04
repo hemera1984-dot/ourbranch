@@ -48,25 +48,25 @@
 
 <div id="app" class="shell" hidden>
   <aside class="sidebar">
+    <button type="button" id="side-toggle" class="side-toggle desktop-only" title="메뉴 펴기">☰</button>
     <a class="brand" href="#home" id="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></a>
     <nav class="nav" id="nav">
       <p class="nav-group-label">업무</p>
-      <a href="#home" data-screen="home">홈</a>
-      <a href="#org" data-screen="org">조직도</a>
-      <a href="#sched" data-screen="sched">일정</a>
-      <a href="#att" data-screen="att">일일보고</a>
-      <a href="#board" data-screen="board">미션·공지</a>
-      <a href="#perf" data-screen="perf">업적현황</a>
+      <a href="#home" data-screen="home"><i>홈</i><b>홈</b></a>
+      <a href="#org" data-screen="org"><i>조직</i><b>조직도</b></a>
+      <a href="#sched" data-screen="sched"><i>일정</i><b>일정</b></a>
+      <a href="#att" data-screen="att"><i>보고</i><b>일일보고</b></a>
+      <a href="#board" data-screen="board"><i>공지</i><b>미션·공지</b></a>
+      <a href="#perf" data-screen="perf"><i>업적</i><b>업적현황</b></a>
       <p class="nav-group-label">리쿠르팅</p>
-      <a href="#ta" data-screen="ta">TA 일지</a>
-      <a href="#recruit" data-screen="recruit">도입 현황</a>
+      <a href="#ta" data-screen="ta"><i>TA</i><b>TA 일지</b></a>
+      <a href="#recruit" data-screen="recruit"><i>도입</i><b>도입 현황</b></a>
       <p class="nav-group-label">내 계정</p>
-      <a href="#me" data-screen="me">내 정보</a>
+      <a href="#me" data-screen="me"><i>내정보</i><b>내 정보</b></a>
       <p class="nav-group-label">관리</p>
-      <a href="#invite" data-screen="invite">초대·승인</a>
-      <a href="#install" data-screen="install">앱 설치</a>
+      <a href="#invite" data-screen="invite"><i>초대</i><b>초대·승인</b></a>
+      <a href="#install" data-screen="install"><i>설치</i><b>앱 설치</b></a>
     </nav>
-    <button type="button" id="side-fold" class="side-fold desktop-only" title="메뉴 접기">◀ 메뉴 접기</button>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
       <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
     </div>
@@ -81,8 +81,6 @@
     <a href="#board" data-screen="board"><span>미션·공지</span><i class="tab-dot" id="tab-dot" hidden></i></a>
     <button type="button" id="tab-more"><span>더보기</span></button>
   </nav>
-
-  <button type="button" id="side-open" class="side-open desktop-only" title="메뉴 열기" hidden>☰</button>
 
   <main class="main">
     <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
@@ -902,7 +900,10 @@
     document.body.classList.toggle("more-open");
   });
   // 메뉴에서 고르면 더보기는 닫는다
-  $("nav").addEventListener("click", function () { document.body.classList.remove("more-open"); });
+  $("nav").addEventListener("click", function () {
+    document.body.classList.remove("more-open");
+    if (!isMobile()) toggleMenu(false);
+  });
 
   $("nav").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
@@ -910,23 +911,29 @@
   });
   // 화면을 넓게 쓰려고 접는 것들 — 접은 상태는 기억한다.
   // 조직도 계보와 달력은 넓을수록 읽기 쉽다.
+  // 메뉴는 평소 두 글자 표만 보이는 얇은 줄이고, 펴면 본문 위로 겹쳐 나온다.
+  // 겹치기 때문에 달력·조직도 폭이 늘었다 줄었다 하지 않는다 (2026-08-04 사용자).
   function applyFolds() {
-    var side = recall("메뉴접힘") === "1";
     var day = recall("일정칸접힘") === "1";
-    document.body.classList.toggle("side-off", side);
     document.body.classList.toggle("day-off", day);
-    $("side-open").hidden = !side;
     $("day-fold").textContent = day ? "◀" : "▶";
     $("day-fold").title = day ? "오른쪽 칸 펴기" : "오른쪽 칸 접기";
   }
-  function toggleFold(key) {
-    remember(key, recall(key) === "1" ? "0" : "1");
-    applyFolds();
+  function toggleMenu(on) {
+    var next = on == null ? !document.body.classList.contains("menu-open") : on;
+    document.body.classList.toggle("menu-open", next);
+    $("side-toggle").title = next ? "메뉴 접기" : "메뉴 펴기";
   }
-  // remember()는 빈 값을 저장하지 않으므로 "0"을 쓴다
-  $("side-fold").addEventListener("click", function () { toggleFold("메뉴접힘"); });
-  $("side-open").addEventListener("click", function () { toggleFold("메뉴접힘"); });
-  $("day-fold").addEventListener("click", function () { toggleFold("일정칸접힘"); });
+  $("side-toggle").addEventListener("click", function () { toggleMenu(); });
+  // 바깥을 누르면 닫힌다 — 펴 둔 채로 잊고 쓰는 일이 없게
+  document.addEventListener("mousedown", function (e) {
+    if (!document.body.classList.contains("menu-open")) return;
+    if (!e.target.closest(".sidebar")) toggleMenu(false);
+  });
+  $("day-fold").addEventListener("click", function () {
+    remember("일정칸접힘", recall("일정칸접힘") === "1" ? "0" : "1");   // "0"도 저장된다(문자열은 참)
+    applyFolds();
+  });
 
   // 사이드바 지점명 = 홈 (로고를 누르면 첫 화면으로 — 익숙한 동작)
   $("brand").addEventListener("click", function (e) { e.preventDefault(); location.hash = "home"; show("home"); });

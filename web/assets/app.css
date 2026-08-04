@@ -759,24 +759,42 @@ a.slot-title:hover { text-decoration: underline; }
 .ttree { min-width: max-content; }
 .tnode > .oc-member { min-width: 176px; }
 
-/* ── 접어서 넓게 쓰기 (2026-08-04) ──
-   조직도 계보와 달력은 넓을수록 읽기 쉽다. 메뉴와 오른쪽 칸을 접을 수 있게 한다. */
-.side-fold {
-  margin: 0; padding: 10px 20px; border: 0; border-top: 1px solid rgba(255,255,255,.08);
-  background: none; color: #8fa3bd; font: inherit; font-size: 12px; font-weight: 600;
-  text-align: left; cursor: pointer;
-}
-.side-fold:hover { background: rgba(255,255,255,.05); color: #fff; }
-body.side-off .sidebar { display: none; }
-.side-open {
-  position: fixed; left: 0; top: 0; z-index: 80;
-  width: 34px; height: 34px; padding: 0; line-height: 34px; text-align: center;
-  border: 0; border-bottom-right-radius: 6px;
-  background: var(--navy); color: #fff; font-size: 16px; cursor: pointer;
-}
-body.side-off .main { padding-left: 44px; }
 
-/* 일정 오른쪽 칸 */
+
+/* ── 얇은 메뉴 줄 + 겹쳐 펴지는 메뉴 (2026-08-04 사용자) ──
+   접어도 두 글자 표가 남아 어디로 갈지 보인다. 펴면 본문 「위로」 겹쳐 나오므로
+   달력·조직도 폭이 늘었다 줄었다 하지 않는다. */
+@media (min-width: 901px) {
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 60;
+    width: 62px; overflow: hidden;
+    transition: width .16s ease;
+  }
+  body.menu-open .sidebar { width: 216px; box-shadow: 2px 0 12px rgba(0,0,0,.28); }
+  .main { margin-left: 62px; }
+
+  .side-toggle {
+    width: 100%; padding: 12px 0; border: 0; background: none; cursor: pointer;
+    color: #cfd8e5; font-size: 16px; line-height: 1;
+  }
+  .side-toggle:hover { background: rgba(255,255,255,.06); color: #fff; }
+
+  /* 접혔을 때: 두 글자 표만 */
+  .brand, .nav-group-label, .side-user, .nav a b { display: none; }
+  .nav a {
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 4px; text-align: center;
+  }
+  .nav a i { font-style: normal; font-size: 12px; font-weight: 700; letter-spacing: -.03em; }
+
+  /* 펴졌을 때: 원래 메뉴 */
+  body.menu-open .brand, body.menu-open .nav-group-label, body.menu-open .side-user { display: block; }
+  body.menu-open .nav a { justify-content: flex-start; padding: 9px 20px; text-align: left; }
+  body.menu-open .nav a i { display: none; }
+  body.menu-open .nav a b { display: inline; font-weight: 600; }
+}
+
+/* 일정 오른쪽 칸 — 여기는 누를 때만 바뀌므로 폭이 변해도 놀라지 않는다 */
 .cal-layout { position: relative; }
 .day-fold {
   position: absolute; top: 0; right: 0; z-index: 5;
@@ -788,5 +806,4 @@ body.side-off .main { padding-left: 44px; }
 body.day-off #cal-day { display: none; }
 body.day-off .cal-layout { grid-template-columns: 1fr; }
 
-/* 접으면 조직도 팀 칸이 그만큼 넓어진다 */
-body.side-off .oc-team { min-width: 300px; }
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
