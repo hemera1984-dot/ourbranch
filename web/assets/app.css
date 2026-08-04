@@ -419,22 +419,18 @@ a.slot-title:hover { text-decoration: underline; }
 
 /* 지점 → 팀 연결선 */
 .oc-stem { width: 1px; height: 18px; margin: 0 auto; background: var(--line-input); }
+/* 팀은 위에서 아래로 쌓는다 — 옆으로 늘어놓으면 팀이 늘어날수록 계보가 눌린다
+   (2026-08-04 사용자: 「4팀 5팀 생기면 문제가 되겠네」). */
 .oc-teams {
-  display: flex; gap: 14px; justify-content: center; align-items: flex-start;
+  display: flex; flex-direction: column; gap: 12px;
   position: relative; padding-top: 18px;
 }
 /* 팀들을 잇는 가로선 */
-.oc-teams::before {
-  content: ""; position: absolute; top: 0; height: 1px; background: var(--line-input);
-  left: calc(50% / var(--n)); right: calc(50% / var(--n));
-}
-.oc-teams.one::before { display: none; }
-.oc-team { flex: 1 1 0; min-width: 168px; position: relative; }
+/* 세로로 쌓으므로 팀들을 잇는 가로선은 필요 없다 */
+.oc-teams::before { display: none; }
+.oc-team { width: 100%; position: relative; }
 /* 가로선 → 각 팀 상자 연결 */
-.oc-team::before {
-  content: ""; position: absolute; top: -18px; left: 50%; width: 1px; height: 18px;
-  background: var(--line-input);
-}
+.oc-team::before { display: none; }
 
 .oc-team-head {
   padding: 9px 12px; border-radius: 6px 6px 0 0; text-align: center;
