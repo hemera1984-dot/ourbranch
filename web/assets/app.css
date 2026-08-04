@@ -758,3 +758,35 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-members { overflow-x: auto; }
 .ttree { min-width: max-content; }
 .tnode > .oc-member { min-width: 176px; }
+
+/* ── 접어서 넓게 쓰기 (2026-08-04) ──
+   조직도 계보와 달력은 넓을수록 읽기 쉽다. 메뉴와 오른쪽 칸을 접을 수 있게 한다. */
+.side-fold {
+  margin: 0; padding: 10px 20px; border: 0; border-top: 1px solid rgba(255,255,255,.08);
+  background: none; color: #8fa3bd; font: inherit; font-size: 12px; font-weight: 600;
+  text-align: left; cursor: pointer;
+}
+.side-fold:hover { background: rgba(255,255,255,.05); color: #fff; }
+body.side-off .sidebar { display: none; }
+.side-open {
+  position: fixed; left: 0; top: 0; z-index: 80;
+  width: 34px; height: 34px; padding: 0; line-height: 34px; text-align: center;
+  border: 0; border-bottom-right-radius: 6px;
+  background: var(--navy); color: #fff; font-size: 16px; cursor: pointer;
+}
+body.side-off .main { padding-left: 44px; }
+
+/* 일정 오른쪽 칸 */
+.cal-layout { position: relative; }
+.day-fold {
+  position: absolute; top: 0; right: 0; z-index: 5;
+  width: 22px; height: 26px; padding: 0; line-height: 24px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--sub); font-size: 11px; cursor: pointer;
+}
+.day-fold:hover { border-color: var(--blue); color: var(--blue); }
+body.day-off #cal-day { display: none; }
+body.day-off .cal-layout { grid-template-columns: 1fr; }
+
+/* 접으면 조직도 팀 칸이 그만큼 넓어진다 */
+body.side-off .oc-team { min-width: 300px; }

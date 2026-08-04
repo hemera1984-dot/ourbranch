@@ -66,6 +66,7 @@
       <a href="#invite" data-screen="invite">초대·승인</a>
       <a href="#install" data-screen="install">앱 설치</a>
     </nav>
+    <button type="button" id="side-fold" class="side-fold desktop-only" title="메뉴 접기">◀ 메뉴 접기</button>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
       <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
     </div>
@@ -80,6 +81,8 @@
     <a href="#board" data-screen="board"><span>미션·공지</span><i class="tab-dot" id="tab-dot" hidden></i></a>
     <button type="button" id="tab-more"><span>더보기</span></button>
   </nav>
+
+  <button type="button" id="side-open" class="side-open desktop-only" title="메뉴 열기" hidden>☰</button>
 
   <main class="main">
     <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
@@ -287,6 +290,7 @@
       <div id="cal-wrap" class="cal-layout">
         <div class="card"><div id="cal-view"></div></div>
         <div class="card" id="cal-day"></div>
+        <button type="button" id="day-fold" class="day-fold desktop-only" title="오른쪽 칸 접기">▶</button>
       </div>
       <div id="week-wrap" hidden>
       <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
@@ -798,6 +802,7 @@
   }
   function renderShell() {
     $("tabbar").hidden = !isMobile();
+    applyFolds();
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
     $("me-name").textContent = BOOT.me.name;
@@ -903,6 +908,26 @@
     var a = e.target.closest("a"); if (!a) return;
     e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
   });
+  // 화면을 넓게 쓰려고 접는 것들 — 접은 상태는 기억한다.
+  // 조직도 계보와 달력은 넓을수록 읽기 쉽다.
+  function applyFolds() {
+    var side = recall("메뉴접힘") === "1";
+    var day = recall("일정칸접힘") === "1";
+    document.body.classList.toggle("side-off", side);
+    document.body.classList.toggle("day-off", day);
+    $("side-open").hidden = !side;
+    $("day-fold").textContent = day ? "◀" : "▶";
+    $("day-fold").title = day ? "오른쪽 칸 펴기" : "오른쪽 칸 접기";
+  }
+  function toggleFold(key) {
+    remember(key, recall(key) === "1" ? "0" : "1");
+    applyFolds();
+  }
+  // remember()는 빈 값을 저장하지 않으므로 "0"을 쓴다
+  $("side-fold").addEventListener("click", function () { toggleFold("메뉴접힘"); });
+  $("side-open").addEventListener("click", function () { toggleFold("메뉴접힘"); });
+  $("day-fold").addEventListener("click", function () { toggleFold("일정칸접힘"); });
+
   // 사이드바 지점명 = 홈 (로고를 누르면 첫 화면으로 — 익숙한 동작)
   $("brand").addEventListener("click", function (e) { e.preventDefault(); location.hash = "home"; show("home"); });
   $("team-pick").addEventListener("change", function () { show(screen); });
