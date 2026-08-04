@@ -723,38 +723,28 @@ a.slot-title:hover { text-decoration: underline; }
 
 
 /* 도입 계보 — 뽑은 사람 밑에 뽑힌 사람이 상자로 붙는다 (보험 조직의 계파 구조).
-   단계를 「직도·간도」로 부르지 않는다 — 3단계부터 부를 말이 없어진다. 모양이 곧 계보다. */
-.ttree { display: flex; flex-direction: column; align-items: center; }
-.tnode { display: flex; flex-direction: column; align-items: center; position: relative; }
-.tnode > .oc-member { position: relative; z-index: 1; }
+   가로로 펼치면 팀 칸을 넘어가 잘린다. 세로로 내려가며 한 단씩 들여쓴다.
+   단계를 「직도·간도」로 부르지 않는다 — 세 단계부터 부를 말이 없어진다. 모양이 곧 계보다. */
+.ttree { display: block; }
+.tnode { position: relative; }
 .tkids {
-  display: flex; align-items: flex-start; gap: 10px;
-  margin-top: 14px; position: relative;
+  position: relative;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line-input);   /* 부모에서 내려오는 줄기 */
 }
-/* 부모에서 내려오는 선 */
-.tkids::before {
-  content: ""; position: absolute; top: -14px; left: 50%; width: 1px; height: 14px;
+/* 마지막 자식 아래로는 줄기를 지운다 */
+.tkids > .tnode:last-child::after {
+  content: ""; position: absolute; left: -13px; top: 15px; bottom: -2px; width: 3px;
+  background: var(--surface);
+}
+/* 자식으로 뻗는 가지 */
+.tkids > .tnode > .oc-member::before {
+  content: ""; position: absolute; left: -12px; top: 50%; width: 10px; height: 1px;
   background: var(--line-input);
 }
-/* 형제를 잇는 가로선 */
-.tkids > .tnode::before {
-  content: ""; position: absolute; top: -8px; left: 50%; right: -5px; height: 1px;
-  background: var(--line-input);
-}
-.tkids > .tnode:last-child::before { right: 50%; }
-.tkids > .tnode:first-child::before { left: 50%; }
-.tkids > .tnode:only-child::before { display: none; }
-/* 자식에서 올라가는 선 */
-.tkids > .tnode::after {
-  content: ""; position: absolute; top: -8px; left: 50%; width: 1px; height: 8px;
-  background: var(--line-input);
-}
+.tnode > .oc-member { position: relative; }
 .oc-wrap { overflow-x: auto; }
-
-/* 팀 꼭대기 줄 — 부지점장 옆에 「지점장이 뽑았지만 부지점장이 아닌 사람」이 선다 */
-.tkids.top { margin-top: 0; }
-.tkids.top::before { display: none; }
-.tkids.top > .tnode::before, .tkids.top > .tnode::after { display: none; }
 
 /* 「+ 아래 추가」 — 그 사람이 뽑은 사람으로 새로 만든다 */
 .oc-under {
@@ -763,3 +753,8 @@ a.slot-title:hover { text-decoration: underline; }
   color: var(--sub); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .oc-under:hover { border-color: var(--blue); color: var(--blue); }
+
+/* 계보가 깊어지면 상자가 눌려 이름이 잘린다 — 최소 너비를 주고 팀 칸이 옆으로 밀리게 한다 */
+.oc-members { overflow-x: auto; }
+.ttree { min-width: max-content; }
+.tnode > .oc-member { min-width: 176px; }

@@ -1440,7 +1440,7 @@
         + (under.length ? '<div class="tkids">' + under.map(function (c) { return node(c, 1); }).join("") + "</div>" : "")
         + "</div>";
       var sideHtml = outside.sort(order).map(function (m) { return node(m, 0); }).join("");
-      return '<div class="ttree">' + (sideHtml ? '<div class="tkids top">' + leadHtml + sideHtml + "</div>" : leadHtml) + "</div>";
+      return '<div class="ttree">' + leadHtml + sideHtml + "</div>";
     }
     return '<div class="ttree">' + tops.concat(loose).sort(order)
       .map(function (m) { return node(m, 0); }).join("") + "</div>";
