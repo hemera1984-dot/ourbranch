@@ -2814,8 +2814,9 @@
       var canp = 0;
       data.rows.filter(function (r) { return r.member === BOOT.me.name; })
         .forEach(function (r) { canp += Number(r.canp) || 0; });
-      repGoal = { goal: g.goal || "", intro: g.intro || 0, canp: canp };
+      repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp };
       $("report-goal").textContent = "이번 달 목표 " + (g.goal || "미설정")
+        + (g.cases ? " · " + g.cases + "건" : "")
         + " · 도입 " + (g.intro || 0) + " · 현재 CANP " + canp.toLocaleString("ko-KR");
     });
   }
@@ -2876,6 +2877,7 @@
       + DOW_FULL[d.getDay()] + " 일일보고]");
     lines.push("");
     lines.push("이번 달 영업 목표 CANP: " + (repGoal.goal || "-"));
+    lines.push("이번 달 목표 건수: " + (repGoal.cases || "-"));
     lines.push("이번 달 도입 목표: " + (repGoal.intro || 0));
     lines.push("");
     var bar = "━━━━━━━━━━━━━";
@@ -3374,12 +3376,14 @@
           html += '<div class="section"><div class="section-head">'
             + '<h2 style="font-size:15px">' + esc(pp.label)
             + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
+            + (g.cases ? ' <span class="badge blue">' + g.cases + "건</span>" : "")
             + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
             + '</h2><div class="toolbar">'
-            + (BOOT.me.isManager
+            + (BOOT.me.canSetGoal
               // data-init에 처음 값을 담아두고, 저장할 때 바뀐 것만 보낸다.
               // 전에는 빈 칸도 그대로 보내서 남의 목표가 조용히 지워졌다.
-              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 (예: 1,000(100))" value="' + esc(g.goal || "") + '" data-init="' + esc(g.goal || "") + '" style="width:150px">'
+              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 CANP" value="' + esc(g.goal || "") + '" data-init="' + esc(g.goal || "") + '" style="width:130px" title="이번 달 목표 CANP">'
+                + '<input class="input cases-input" data-i="' + i + '" type="number" min="0" placeholder="건수" value="' + (g.cases || "") + '" data-init="' + (g.cases || "") + '" style="width:70px" title="이번 달 목표 건수">'
                 + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" data-init="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
               : "")
             + (canEdit ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
@@ -3431,14 +3435,16 @@
         .map(function (r) { return Object.assign({}, r, { member: pg.member, memberEmail: pg.email }); });
       if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: pg.teamId, month: month, rows: news } }));
       pg.grid.dirtyRows().forEach(function (r) { jobs.push(api("/perf/" + r._id, { method: "POST", body: r })); });
-      if (BOOT.me.isManager) {
+      if (BOOT.me.canSetGoal) {
         var gi = document.querySelector('.goal-input[data-i="' + i + '"]');
+        var ci = document.querySelector('.cases-input[data-i="' + i + '"]');
         var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
         // 바뀐 칸만 보낸다 — 손대지 않은 목표를 빈 값으로 덮어쓰지 않게
         if (gi) {
           var payload = { member: pg.member, memberEmail: pg.email };
           var changed = false;
           if (gi.value.trim() !== (gi.dataset.init || "")) { payload.goal = gi.value.trim(); changed = true; }
+          if (ci && String(ci.value || "") !== (ci.dataset.init || "")) { payload.cases = Number(ci.value) || 0; changed = true; }
           if (ii && String(ii.value || "") !== (ii.dataset.init || "")) { payload.intro = Number(ii.value) || 0; changed = true; }
           if (changed) (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push(payload);
         }

@@ -794,6 +794,17 @@ async function main() {
   // 형식이 틀리면 거절
   assert.equal((await api("t-super", "POST", "/admin/members", { email: "차월@x.com", joinedAt: "2026년 5월" })).status, 400);
 
+  // 45) 목표는 부지점장 이상만 — 관리자로 임명된 팀원도 목표는 못 정한다 (2026-08-05 사용자)
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: true });
+  assert.equal((await api("t-fc1", "POST", "/perf/goals", { month: "2026-09", goals: [{ member: "팀원1", goal: "9" }] })).status, 403);
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: false });
+  // 목표 건수는 CANP·도입과 따로 저장되고, 하나만 고쳐도 나머지가 남는다
+  await api("t-esl1", "POST", "/perf/goals", { month: "2026-09", goals: [{ member: "팀원1", cases: 12 }] });
+  const gCase = (await (await api("t-fc1", "GET", "/perf?month=2026-09")).json()).goals.find(g => g.member === "팀원1");
+  assert.equal(gCase.cases, 12);
+  assert.equal(gCase.goal, "1,200(120)");
+  assert.equal(gCase.intro, 4);
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 

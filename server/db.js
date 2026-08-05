@@ -180,6 +180,7 @@ export function openDb(file) {
       member       TEXT NOT NULL,
       member_email TEXT,
       goal         TEXT NOT NULL DEFAULT '',
+      cases        INTEGER NOT NULL DEFAULT 0,
       intro        INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (team_id, month, member_key)
     );
@@ -238,6 +239,8 @@ export function openDb(file) {
     "ALTER TABLE ta_logs ADD COLUMN author_email TEXT",
     "ALTER TABLE perf ADD COLUMN member_email TEXT",
     "ALTER TABLE perf_goals ADD COLUMN member_email TEXT",
+    // 목표 건수 — CANP와 따로 센다 (2026-08-05 사용자)
+    "ALTER TABLE perf_goals ADD COLUMN cases INTEGER NOT NULL DEFAULT 0",
     // 본인 확인 — 구글 계정 이름이 그대로 들어오면 "kim jia"처럼 남는다.
     // 승인 후 본인이 실명을 확인해야 1이 된다.
     "ALTER TABLE members ADD COLUMN phone TEXT NOT NULL DEFAULT ''",
