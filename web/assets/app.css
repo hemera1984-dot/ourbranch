@@ -422,17 +422,17 @@ a.slot-title:hover { text-decoration: underline; }
 
 /* 지점 → 팀 연결선 */
 .oc-stem { width: 1px; height: 18px; margin: 0 auto; background: var(--line-input); }
-/* 팀은 위에서 아래로 쌓는다 — 옆으로 늘어놓으면 팀이 늘어날수록 계보가 눌린다
-   (2026-08-04 사용자: 「4팀 5팀 생기면 문제가 되겠네」). */
+/* 팀 카드를 화면 폭에 맞게 깐다. 상자 폭에 위아래 한계를 둬서, 팀이 둘뿐일 때
+   이름 옆이 텅 비지도 않고 다섯일 때 눌리지도 않는다. */
 .oc-teams {
-  display: flex; flex-direction: column; gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(276px, 384px));
+  justify-content: center; align-items: start; gap: 12px;
   position: relative; padding-top: 18px;
-  max-width: 660px; margin: 0 auto;   /* 늘리면 이름 옆이 텅 빈다 — 계보는 들여쓰기로 읽는다 */
 }
 /* 팀들을 잇는 가로선 */
 /* 세로로 쌓으므로 팀들을 잇는 가로선은 필요 없다 */
 .oc-teams::before { display: none; }
-.oc-team { width: 100%; position: relative; }
+.oc-team { position: relative; min-width: 0; }
 /* 가로선 → 각 팀 상자 연결 */
 .oc-team::before { display: none; }
 
@@ -447,7 +447,7 @@ a.slot-title:hover { text-decoration: underline; }
   background: var(--surface); overflow: hidden;
 }
 .oc-member {
-  padding: 5px 10px; border-top: 1px solid var(--line); font-size: 13px;
+  padding: 3px 8px; border-top: 1px solid var(--line); font-size: 13px;
   display: flex; align-items: baseline; gap: 6px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
@@ -488,6 +488,7 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .nav-group-label:first-child { margin-top: 4px; }
 /* 계정 미연결 표시 */
+.oc-member .r { min-width: 0; }
 .oc-nolink {
   margin-left: auto; padding: 0 5px; border-radius: 3px;
   background: var(--canvas); border: 1px solid var(--line);
@@ -757,7 +758,7 @@ a.slot-title:hover { text-decoration: underline; }
 /* 가로 스크롤을 두지 않는다 — 한 화면에 다 보여야 조직이 읽힌다 (2026-08-04 사용자).
    들여쓰기를 좁히고 이름이 길면 말줄임으로 접는다. */
 .oc-members { overflow: visible; }
-.tkids { margin-left: 8px; padding-left: 10px; }
+.tkids { margin-left: 5px; padding-left: 8px; }
 .oc-member > span:nth-of-type(2) {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
