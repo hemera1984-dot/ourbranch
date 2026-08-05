@@ -293,7 +293,10 @@ a.slot-title:hover { text-decoration: underline; }
   display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center;
   border-radius: 3px; font-size: 12px; font-weight: 700; margin-bottom: 3px;
 }
-.cal-ev { display: flex; align-items: baseline; gap: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 달력 한 줄은 멀리서도 읽혀야 한다 — 일정 화면에서 제일 많이 보는 글자다 */
+.cal-ev { display: flex; align-items: baseline; gap: 5px; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ev .slot-time { font-weight: 500; color: var(--sub); }
+.cal-ev > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .cal-ev .dot { flex: none; width: 7px; height: 7px; border-radius: 2px; }
 .cal-more { font-size: 11px; color: var(--ter); }
 .cal-day-head { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }

@@ -612,6 +612,16 @@
     return head + (bits.length ? " · " + bits.join(" · ") : "");
   }
 
+  // 달력 칸에 뜰 글자. 세부(내용2)까지 붙이고, 구분 이름만 반복되면 그건 뺀다 —
+  // 구분은 색 점이 이미 말해 준다 (2026-08-05 사용자: 「팀미팅, 킥오프라고 나왔음」).
+  function evLabel(e) {
+    var l2 = "";
+    try { l2 = ((e.detail ? JSON.parse(e.detail) : {}) || {}).line2 || ""; } catch (err) { l2 = ""; }
+    var head = e.title || e.kind;
+    if (!l2) return head;
+    return head === e.kind ? l2 : head + " " + l2;
+  }
+
   // 면접관 명단 — 팀원이 아니라 설정값이고, 1차와 2차가 다르다.
   var INTERVIEWERS = {};
   function interviewersOf(kind) { return INTERVIEWERS[kind] || []; }
@@ -2613,7 +2623,7 @@
           return list.slice(0, 2).map(function (e) {
             return '<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
               + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
-              + "<span>" + esc(e.title || e.kind) + "</span></div>";
+              + "<span>" + esc(evLabel(e)) + "</span></div>";
           }).join("") + (list.length > 2 ? '<div class="cal-more">+' + (list.length - 2) + "건</div>" : "");
         }
         cell.push('<div class="cal-half">' + evLines(mineSide) + "</div>");
