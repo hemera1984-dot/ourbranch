@@ -2667,6 +2667,8 @@
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
     selDate = cell.dataset.date;
+    // 날짜를 눌렀다는 건 그날 상세를 보겠다는 뜻이다 — 접어 뒀어도 편다 (2026-08-05 사용자)
+    if (recall("일정칸접힘") === "1") { remember("일정칸접힘", "0"); applyFolds(); }
     renderCalGrid();
     renderCalDay();
   });
