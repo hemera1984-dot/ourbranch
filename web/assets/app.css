@@ -427,6 +427,7 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-teams {
   display: flex; flex-direction: column; gap: 12px;
   position: relative; padding-top: 18px;
+  max-width: 660px; margin: 0 auto;   /* 늘리면 이름 옆이 텅 빈다 — 계보는 들여쓰기로 읽는다 */
 }
 /* 팀들을 잇는 가로선 */
 /* 세로로 쌓으므로 팀들을 잇는 가로선은 필요 없다 */
@@ -436,17 +437,17 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-team::before { display: none; }
 
 .oc-team-head {
-  padding: 9px 12px; border-radius: 6px 6px 0 0; text-align: center;
+  padding: 6px 12px; border-radius: 6px 6px 0 0; text-align: center;
   background: var(--tc, var(--navy)); color: #fff;
 }
-.oc-team-head strong { display: block; font-size: 14px; font-weight: 800; }
-.oc-team-head span { font-size: 12px; opacity: .85; }
+.oc-team-head strong { display: inline; font-size: 13px; font-weight: 800; }
+.oc-team-head span { font-size: 12px; opacity: .85; margin-left: 8px; }
 .oc-members {
   border: 1px solid var(--line); border-top: 0; border-radius: 0 0 6px 6px;
   background: var(--surface); overflow: hidden;
 }
 .oc-member {
-  padding: 8px 10px; border-top: 1px solid var(--line); font-size: 13px;
+  padding: 5px 10px; border-top: 1px solid var(--line); font-size: 13px;
   display: flex; align-items: baseline; gap: 6px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
@@ -763,52 +764,48 @@ a.slot-title:hover { text-decoration: underline; }
 
 
 
-/* ── 얇은 메뉴 줄 + 겹쳐 펴지는 메뉴 (2026-08-04 사용자) ──
-   접어도 두 글자 표가 남아 어디로 갈지 보인다. 펴면 본문 「위로」 겹쳐 나오므로
-   달력·조직도 폭이 늘었다 줄었다 하지 않는다. */
+/* ── 양옆 칸 접기 (2026-08-05 사용자) ──
+   평소엔 메뉴가 다 보인다. 칸 옆 가운데 화살표를 누르면 「완전히」 접히고,
+   달력·조직도가 그만큼 넓어진다. 다시 누르면 나온다. */
+.edge-handle {
+  position: fixed; top: 50%; transform: translateY(-50%); z-index: 61;
+  width: 18px; height: 64px; padding: 0; line-height: 62px; text-align: center;
+  border: 1px solid var(--line); border-left: 0; border-radius: 0 5px 5px 0;
+  background: var(--surface); color: var(--sub); font-size: 11px; cursor: pointer;
+  box-shadow: 1px 0 4px rgba(0,0,0,.08);
+  transition: left .18s ease, right .18s ease, color .14s, border-color .14s;
+}
+.edge-handle:hover { color: var(--blue); border-color: var(--blue); }
+
 @media (min-width: 901px) {
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 60;
-    width: 62px; overflow: hidden;
-    transition: width .16s ease;
+    width: 216px; overflow: hidden;
+    transition: width .18s ease;
   }
-  body.menu-open .sidebar { width: 216px; box-shadow: 2px 0 12px rgba(0,0,0,.28); }
-  .main { margin-left: 62px; }
+  .main { margin-left: 216px; transition: margin-left .18s ease; }
+  #side-handle { left: 216px; }
 
-  .side-toggle {
-    width: 100%; padding: 12px 0; border: 0; background: none; cursor: pointer;
-    color: #cfd8e5; font-size: 16px; line-height: 1;
-  }
-  .side-toggle:hover { background: rgba(255,255,255,.06); color: #fff; }
-
-  /* 접혔을 때: 두 글자 표만 */
-  .brand, .nav-group-label, .side-user, .nav a b { display: none; }
-  .nav a {
-    display: flex; align-items: center; justify-content: center;
-    padding: 10px 4px; text-align: center;
-  }
-  .nav a i { font-style: normal; font-size: 12px; font-weight: 700; letter-spacing: -.03em; }
-
-  /* 펴졌을 때: 원래 메뉴 */
-  body.menu-open .brand, body.menu-open .nav-group-label, body.menu-open .side-user { display: block; }
-  body.menu-open .nav a { justify-content: flex-start; padding: 9px 20px; text-align: left; }
-  body.menu-open .nav a i { display: none; }
-  body.menu-open .nav a b { display: inline; font-weight: 600; }
+  body.menu-off .sidebar { width: 0; border-top-width: 0; }
+  body.menu-off .main { margin-left: 0; }
+  body.menu-off #side-handle { left: 0; }
 }
 
-/* 일정 오른쪽 칸 — 여기는 누를 때만 바뀌므로 폭이 변해도 놀라지 않는다 */
+/* 일정 오른쪽 칸 — 손잡이는 칸의 왼쪽 모서리 가운데에 선다 */
 .cal-layout { position: relative; }
-.day-fold {
-  position: absolute; top: 0; right: 0; z-index: 5;
-  width: 22px; height: 26px; padding: 0; line-height: 24px;
-  border: 1px solid var(--line); border-radius: 4px;
-  background: var(--surface); color: var(--sub); font-size: 11px; cursor: pointer;
+#day-fold {
+  position: absolute; right: 340px; top: 50%; left: auto;
+  border: 1px solid var(--line); border-right: 0; border-radius: 5px 0 0 5px;
+  box-shadow: -1px 0 4px rgba(0,0,0,.08);
 }
-.day-fold:hover { border-color: var(--blue); color: var(--blue); }
 body.day-off #cal-day { display: none; }
 body.day-off .cal-layout { grid-template-columns: 1fr; }
+body.day-off #day-fold { right: 0; }
+@media (max-width: 1200px) { #day-fold { right: 300px; } }
 
-@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .main, .edge-handle { transition: none; }
+}
 
 /* 차월 — 위촉 년월에서 자동으로 센다. 조직도 이름 옆에 붙는다. */
 .oc-mm {
