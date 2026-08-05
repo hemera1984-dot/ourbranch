@@ -2929,10 +2929,13 @@
       // 명단 밖(총관리자 등) 본인도 자기 줄은 갖는다
       if (!roster.some(function (m) { return m.email === BOOT.me.email; }))
         roster = roster.concat([{ email: BOOT.me.email, name: BOOT.me.name, role: "명단 외" }]);
-      var checked = roster.filter(function (m) { return byEmail[m.email] && byEmail[m.email].present; }).length;
-      var missing = roster.filter(function (m) { return !(byEmail[m.email] && byEmail[m.email].id != null); });
-      var reported = roster.length - missing.length;
-      $("att-summary").textContent = "출석 " + checked + "명 · 보고 " + reported + "/" + roster.length + "명";
+      // 보고는 팀원이 부지점장에게 하는 것이다 — 받는 사람은 스스로에게 보고하지 않는다
+      // (2026-08-05 사용자). 줄은 그대로 두되 집계·재촉 명단에서만 뺀다.
+      var due = roster.filter(function (m) { return m.role !== "부지점장" && m.role !== "지점장"; });
+      var checked = due.filter(function (m) { return byEmail[m.email] && byEmail[m.email].present; }).length;
+      var missing = due.filter(function (m) { return !(byEmail[m.email] && byEmail[m.email].id != null); });
+      var reported = due.length - missing.length;
+      $("att-summary").textContent = "출석 " + checked + "명 · 보고 " + reported + "/" + due.length + "명";
       // 미보고자를 눈에 띄게 — 부지점장이 누구를 재촉할지 바로 안다
       attSnapshot = { ds: ds, roster: roster, byEmail: byEmail, missing: missing };
       var mb = $("att-missing");
@@ -2950,7 +2953,7 @@
         var state = a.present
           ? '<span class="badge green">출근' + (a.checked_at ? " " + esc(a.checked_at.slice(11, 16)) : "") + "</span>"
           : (a.id != null ? '<span class="badge gray">미출근' + (a.reason ? " · " + esc(a.reason) : "") + "</span>"
-            : '<span class="cell-empty">미보고</span>');
+            : '<span class="cell-empty">' + (due.indexOf(m) >= 0 ? "미보고" : "—") + "</span>");
         h.push("<tr>"
           + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(m.role) + "</span></td>"
           + '<td class="ro">' + state + "</td>"
@@ -3088,7 +3091,10 @@
       var readNames = (n.reads || []).map(function (r) { return r.name; }).join(", ");
       return '<div class="card" style="margin-bottom:10px"><div class="card-pad">'
         + '<div class="toolbar" style="margin-bottom:6px">'
-        + '<span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">' + (n.team_id == null ? "지점 전체" : "팀") + "</span>"
+        // 어느 팀 공지인지 이름으로 — 여러 팀을 보는 사람에게 「팀」 한 글자는 뜻이 없다
+        + '<span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">'
+        + (n.team_id == null ? "지점 전체"
+           : esc((BOOT.teams.filter(function (t) { return t.id === n.team_id; })[0] || {}).name || "팀")) + "</span>"
         + '<strong style="flex:1">' + esc(n.title) + "</strong>"
         + '<span class="note">' + esc(n.author) + " · " + esc((n.created || "").slice(0, 10)) + "</span>"
         + '<span class="note" title="' + esc(readNames) + '">확인 ' + (n.reads || []).length + "명</span>"
