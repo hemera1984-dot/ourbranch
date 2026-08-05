@@ -1397,6 +1397,23 @@
   $("ins-copy").addEventListener("click", function () { copyText(appUrl(), "ins-msg"); });
   $("ins-copy-guide").addEventListener("click", function () { copyText(installGuideText(), "ins-msg"); });
 
+  // 합치면 자리 쪽 팀·직급·도입자와 그동안의 기록이 계정으로 넘어가고 빈 자리는 사라진다.
+  $("link-list").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-merge]");
+    if (!b) return;
+    var seat = BOOT.members.filter(function (m) { return m.email === b.dataset.merge; })[0] || {};
+    var acc = BOOT.members.filter(function (m) { return m.email === b.dataset.into; })[0] || {};
+    if (!confirm(seat.name + " 두 줄을 하나로 합칩니다.\n\n"
+      + "남는 계정: " + b.dataset.into + "\n"
+      + "직급·팀: " + seat.role + " · "
+      + ((BOOT.teams.filter(function (t) { return t.id === seat.team_id; })[0] || {}).name || "지점 직속")
+      + " (자리 쪽을 따릅니다. 지금 계정은 " + acc.role + ")\n\n합칠까요?")) return;
+    api("/admin/members/link", { method: "POST", body: { seatEmail: b.dataset.merge, accountEmail: b.dataset.into } })
+      .then(refreshBoot)
+      .then(function () { renderInvite(); renderOrg(); })
+      .catch(function (err) { alert(err.message || "합치지 못했습니다."); });
+  });
+
   // 초대·승인 화면 — 계정 연결만 다룬다 (조직 구조는 조직도에서)
   function renderInvite() {
     renderPending();
@@ -1409,11 +1426,19 @@
     var seats = BOOT.members.filter(isUnlinked);
     var row = function (m, ok) {
       var tn = (BOOT.teams.filter(function (t) { return t.id === m.team_id; })[0] || {}).name || "지점 직속";
+      // 같은 이름의 계정이 이미 명단에 있으면 한 사람이 두 줄로 갈라진 것이다
+      var twin = ok ? null : linked.filter(function (x) { return x.name === m.name; })[0];
       return '<div class="org-row">'
         + '<span class="badge ' + (ok ? "green" : "gray") + '">' + (ok ? "로그인 가능" : "자리만 있음") + "</span>"
         + '<span class="name">' + esc(memberLabel(m)) + "</span>"
         + '<span class="meta">' + esc(m.role) + " · " + esc(tn)
-        + (ok ? " · " + esc(m.email) : " · 계정 미연결 — 초대 문구를 보내세요") + "</span></div>";
+        + (ok ? " · " + esc(m.email)
+              : twin ? " · 같은 이름의 계정이 있습니다 — " + esc(twin.email)
+              : " · 계정 미연결 — 초대 문구를 보내세요") + "</span>"
+        + (twin && BOOT.me.isManager
+            ? '<button type="button" class="btn" data-merge="' + esc(m.email)
+              + '" data-into="' + esc(twin.email) + '">합치기</button>' : "")
+        + "</div>";
     };
     $("link-list").innerHTML =
       (seats.length ? seats.map(function (m) { return row(m, false); }).join("") : "")
