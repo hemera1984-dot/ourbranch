@@ -1543,11 +1543,12 @@
     var others = direct.filter(function (m) { return m !== head; });
     if (head || others.length || mg) {
       h.push('<div class="oc-stem"></div><div class="oc-direct">'
+        // 직급을 앞에 둔다 — 팀 안의 줄(「부지점장 김지아」)과 읽는 순서를 맞춘다
         + (head ? '<span class="oc-chip head' + (mg ? " editable" : "") + '" data-email="' + esc(head.email) + '">'
-            + esc(memberLabel(head)) + '<span class="r">지점장</span></span>' : "")
+            + '<span class="r">지점장</span>' + esc(memberLabel(head)) + "</span>" : "")
         + others.map(function (m) {
           return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
-            + esc(memberLabel(m)) + '<span class="r">' + esc(m.role) + "</span></span>";
+            + '<span class="r">' + esc(m.role) + "</span>" + esc(memberLabel(m)) + "</span>";
         }).join("")
         + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
         + "</div>");
