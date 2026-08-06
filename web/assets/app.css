@@ -456,13 +456,18 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-member.me { background: var(--blue-bg); font-weight: 700; }
 .oc-empty { padding: 14px 10px; text-align: center; color: var(--ter); font-size: 12px; }
 
-/* 지점 직속(지점장 등) */
-.oc-direct { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+/* 지점 직속 — 지점 상자 바로 밑, 팀 위. 권한 순서가 곧 자리다 */
+.oc-direct { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .oc-direct .oc-chip {
   padding: 5px 12px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--surface); font-size: 13px; font-weight: 600;
 }
 .oc-direct .oc-chip .r { font-size: 11px; color: var(--ter); margin-left: 5px; font-weight: 400; }
+/* 지점장은 지점 다음 자리다 — 한눈에 그렇게 보이게 */
+.oc-direct .oc-chip.head {
+  background: var(--navy); color: #fff; border-color: var(--navy); padding: 6px 16px; font-size: 14px;
+}
+.oc-direct .oc-chip.head .r { color: #c9d5e5; }
 
 @media (max-width: 900px) {
   .oc-teams { gap: 10px; }

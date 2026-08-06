@@ -99,7 +99,15 @@ function tx(fn) {
 // - 열람 범위: super·지점장(BM)·can_view_all → 지점 전체 / 그 외 → 자기 팀
 
 // 조직도 직급명 → 코드. 직급 서열은 BM > ESL > SSL > GSL > FC (헌법 조직·권한 절).
-const GRADE_OF_ROLE = { "지점장": "BM", "부지점장": "ESL", "팀장": "SSL", "부팀장": "GSL", "팀원": "FC" };
+const GRADE_OF_ROLE = {
+  "지점장": "BM", "수석 부지점장": "ESL", "부지점장": "ESL",
+  "팀장": "SSL", "부팀장": "GSL", "팀원": "FC"
+};
+// 권한 순서 — 총관리자(isSuper) > 지점장 > 수석 부지점장 > 부지점장 > 팀장 > 부팀장 > 팀원.
+// 마이가디언 등급(GRADE)은 다섯 칸뿐이라 수석·부지점장을 가르지 못한다. 여기서 가른다.
+const ROLE_ORDER = ["지점장", "수석 부지점장", "부지점장", "팀장", "부팀장", "팀원"];
+const ROLE_OF_GRADE = { BM: "지점장", ESL: "부지점장", SSL: "팀장", GSL: "부팀장", FC: "팀원" };
+const roleRank = r => { const i = ROLE_ORDER.indexOf(r); return i < 0 ? 99 : i; };
 const GRADE_RANK = ["BM", "ESL", "SSL", "GSL", "FC"];
 const rankOf = g => { const i = GRADE_RANK.indexOf(g); return i < 0 ? 99 : i; };
 const topGrade = (a, b) => (rankOf(a) <= rankOf(b) ? a : b) || null;
@@ -131,6 +139,7 @@ function userFor(req) {
     name: (member && member.name) || acc.name,
     grade,
     teamId: member ? member.team_id : null,
+    role: (member && member.role) || ROLE_OF_GRADE[mgApproved ? acc.grade : null] || null,
     isSuper,
     isManager: isSuper || gradeManager || !!(member && member.is_manager),
     seesAll: isSuper || grade === "BM" || !!(member && member.can_view_all),
@@ -1086,8 +1095,7 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   // 자기 직급은 총관리자만 바꾼다. 남에게도 자기보다 높은 직급은 주지 못한다.
   if (b.role !== undefined && b.role !== (prev.role || "팀원") && !user.isSuper) {
     if (email === user.email) return send(res, 403, { error: "자기 직급은 총관리자만 바꿉니다" });
-    const rankOfRole = r => rankOf(GRADE_OF_ROLE[r]);
-    if (rankOfRole(b.role) < rankOf(user.grade))
+    if (roleRank(b.role) < roleRank(user.role))
       return send(res, 403, { error: "자기보다 높은 직급은 줄 수 없습니다" });
   }
   // 보낸 값만 갱신 — 도입자만 바꾸려다 이름·팀·직급이 초기화되는 일이 없도록

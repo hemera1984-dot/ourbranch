@@ -805,6 +805,16 @@ async function main() {
   assert.equal(gCase.goal, "1,200(120)");
   assert.equal(gCase.intro, 4);
 
+  // 46) 권한 순서: 총관리자 > 지점장 > 수석 부지점장 > 부지점장 (2026-08-05 사용자)
+  // 수석과 부지점장은 마이가디언 등급이 둘 다 ESL이라 등급으로만 비교하면 뚫린다.
+  assert.equal((await api("t-esl1", "POST", "/admin/members",
+    { email: "차월@x.com", role: "수석 부지점장" })).status, 403);
+  assert.equal((await api("t-super", "POST", "/admin/members",
+    { email: "차월@x.com", role: "수석 부지점장" })).status, 200);
+  // 같은 줄(부지점장 → 부지점장)은 그대로 된다
+  assert.equal((await api("t-esl1", "POST", "/admin/members",
+    { email: "차월@x.com", role: "부지점장" })).status, 200);
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 

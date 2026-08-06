@@ -494,10 +494,12 @@
     try { return localStorage.getItem("ob_theme") || "light"; } catch (e) { return "light"; }
   })());
   var taGrid = null, perfGrids = [], evGrid = null;
-  // 직급 — 마이가디언 서버의 GRADES와 같은 코드·순서를 쓴다 (한 곳에서만 관리)
-  // BM 지점장 > ESL 부지점장 > SSL 팀장 > GSL 부팀장 > FC 팀원
+  // 직급 — 위에서 아래가 곧 권한 순서다 (2026-08-05 사용자 확정).
+  // 총관리자 > 지점장 > 수석 부지점장 > 부지점장 > 팀장 > 부팀장 > 팀원.
+  // code는 마이가디언 등급이라 수석·부지점장이 같다 — 가르는 것은 이 목록의 순서다.
   var GRADES = [
     { code: "BM", name: "지점장" },
+    { code: "ESL", name: "수석 부지점장" },
     { code: "ESL", name: "부지점장" },
     { code: "SSL", name: "팀장" },
     { code: "GSL", name: "부팀장" },
@@ -1472,11 +1474,17 @@
   // 팀은 피라미드다 — 부지점장이 꼭대기, 그 밑으로 도입 계보가 갈린다.
   // 보험 조직은 「누가 누구를 도입했나」가 팀 안에서 또 줄기를 만든다(계파).
   // 도입자가 지정되지 않은 사람은 부지점장 바로 밑에 붙는다.
+  // 팀 꼭대기 — 수석 부지점장이 있으면 그 사람, 없으면 부지점장
+  function teamLead(list) {
+    return list.filter(function (m) { return m.role === "수석 부지점장"; })[0]
+      || list.filter(function (m) { return m.role === "부지점장"; })[0];
+  }
+
   function lineageHtml(list, teamId, mg) {
     var byEmail = {};
     list.forEach(function (m) { byEmail[m.email] = m; });
     var rank = function (m) { return ROLE_RANK[m.role] == null ? 9 : ROLE_RANK[m.role]; };
-    var lead = list.filter(function (m) { return m.role === "부지점장"; })[0];
+    var lead = teamLead(list);
     var kids = {}, loose = [], outside = [];
     list.forEach(function (m) {
       if (lead && m.email === lead.email) return;
@@ -1528,7 +1536,22 @@
 
     var h = ['<div class="orgchart">'];
     h.push('<div class="oc-branch"><strong>' + esc(BOOT.branchName || "지점") + "</strong>"
-      + '<span>' + (head ? esc(memberLabel(head)) + " 지점장" : "구성원 " + BOOT.members.length + "명") + "</span></div>");
+      + '<span>구성원 ' + BOOT.members.length + "명</span></div>");
+
+    // 지점장·지점 직속은 지점 바로 밑 — 팀 위에 선다. 권한 순서가 곧 자리다
+    // (2026-08-05 사용자: 「지점장도 추가해야됨」).
+    var others = direct.filter(function (m) { return m !== head; });
+    if (head || others.length || mg) {
+      h.push('<div class="oc-stem"></div><div class="oc-direct">'
+        + (head ? '<span class="oc-chip head' + (mg ? " editable" : "") + '" data-email="' + esc(head.email) + '">'
+            + esc(memberLabel(head)) + '<span class="r">지점장</span></span>' : "")
+        + others.map(function (m) {
+          return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
+            + esc(memberLabel(m)) + '<span class="r">' + esc(m.role) + "</span></span>";
+        }).join("")
+        + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
+        + "</div>");
+    }
 
     if (!teams.length) {
       h.push('<div class="oc-empty" style="margin-top:14px">팀이 아직 없습니다.'
@@ -1541,14 +1564,14 @@
     h.push('<div class="oc-teams' + (teams.length === 1 ? " one" : "") + '" style="--n:' + teams.length + '">');
     teams.forEach(function (t, i) {
       var list = rosterOf(t.id);
-      var lead = list.filter(function (m) { return m.role === "부지점장"; })[0];
+      var lead = teamLead(list);
       var rest = list.filter(function (m) { return m !== lead; });
       h.push('<div class="oc-team">');
       h.push('<div class="oc-team-head' + (BOOT.me.isBranchHead ? " editable" : "") + '"'
         + ' style="--tc:' + TEAM_COLORS[i % TEAM_COLORS.length] + '"'
         + ' data-team="' + t.id + '" data-name="' + esc(t.name) + '">'
         + "<strong>" + esc(t.name) + "</strong>"
-        + '<span>' + (lead ? esc(memberLabel(lead)) + " 부지점장" : "부지점장 미지정") + "</span></div>");
+        + '<span>' + (lead ? esc(memberLabel(lead)) + " " + esc(lead.role) : "부지점장 미지정") + "</span></div>");
       h.push('<div class="oc-members">');
       var shown = (lead ? [lead] : []).concat(rest);
       if (shown.length) {
@@ -1559,18 +1582,6 @@
     });
     h.push("</div>");
 
-    var others = direct.filter(function (m) { return m !== head; });
-    if (head || others.length || mg) {
-      h.push('<div class="oc-direct">'
-        + (head ? '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(head.email) + '">'
-            + esc(memberLabel(head)) + '<span class="r">지점장</span></span>' : "")
-        + others.map(function (m) {
-          return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
-            + esc(memberLabel(m)) + '<span class="r">' + esc(m.role) + "</span></span>";
-        }).join("")
-        + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
-        + "</div>");
-    }
     h.push("</div>");
     $("org-chart").innerHTML = h.join("");
   }
