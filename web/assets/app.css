@@ -760,6 +760,12 @@ a.slot-title:hover { text-decoration: underline; }
   color: var(--sub); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .oc-under:hover { border-color: var(--blue); color: var(--blue); }
+.oc-off {
+  flex: none; margin-left: 3px; width: 20px; height: 20px; padding: 0; line-height: 18px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ter); font-size: 12px; cursor: pointer;
+}
+.oc-off:hover { border-color: var(--red); color: var(--red); }
 
 /* 가로 스크롤을 두지 않는다 — 한 화면에 다 보여야 조직이 읽힌다 (2026-08-04 사용자).
    들여쓰기를 좁히고 이름이 길면 말줄임으로 접는다. */

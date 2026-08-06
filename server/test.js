@@ -815,6 +815,14 @@ async function main() {
   assert.equal((await api("t-esl1", "POST", "/admin/members",
     { email: "차월@x.com", role: "부지점장" })).status, 200);
 
+  // 47) 사람을 내리면 그 밑 계보가 한 칸 위로 올라붙는다 — 줄기가 끊기지 않게
+  await api("t-super", "POST", "/admin/members", { email: "계보중간@x.com", name: "중간", teamId: 1, role: "팀장", recruiterEmail: "esl1@x.com" });
+  await api("t-super", "POST", "/admin/members", { email: "계보아래@x.com", name: "아래", teamId: 1, role: "팀원", recruiterEmail: "계보중간@x.com" });
+  assert.equal((await api("t-super", "DELETE", "/admin/members/" + encodeURIComponent("계보중간@x.com"))).status, 200);
+  const lifted = (await (await api("t-super", "GET", "/bootstrap")).json()).members
+    .filter(m => m.email === "계보아래@x.com")[0];
+  assert.equal(lifted.recruiter_email, "esl1@x.com", "도입자가 사라진 사람을 가리키면 안 된다");
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 

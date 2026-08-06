@@ -1467,7 +1467,9 @@
       + (monthsIn(m.joined_at) ? '<span class="oc-mm">' + monthsIn(m.joined_at) + "차월</span>" : "")
       + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
       + (mg ? '<button type="button" class="oc-under" title="이 사람이 뽑은 사람 추가" data-under="'
-              + esc(m.email) + '" data-team="' + teamId + '">+</button>' : "")
+              + esc(m.email) + '" data-team="' + teamId + '">+</button>'
+            + '<button type="button" class="oc-off" title="명단에서 내리기" data-off="'
+              + esc(m.email) + '">×</button>' : "")
       + "</div>";
   }
 
@@ -1585,6 +1587,20 @@
 
     h.push("</div>");
     $("org-chart").innerHTML = h.join("");
+  }
+
+  // 명단에서 내리기 — 기록이 없는 자리는 지우고, 기록이 있으면 남긴다(서버가 가른다).
+  // 그 사람 밑에 있던 사람들은 한 칸 위로 올라붙는다.
+  function removeMember(email) {
+    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
+    if (!m) return;
+    var kids = BOOT.members.filter(function (x) { return x.recruiter_email === email && x.active !== 0; });
+    if (!confirm(m.name + " 님을 명단에서 내릴까요?\n\n"
+      + "지난 일정·일지·업적 기록은 남습니다."
+      + (kids.length ? "\n밑에 있던 " + kids.length + "명은 한 칸 위로 올라붙습니다." : ""))) return;
+    api("/admin/members/" + encodeURIComponent(email), { method: "DELETE" })
+      .then(refreshBoot).then(renderOrg)
+      .catch(function (err) { alert(err.message || "내리지 못했습니다."); });
   }
 
   function placePop(p, anchor) {
@@ -1854,6 +1870,8 @@
 
   // 차트 클릭 — 팀 헤더 / 팀원 / 추가
   $("org-chart").addEventListener("click", function (e) {
+    var off = e.target.closest(".oc-off");
+    if (off) { removeMember(off.dataset.off); return; }
     var under = e.target.closest(".oc-under");
     if (under) {   // 그 사람이 뽑은 사람으로 새로 만든다 — 도입자를 빼먹지 않게
       openMemberPop(under, { teamId: Number(under.dataset.team), recruiter: under.dataset.under });

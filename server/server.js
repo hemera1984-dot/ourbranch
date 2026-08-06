@@ -1191,12 +1191,19 @@ route("DELETE", /^\/admin\/members\/([^/]+)$/, true, (req, res, user, m) => {
                "SELECT COUNT(*) n FROM tasks WHERE targets LIKE '%' || ? || '%'",
                "SELECT COUNT(*) n FROM events WHERE detail LIKE '%' || ? || '%'"]
     .some(sql => db.prepare(sql).get(email).n > 0);
+  // 아래 사람들은 한 칸 위(그 사람의 도입자)로 올려붙인다 — 줄기가 끊기지 않게
+  const gone = getMember(db, email);
+  const up = gone && gone.recruiter_email && gone.recruiter_email !== email ? gone.recruiter_email : null;
+  const lift = () => db.prepare("UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?").run(up, email);
   if (!has) {
-    db.prepare("DELETE FROM members WHERE email = ?").run(email);
+    tx(() => { lift(); db.prepare("DELETE FROM members WHERE email = ?").run(email); });
     return send(res, 200, { ok: true, removed: true });
   }
-  db.prepare("UPDATE members SET active = 0, left_at = ?, is_manager = 0, can_view_all = 0 WHERE email = ?")
-    .run(today(), email);
+  tx(() => {
+    lift();
+    db.prepare("UPDATE members SET active = 0, left_at = ?, is_manager = 0, can_view_all = 0 WHERE email = ?")
+      .run(today(), email);
+  });
   send(res, 200, { ok: true, removed: false });
 });
 
