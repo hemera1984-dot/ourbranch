@@ -2655,7 +2655,9 @@
       var ds = fmtDate(new Date(y, mo, d));
       var items = calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
         .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
-      var cell = ['<div class="cal-cell' + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
+      var dow = (pad + d - 1) % 7;                       // 0=월 … 5=토, 6=일
+      var cell = ['<div class="cal-cell' + (dow >= 5 ? " weekend" : "")
+        + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
       cell.push('<span class="cal-daynum">' + d + "</span>");
       function kindClsOf(e) {
         return "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
@@ -2670,11 +2672,12 @@
         var mineSide = items.filter(function (e) { return !isOfficial(e); });
         var offSide = items.filter(isOfficial);
         function evLines(list) {
-          return list.slice(0, 2).map(function (e) {
+          // 평일 칸이 넓어졌으니 한 줄 더 보여준다 (2026-08-05 사용자)
+          return list.slice(0, 3).map(function (e) {
             return '<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
               + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
               + "<span>" + esc(evLabel(e)) + "</span></div>";
-          }).join("") + (list.length > 2 ? '<div class="cal-more">+' + (list.length - 2) + "건</div>" : "");
+          }).join("") + (list.length > 3 ? '<div class="cal-more">+' + (list.length - 3) + "건</div>" : "");
         }
         cell.push('<div class="cal-half">' + evLines(mineSide) + "</div>");
         cell.push('<div class="cal-half official">' + evLines(offSide) + "</div>");

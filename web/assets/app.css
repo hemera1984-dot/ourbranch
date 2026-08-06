@@ -276,11 +276,16 @@ a.slot-title:hover { text-decoration: underline; }
 .seg .seg-btn:last-child { border-radius: 0 4px 4px 0; }
 .seg .seg-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 .cal-layout { display: grid; grid-template-columns: 1fr 340px; gap: 12px; align-items: start; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+/* 지점·팀 일정은 월~금에 몰린다. 토·일은 대개 개인 일정뿐이라 좁혀도 아쉽지 않다 —
+   그만큼을 평일에 얹어 한 칸에 더 많은 내용이 들어간다 (2026-08-05 사용자). */
+.cal-grid { display: grid; grid-template-columns: repeat(5, 1fr) .62fr .62fr; }
+/* 좁아진 주말 칸에서는 시간을 접는다 — 개인 일정은 몇 시인지보다 무엇인지가 먼저다.
+   시간은 칸을 누르면 오른쪽 상세에서 본다. */
+.cal-cell.weekend .cal-ev .slot-time { display: none; }
 .cal-dow { padding: 7px 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--sub); background: var(--canvas); border-bottom: 1px solid var(--line); }
 .cal-dow.weekend { color: var(--red); }
 .cal-cell {
-  min-height: 92px; padding: 6px 7px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  min-height: 112px; padding: 6px 7px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
   cursor: pointer; transition: background .14s; min-width: 0;
 }
 .cal-grid > :nth-child(7n) { border-right: 0; }
