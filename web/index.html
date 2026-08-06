@@ -1459,10 +1459,11 @@
   }
 
   function memberBox(m, teamId, mg, depth) {
-    return '<div class="oc-member' + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
+    return '<div class="oc-member d' + Math.min(depth, 3)
+      + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
       + (mg ? ' draggable="true"' : "")
       + ' data-team="' + teamId + '" data-email="' + esc(m.email) + '">'
-      + '<span class="r">' + esc(m.role) + "</span>"
+      + '<span class="r' + (m.role === "팀원" ? "" : " sr") + '">' + esc(m.role) + "</span>"
       + "<span>" + esc(memberLabel(m)) + "</span>"
       + (monthsIn(m.joined_at) ? '<span class="oc-mm">' + monthsIn(m.joined_at) + "차월</span>" : "")
       + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
@@ -1569,9 +1570,8 @@
       var list = rosterOf(t.id);
       var lead = teamLead(list);
       var rest = list.filter(function (m) { return m !== lead; });
-      h.push('<div class="oc-team">');
+      h.push('<div class="oc-team" style="--tc:' + TEAM_COLORS[i % TEAM_COLORS.length] + '">');
       h.push('<div class="oc-team-head' + (BOOT.me.isBranchHead ? " editable" : "") + '"'
-        + ' style="--tc:' + TEAM_COLORS[i % TEAM_COLORS.length] + '"'
         + ' data-team="' + t.id + '" data-name="' + esc(t.name) + '">'
         + "<strong>" + esc(t.name) + "</strong>"
         + '<span>' + (lead ? esc(memberLabel(lead)) + " " + esc(lead.role) : "부지점장 미지정") + "</span></div>");

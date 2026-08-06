@@ -498,7 +498,7 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-nolink {
   margin-left: auto; padding: 0 5px; border-radius: 3px;
   background: var(--canvas); border: 1px solid var(--line);
-  font-size: 11px; color: var(--ter); flex: none;
+  font-size: 11px; color: var(--ter); flex: none; opacity: .7;
 }
 
 /* 앱 설치 안내 */
@@ -738,18 +738,29 @@ a.slot-title:hover { text-decoration: underline; }
   position: relative;
   margin-left: 14px;
   padding-left: 12px;
-  border-left: 1px solid var(--line-input);   /* 부모에서 내려오는 줄기 */
+  border-left: 2px solid var(--tc, var(--line-input));   /* 부모에서 내려오는 줄기 */
 }
 /* 마지막 자식 아래로는 줄기를 지운다 */
+/* 마지막 자식은 가지가 닿는 데까지만 줄기를 남긴다 (└ 모양) */
 .tkids > .tnode:last-child::after {
-  content: ""; position: absolute; left: -13px; top: 15px; bottom: -2px; width: 3px;
+  content: ""; position: absolute; left: -15px; top: 15px; bottom: -2px; width: 4px;
   background: var(--surface);
 }
 /* 자식으로 뻗는 가지 */
 .tkids > .tnode > .oc-member::before {
-  content: ""; position: absolute; left: -12px; top: 50%; width: 10px; height: 1px;
-  background: var(--line-input);
+  content: ""; position: absolute; left: -13px; top: 13px; width: 11px; height: 2px;
+  background: var(--tc, var(--line-input));
 }
+
+/* 위계 — 들여쓰기만으로는 30명이 한 줄로 보인다. 크기·굵기·색으로 같이 말한다
+   (2026-08-05 사용자: 「위계가 좀 잘 안보이긴한다」). */
+.oc-member.d0 { font-size: 14.5px; font-weight: 700; background: var(--canvas); padding: 6px 8px; }
+.oc-member.d1 { font-size: 13.5px; font-weight: 600; }
+.oc-member.d2 { font-size: 13px; }
+.oc-member.d3 { font-size: 12.5px; }
+.oc-member.d2 .r, .oc-member.d3 .r { opacity: .8; }
+/* 직급은 팀원일 때만 흐리다 — 팀장·부팀장이 어디 있는지 바로 보이게 */
+.oc-member .r.sr { color: var(--blue); font-weight: 700; }
 .tnode > .oc-member { position: relative; }
 .oc-wrap { overflow-x: auto; }
 
@@ -760,6 +771,9 @@ a.slot-title:hover { text-decoration: underline; }
   color: var(--sub); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .oc-under:hover { border-color: var(--blue); color: var(--blue); }
+.oc-under, .oc-off { opacity: 0; transition: opacity .12s; }
+.oc-member:hover .oc-under, .oc-member:hover .oc-off { opacity: 1; }
+@media (pointer: coarse) { .oc-under, .oc-off { opacity: 1; } }
 .oc-off {
   flex: none; margin-left: 3px; width: 20px; height: 20px; padding: 0; line-height: 18px;
   border: 1px solid var(--line); border-radius: 4px;
@@ -770,7 +784,7 @@ a.slot-title:hover { text-decoration: underline; }
 /* 가로 스크롤을 두지 않는다 — 한 화면에 다 보여야 조직이 읽힌다 (2026-08-04 사용자).
    들여쓰기를 좁히고 이름이 길면 말줄임으로 접는다. */
 .oc-members { overflow: visible; }
-.tkids { margin-left: 5px; padding-left: 8px; }
+.tkids { margin-left: 13px; padding-left: 13px; }
 .oc-member > span:nth-of-type(2) {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
