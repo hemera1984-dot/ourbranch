@@ -505,6 +505,14 @@
     { code: "GSL", name: "부팀장" },
     { code: "FC", name: "팀원" }
   ];
+  // 직급 색 — 위계는 순서라서 색을 흩뿌리지 않고 한 색의 농도로 센다.
+  // 위로 갈수록 진하다. 팀원은 대다수라 배경 없이 둔다(안 그러면 화면이 배지밭이 된다).
+  var ROLE_CLS = {
+    "지점장": "r-bm", "수석 부지점장": "r-es2", "부지점장": "r-esl",
+    "팀장": "r-ssl", "부팀장": "r-gsl", "팀원": "r-fc"
+  };
+  function roleCls(role) { return ROLE_CLS[role] || "r-fc"; }
+
   var ROLE_RANK = {};
   GRADES.forEach(function (g, i) { ROLE_RANK[g.name] = i; });
   function gradeCode(name) {
@@ -1463,7 +1471,7 @@
       + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
       + (mg ? ' draggable="true"' : "")
       + ' data-team="' + teamId + '" data-email="' + esc(m.email) + '">'
-      + '<span class="r' + (m.role === "팀원" ? "" : " sr") + '">' + esc(m.role) + "</span>"
+      + '<span class="r ' + roleCls(m.role) + '">' + esc(m.role) + "</span>"
       + "<span>" + esc(memberLabel(m)) + "</span>"
       + (monthsIn(m.joined_at) ? '<span class="oc-mm">' + monthsIn(m.joined_at) + "차월</span>" : "")
       + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
@@ -1551,7 +1559,7 @@
             + '<span class="r">지점장</span>' + esc(memberLabel(head)) + "</span>" : "")
         + others.map(function (m) {
           return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
-            + '<span class="r">' + esc(m.role) + "</span>" + esc(memberLabel(m)) + "</span>";
+            + '<span class="r ' + roleCls(m.role) + '">' + esc(m.role) + "</span>" + esc(memberLabel(m)) + "</span>";
         }).join("")
         + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
         + "</div>");

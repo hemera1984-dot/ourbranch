@@ -9,6 +9,13 @@
   --green: #15803d; --green-bg: #e8f5ee; --red: #dc2626; --red-bg: #fdecea; --amber: #b45309; --amber-bg: #fdf3e0;
   --k-meet-bg: #f1ece6; --k-meet-fg: #481820; --k-int-bg: #efe9fb; --k-int-fg: #5b3fa8;
   --k-lec-bg: #e0f4f8; --k-lec-fg: #0b6f85;
+  /* 직급 색 — 위로 갈수록 진한 한 계단 (장식이 아니라 위계 신호다) */
+  --r-bm-bg: #481820;  --r-bm-fg: #ffffff;
+  --r-es2-bg: #7b2231; --r-es2-fg: #ffffff;
+  --r-esl-bg: #bc003a; --r-esl-fg: #ffffff;
+  --r-ssl-bg: #ffd7de; --r-ssl-fg: #8f0230;
+  --r-gsl-bg: #f2e7e4; --r-gsl-fg: #7a4a50;
+  --r-fc-bg:  #f1efec; --r-fc-fg:  #565d68;
 }
 
 /* 다크모드 — 마이가디언은 푸른 남색 계열이지만 여기서는 따르지 않는다.
@@ -22,6 +29,12 @@
   --k-meet-bg: #2b2626; --k-meet-fg: #d8cfcf; --k-int-bg: #29243a; --k-int-fg: #b9a8e8;
   --k-lec-bg: #10333c; --k-lec-fg: #6fd0e6;
   --today-bg: #23201f;
+  --r-bm-bg: #f4849a;  --r-bm-fg: #241012;
+  --r-es2-bg: #cf6a80; --r-es2-fg: #1d0d10;
+  --r-esl-bg: #a8455a; --r-esl-fg: #ffffff;
+  --r-ssl-bg: #3d2129; --r-ssl-fg: #f0a8b6;
+  --r-gsl-bg: #2d2325; --r-gsl-fg: #d3aeb3;
+  --r-fc-bg:  #26272b; --r-fc-fg:  #9aa0a8;
 }
 :root { --today-bg: #fdf3f4; }
 * { box-sizing: border-box; }
@@ -767,8 +780,20 @@ a.slot-title:hover { text-decoration: underline; }
 .oc-member.d2 { font-size: 13px; }
 .oc-member.d3 { font-size: 12.5px; }
 .oc-member.d2 .r, .oc-member.d3 .r { opacity: .8; }
-/* 직급은 팀원일 때만 흐리다 — 팀장·부팀장이 어디 있는지 바로 보이게 */
-.oc-member .r.sr { color: var(--blue); font-weight: 700; }
+/* 직급 배지 — 위계를 색 농도로 읽는다. 팀 색(계보선)과는 축이 달라 섞이지 않는다. */
+.oc-member .r, .oc-direct .oc-chip .r {
+  padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 700;
+  white-space: nowrap;
+}
+.r.r-bm  { background: var(--r-bm-bg);  color: var(--r-bm-fg); }
+.r.r-es2 { background: var(--r-es2-bg); color: var(--r-es2-fg); }
+.r.r-esl { background: var(--r-esl-bg); color: var(--r-esl-fg); }
+.r.r-ssl { background: var(--r-ssl-bg); color: var(--r-ssl-fg); }
+.r.r-gsl { background: var(--r-gsl-bg); color: var(--r-gsl-fg); }
+.r.r-fc  { background: var(--r-fc-bg);  color: var(--r-fc-fg); font-weight: 600; }
+/* 지점장 칩은 그 자체가 진한 상자다 — 배지를 또 칠하지 않는다 */
+.oc-direct .oc-chip.head .r { background: none; color: #b9c8dc; padding-left: 0; }
+/* 팀원은 대다수다 — 배지는 두되 가장 옅게 둬서 화면이 배지밭이 되지 않게 */
 .tnode > .oc-member { position: relative; }
 .oc-wrap { overflow-x: auto; }
 
