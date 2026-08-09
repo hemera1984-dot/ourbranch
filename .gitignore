@@ -15,6 +15,10 @@
 *.key
 id_rsa*
 
+# 올린 서류 — 합격증·수료증에는 실명과 생년월일이 있다. 저장소에 절대 두지 않는다.
+files/
+server/files/
+
 # 내려받은 자료·임시
 *.log
 node_modules/

@@ -7,7 +7,7 @@
 // 외부 패키지를 쓰지 않는다 (Node 22+ 내장 http·sqlite).
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken } from "./auth.js";
@@ -18,6 +18,9 @@ const DB_FILE = process.env.DB_FILE || "./ourbranch.db";
 const AUTH_DB_FILE = process.env.AUTH_DB_FILE || "../myguardian-server/myguardian.db";
 const ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
 const WEB_DIR = process.env.WEB_DIR || "";   // 개발용: web/을 같은 출처로 서빙
+// 서류 파일이 실제로 놓이는 곳. 저장소에는 절대 들어가지 않는다(개인정보).
+const FILE_DIR = process.env.FILE_DIR || "./files";
+const MAX_FILE = 8 * 1024 * 1024;            // 합격증·수료증은 사진 한 장이면 충분하다
 
 const db = openDb(DB_FILE);
 const authDb = openAuthDb(AUTH_DB_FILE);
@@ -278,6 +281,105 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
           .filter(p => user.seesAll || p.team_id == null || p.team_id === user.teamId)
       : []
   });
+});
+
+// ---------- 서류함 ----------
+//
+// 합격증·수료증에는 실명과 생년월일이 찍혀 있다. 그래서 열람을 좁게 연다:
+// 본인 / 자기 팀 관리자 / 지점장·총관리자. 지점 공용 서류(사업자등록증)만 전원 열람.
+//
+// 업로드는 multipart를 쓰지 않는다 — 파서를 직접 짜야 하고 틀리기 쉽다.
+// 메타는 쿼리로 받고 본문은 파일 그대로다.
+
+const DOC_EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+                  "image/heic": ".heic", "application/pdf": ".pdf" };
+
+function canSeeDoc(user, d) {
+  if (d.scope === "branch") return true;                    // 사업자등록증 등 지점 공용
+  if (d.owner_email && d.owner_email === user.email) return true;
+  return user.isManager && canSeeTeam(user, d.team_id);
+}
+// 올리기·지우기 — 본인 것이거나, 자기 팀에 쓰기 권한이 있는 관리자
+function canWriteDoc(user, d) {
+  if (d.scope === "branch") return user.isManager;
+  if (d.owner_email && d.owner_email === user.email) return true;
+  return user.isManager && canWriteTeam(user, d.team_id);
+}
+
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    req.on("data", c => {
+      n += c.length;
+      if (n > limit) { req.destroy(); reject(new Error("too large")); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+route("GET", /^\/docs$/, false, (req, res, user) => {
+  const list = db.prepare("SELECT * FROM docs ORDER BY created DESC, id DESC").all()
+    .filter(d => canSeeDoc(user, d))
+    .map(d => ({ ...d, path: undefined }));      // 서버 경로는 내보내지 않는다
+  send(res, 200, list);
+});
+
+route("POST", /^\/docs$/, false, async (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const scope = q.get("scope") === "branch" ? "branch" : "member";
+  const owner = scope === "branch" ? null : String(q.get("email") || user.email).toLowerCase();
+  const target = owner ? getMember(db, owner) : null;
+  if (scope === "member" && !target) return send(res, 404, { error: "명단에 없는 사람입니다" });
+  const draft = { scope, owner_email: owner, team_id: target ? target.team_id : null };
+  if (!canWriteDoc(user, draft)) return send(res, 403, { error: "권한 없음" });
+
+  const mime = String(req.headers["content-type"] || "").split(";")[0].trim();
+  const ext = DOC_EXT[mime];
+  if (!ext) return send(res, 400, { error: "PDF 또는 사진(JPG·PNG·HEIC)만 올릴 수 있습니다" });
+  const name = String(q.get("name") || "").slice(0, 120) || ("서류" + ext);
+  const kind = String(q.get("kind") || "").slice(0, 40);
+
+  let buf;
+  try { buf = await readBody(req, MAX_FILE); }
+  catch { return send(res, 413, { error: "파일이 8MB를 넘습니다" }); }
+  if (!buf.length) return send(res, 400, { error: "빈 파일입니다" });
+
+  // 파일 이름은 서버가 짓는다 — 올린 이름을 그대로 쓰면 경로를 벗어나는 이름이 섞인다
+  const rel = randomBytes(12).toString("hex") + ext;
+  mkdirSync(FILE_DIR, { recursive: true });
+  writeFileSync(join(FILE_DIR, rel), buf);
+  const r = db.prepare(
+    `INSERT INTO docs (scope, owner_email, team_id, kind, name, mime, size, path, uploader, created)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(scope, owner, draft.team_id, kind, name, mime, buf.length, rel, user.email, now());
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+
+route("GET", /^\/docs\/(\d+)\/file$/, false, (req, res, user, m) => {
+  const d = db.prepare("SELECT * FROM docs WHERE id = ?").get(Number(m[1]));
+  if (!d || !canSeeDoc(user, d)) return send(res, 403, { error: "권한 없음" });
+  const file = normalize(join(FILE_DIR, d.path));
+  if (!file.startsWith(normalize(FILE_DIR)) || !existsSync(file))
+    return send(res, 404, { error: "파일이 없습니다" });
+  res.writeHead(200, {
+    "Content-Type": d.mime || "application/octet-stream",
+    "Content-Length": statSync(file).size,
+    // 이름에 한글이 들어가므로 filename* 로 보낸다
+    "Content-Disposition": "inline; filename*=UTF-8''" + encodeURIComponent(d.name),
+    "Cache-Control": "private, no-store"
+  });
+  res.end(readFileSync(file));
+});
+
+route("DELETE", /^\/docs\/(\d+)$/, false, (req, res, user, m) => {
+  const d = db.prepare("SELECT * FROM docs WHERE id = ?").get(Number(m[1]));
+  if (!d || !canWriteDoc(user, d)) return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM docs WHERE id = ?").run(d.id);
+  try { unlinkSync(join(FILE_DIR, d.path)); } catch { /* 이미 없으면 그만 */ }
+  send(res, 200, { ok: true });
 });
 
 // ---- 공지 ----

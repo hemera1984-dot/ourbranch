@@ -185,6 +185,23 @@ export function openDb(file) {
       PRIMARY KEY (team_id, month, member_key)
     );
 
+    -- 서류함 — 합격증·수료증처럼 「사람마다 한 장씩」 쌓이는 자료.
+    -- 파일 자체는 서버 디스크에 두고 여기엔 어디 있는지와 누구 것인지만 적는다.
+    -- scope='member' 개인 서류 / scope='branch' 지점 공용(사업자등록증 등).
+    CREATE TABLE IF NOT EXISTS docs (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope        TEXT NOT NULL DEFAULT 'member',
+      owner_email  TEXT,
+      team_id      INTEGER,
+      kind         TEXT NOT NULL DEFAULT '',
+      name         TEXT NOT NULL,
+      mime         TEXT NOT NULL DEFAULT '',
+      size         INTEGER NOT NULL DEFAULT 0,
+      path         TEXT NOT NULL,
+      uploader     TEXT NOT NULL DEFAULT '',
+      created      TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS tasks (
       id       INTEGER PRIMARY KEY AUTOINCREMENT,
       team_id  INTEGER NOT NULL REFERENCES teams(id),

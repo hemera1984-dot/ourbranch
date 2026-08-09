@@ -60,6 +60,8 @@
       <p class="nav-group-label">리쿠르팅</p>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#recruit" data-screen="recruit">도입 현황</a>
+      <p class="nav-group-label">자료</p>
+      <a href="#docs" data-screen="docs">서류함</a>
       <p class="nav-group-label">내 계정</p>
       <a href="#me" data-screen="me">내 정보</a>
       <p class="nav-group-label">관리</p>
@@ -462,6 +464,24 @@
       </div>
     </section>
 
+    <section id="screen-docs" hidden>
+      <p class="eyebrow">자료</p>
+      <h1>서류함</h1>
+      <p class="page-desc">합격증·수료증처럼 사람마다 한 장씩 쌓이는 자료를 여기 둡니다.
+        누가 무엇을 안 냈는지 한 화면에 보입니다. 본인과 팀 관리자만 볼 수 있습니다.</p>
+      <div class="section">
+        <div class="section-head"><h2>지점 자료</h2><p>사업자등록증처럼 지점 전체가 함께 쓰는 서류입니다.</p></div>
+        <div class="card" id="doc-branch"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>팀원 서류</h2>
+          <div class="toolbar"><select class="input" id="doc-team"></select></div>
+        </div>
+        <div class="card" id="doc-people"></div>
+      </div>
+      <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,image/*,application/pdf" hidden>
+    </section>
+
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
@@ -479,7 +499,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit"];
+  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -911,6 +931,7 @@
     if (name === "ta") loadTa();
     if (name === "perf") loadPerf();
     if (name === "recruit") loadRecruit();
+    if (name === "docs") loadDocs();
   }
   // 폰 하단 탭 — 넷은 바로, 나머지는 「더보기」로 사이드 메뉴를 연다
   $("tabbar").addEventListener("click", function (e) {
@@ -3056,6 +3077,133 @@
   $("att-next").addEventListener("click", function () { attMoved = true; attBase = new Date(attBase.getFullYear(), attBase.getMonth(), attBase.getDate() + 1); loadAtt(); });
   $("att-today").addEventListener("click", function () { attMoved = true; attBase = new Date(); loadAtt(); });
   $("att-tomorrow").addEventListener("click", function () { attMoved = true; attBase = new Date(Date.now() + 86400e3); loadAtt(); });
+
+  // ── 서류함 ──
+  //
+  // 파일 올리기는 multipart를 쓰지 않는다 — 메타는 주소에, 파일은 본문 그대로.
+  // 서버도 파서 없이 그대로 받아 적는다.
+  var DOC_KINDS = ["생명보험 합격증", "손해보험 합격증", "변액 합격증",
+    "온라인 교육 수료증", "위촉 서류", "기타"];
+  var docs = [];
+  var docPick = null;      // 파일 고르기 창이 무엇을 위해 열렸는지
+
+  function docUpload(file, meta) {
+    var qs = "?scope=" + encodeURIComponent(meta.scope)
+      + (meta.email ? "&email=" + encodeURIComponent(meta.email) : "")
+      + "&kind=" + encodeURIComponent(meta.kind || "")
+      + "&name=" + encodeURIComponent(file.name);
+    return fetch(API + "/docs" + qs, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": file.type || "application/octet-stream" },
+      body: file
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) { alert(j.error || "올리지 못했습니다"); throw new Error(j.error || r.status); }
+        return j;
+      });
+    });
+  }
+
+  function docOpen(d) {
+    // 토큰이 필요하므로 주소를 바로 열 수 없다 — 받아서 새 탭에 띄운다
+    fetch(API + "/docs/" + d.id + "/file", { headers: { Authorization: "Bearer " + token } })
+      .then(function (r) { if (!r.ok) throw new Error("열지 못했습니다"); return r.blob(); })
+      .then(function (b) {
+        var u = URL.createObjectURL(b);
+        window.open(u, "_blank");
+        setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+      })
+      .catch(function (e) { alert(e.message); });
+  }
+
+  function docChip(d, canEdit) {
+    return '<span class="doc-chip" data-id="' + d.id + '">'
+      + '<button type="button" class="doc-open" data-id="' + d.id + '">'
+      + esc(d.kind || d.name) + "</button>"
+      + (canEdit ? '<button type="button" class="doc-del" data-id="' + d.id + '" title="지우기">×</button>' : "")
+      + "</span>";
+  }
+
+  function docAddBtn(scope, email) {
+    return '<button type="button" class="btn doc-add" data-scope="' + scope + '"'
+      + (email ? ' data-email="' + esc(email) + '"' : "") + ">올리기</button>";
+  }
+
+  function loadDocs() {
+    var t = $("doc-team");
+    if (BOOT.me.seesAll && BOOT.teams.length > 1) {
+      t.hidden = false;
+      if (!t.options.length)
+        t.innerHTML = BOOT.teams.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + "</option>"; }).join("");
+    } else t.hidden = true;
+    api("/docs").then(function (list) { docs = list; renderDocs(); });
+  }
+
+  function renderDocs() {
+    var byOwner = {}, branch = [];
+    docs.forEach(function (d) {
+      if (d.scope === "branch") branch.push(d);
+      else (byOwner[d.owner_email] = byOwner[d.owner_email] || []).push(d);
+    });
+
+    $("doc-branch").innerHTML = '<div class="org-row">'
+      + '<span class="name">지점 공용</span>'
+      + '<span class="meta">' + (branch.length ? branch.map(function (d) { return docChip(d, BOOT.me.isManager); }).join(" ")
+          : '<span class="cell-empty">올린 서류가 없습니다</span>') + "</span>"
+      + (BOOT.me.isManager ? docAddBtn("branch") : "") + "</div>";
+
+    var teamId = $("doc-team").hidden ? myTeamId() : Number($("doc-team").value);
+    var people = rosterOf(teamId);
+    if (!people.length) { $("doc-people").innerHTML = '<div class="empty">팀원 명단이 비어 있습니다.</div>'; return; }
+    $("doc-people").innerHTML = people.map(function (m) {
+      var mine = byOwner[m.email] || [];
+      var canEdit = m.email === BOOT.me.email || BOOT.me.isManager;
+      var missing = DOC_KINDS.slice(0, 3).filter(function (k) {
+        return !mine.some(function (d) { return d.kind === k; });
+      });
+      return '<div class="org-row">'
+        + '<span class="name">' + esc(memberLabel(m)) + "</span>"
+        + '<span class="meta">'
+        + (mine.length ? mine.map(function (d) { return docChip(d, canEdit); }).join(" ") : "")
+        // 안 낸 것을 같이 보여준다 — 재촉할 대상이 바로 보이게
+        + (missing.length ? ' <span class="doc-miss">미제출 ' + missing.map(esc).join(" · ") + "</span>" : "")
+        + (!mine.length && !missing.length ? '<span class="cell-empty">없음</span>' : "")
+        + "</span>"
+        + (canEdit ? docAddBtn("member", m.email) : "") + "</div>";
+    }).join("");
+  }
+
+  $("doc-team").addEventListener("change", renderDocs);
+  $("screen-docs").addEventListener("click", function (e) {
+    var open = e.target.closest(".doc-open");
+    if (open) {
+      var d = docs.filter(function (x) { return String(x.id) === open.dataset.id; })[0];
+      if (d) docOpen(d);
+      return;
+    }
+    var del = e.target.closest(".doc-del");
+    if (del) {
+      var dd = docs.filter(function (x) { return String(x.id) === del.dataset.id; })[0];
+      if (!dd || !confirm("「" + (dd.kind || dd.name) + "」을 지울까요?")) return;
+      api("/docs/" + dd.id, { method: "DELETE" }).then(loadDocs);
+      return;
+    }
+    var add = e.target.closest(".doc-add");
+    if (!add) return;
+    var kind = prompt("어떤 서류인가요?\n\n" + DOC_KINDS.join(" · "),
+      add.dataset.scope === "branch" ? "사업자등록증" : DOC_KINDS[0]);
+    if (kind === null) return;
+    docPick = { scope: add.dataset.scope, email: add.dataset.email || "", kind: kind.trim() };
+    $("doc-file").value = "";
+    $("doc-file").click();
+  });
+  $("doc-file").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f || !docPick) return;
+    if (f.size > 8 * 1024 * 1024) { alert("파일이 8MB를 넘습니다. 사진이라면 조금 줄여 주세요."); return; }
+    docUpload(f, docPick).then(loadDocs).catch(function () {});
+    docPick = null;
+  });
 
   // ── 미션·공지 ──
   function loadBoard() {

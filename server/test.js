@@ -33,8 +33,10 @@ tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far); tok.run("t-new", 6, far);
 tok.run("t-bm", 7, far);
 auth.close();
 
+const FILES = "./test-files";
+rmSync(FILES, { force: true, recursive: true });
 const srv = spawn(process.execPath, ["server.js"], {
-  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH },
+  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES },
   stdio: "inherit"
 });
 
@@ -823,6 +825,40 @@ async function main() {
     .filter(m => m.email === "계보아래@x.com")[0];
   assert.equal(lifted.recruiter_email, "esl1@x.com", "도입자가 사라진 사람을 가리키면 안 된다");
 
+  // 48) 서류함 — 합격증에는 실명·생년월일이 있다. 열람을 좁게 연다.
+  const docPut = (tok, qs, body, type) => fetch(BASE + "/docs" + qs, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + tok, "Content-Type": type || "application/pdf" },
+    body
+  });
+  const docPdf = Buffer.from("%PDF-1.4 테스트");
+  // 본인 것은 본인이 올린다
+  const docOwn = await (await docPut("t-fc1", "?scope=member&kind=생명보험 합격증&name=합격증.pdf", docPdf)).json();
+  assert.ok(docOwn.id);
+  // 확장자·형식 검사
+  assert.equal((await docPut("t-fc1", "?scope=member", docPdf, "text/html")).status, 400);
+  // 남의 팀 사람 것은 못 올린다
+  assert.equal((await docPut("t-esl1", "?scope=member&email=fc2@x.com", docPdf)).status, 403);
+  // 팀 관리자는 자기 팀원 것을 올린다
+  assert.equal((await docPut("t-esl1", "?scope=member&email=fc1@x.com&kind=손해보험 합격증", docPdf)).status, 200);
+  // 지점 공용은 관리자만
+  assert.equal((await docPut("t-fc1", "?scope=branch&kind=사업자등록증", docPdf)).status, 403);
+  const docBiz = await (await docPut("t-super", "?scope=branch&kind=사업자등록증", docPdf)).json();
+  // 열람: 다른 팀 팀원은 개인 서류를 못 보되 지점 공용은 본다
+  const seenBy2 = await (await api("t-fc2", "GET", "/docs")).json();
+  assert.equal(seenBy2.filter(d => d.scope === "member").length, 0, "남의 개인 서류가 보이면 안 된다");
+  assert.equal(seenBy2.filter(d => d.id === docBiz.id).length, 1);
+  assert.equal((await api("t-fc2", "GET", "/docs/" + docOwn.id + "/file")).status, 403);
+  const docFile = await api("t-fc1", "GET", "/docs/" + docOwn.id + "/file");
+  assert.equal(docFile.status, 200);
+  assert.equal((await docFile.arrayBuffer()).byteLength, docPdf.length);
+  // 서버 경로는 내보내지 않는다
+  assert.equal((await (await api("t-fc1", "GET", "/docs")).json())[0].path, undefined);
+  // 지우기도 같은 범위
+  assert.equal((await api("t-fc2", "DELETE", "/docs/" + docOwn.id)).status, 403);
+  assert.equal((await api("t-fc1", "DELETE", "/docs/" + docOwn.id)).status, 200);
+  assert.equal((await api("t-fc1", "GET", "/docs/" + docOwn.id + "/file")).status, 403);
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 
@@ -834,4 +870,5 @@ main().catch(e => { console.error(e); process.exitCode = 1; })
     await exited;
     for (const f of [AUTH, DATA, DATA + "-wal", DATA + "-shm"])
       try { rmSync(f, { force: true }); } catch { /* WAL 잔재는 다음 실행이 지운다 */ }
+    try { rmSync(FILES, { force: true, recursive: true }); } catch { /* 다음 실행이 지운다 */ }
   });

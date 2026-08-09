@@ -519,6 +519,23 @@ a.slot-title:hover { text-decoration: underline; }
   font-size: 11px; color: var(--ter); flex: none; opacity: .7;
 }
 
+/* 서류함 — 낸 것은 칩, 안 낸 것은 글자로 남겨 재촉할 대상이 보이게 */
+.doc-chip {
+  display: inline-flex; align-items: center; gap: 2px; margin: 2px 4px 2px 0;
+  border: 1px solid var(--line-input); border-radius: 4px; background: var(--surface);
+}
+.doc-chip .doc-open {
+  border: 0; background: none; padding: 3px 8px; font-size: 12px; font-weight: 600;
+  color: var(--blue); cursor: pointer;
+}
+.doc-chip .doc-open:hover { text-decoration: underline; }
+.doc-chip .doc-del {
+  border: 0; background: none; padding: 3px 6px 3px 0; font-size: 12px;
+  color: var(--ter); cursor: pointer;
+}
+.doc-chip .doc-del:hover { color: var(--red); }
+.doc-miss { font-size: 12px; color: var(--amber); font-weight: 600; }
+
 /* 앱 설치 안내 */
 .ins-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .ins-grid strong { display: block; margin-bottom: 8px; font-size: 14px; }
