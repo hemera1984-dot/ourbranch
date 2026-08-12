@@ -15,7 +15,7 @@ rmSync(DATA + "-wal", { force: true }); rmSync(DATA + "-shm", { force: true });
 // 마이가디언 DB 흉내 — accounts·sessions만 있으면 된다
 const auth = new DatabaseSync(AUTH);
 auth.exec(`
-  CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT, name TEXT, status TEXT, grade TEXT, is_admin INTEGER);
+  CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT, name TEXT, display_name TEXT, status TEXT, grade TEXT, is_admin INTEGER);
   CREATE TABLE sessions (token TEXT PRIMARY KEY, account_id INTEGER, expires_at TEXT);
 `);
 const far = new Date(Date.now() + 86400e3).toISOString();
@@ -858,6 +858,16 @@ async function main() {
   assert.equal((await api("t-fc2", "DELETE", "/docs/" + docOwn.id)).status, 403);
   assert.equal((await api("t-fc1", "DELETE", "/docs/" + docOwn.id)).status, 200);
   assert.equal((await api("t-fc1", "GET", "/docs/" + docOwn.id + "/file")).status, 403);
+
+  // 49) 붙일 계정 목록 — 「승인 대기자」만 후보로 두면 로그인만 하고 가입 신청을
+  // 안 한 사람을 영영 못 붙인다 (2026-08-05 사용자: 「연결이 안되는데」).
+  const cands = await (await api("t-super", "GET", "/admin/accounts")).json();
+  const candBy = Object.fromEntries(cands.map(c => [c.email, c]));
+  // 하랑지점 가입 신청을 한 적 없는 계정도 후보에 있어야 한다
+  assert.ok(candBy["wait@x.com"], "로그인 이력만 있어도 붙일 수 있어야 한다");
+  assert.equal(candBy["fc1@x.com"].state, "명단");     // 합치기 대상은 표시가 붙는다
+  assert.ok(["미신청", "대기", "명단"].includes(candBy["wait@x.com"].state));
+  assert.equal((await api("t-fc1", "GET", "/admin/accounts")).status, 403);   // 관리자만
 
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }

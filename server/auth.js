@@ -10,6 +10,15 @@ export function openAuthDb(file) {
   return new DatabaseSync(file, { readOnly: true });
 }
 
+// 자리에 붙일 수 있는 계정 — 마이가디언에 실제로 로그인한 적이 있는 사람.
+// 이름·이메일만 돌려준다(직급·권한은 하랑지점이 따로 정한다).
+export function listAccounts(authDb) {
+  return authDb.prepare(
+    `SELECT email, COALESCE(NULLIF(display_name, ''), name) AS name, status
+     FROM accounts WHERE status <> '정지' ORDER BY name, email`
+  ).all();
+}
+
 // 세션 토큰 → 계정. 만료·정지는 null.
 //
 // 마이가디언에서 아직 '대기'인 계정도 통과시킨다 — 하랑지점은 자체 승인 체계를

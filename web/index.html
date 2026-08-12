@@ -1729,20 +1729,32 @@
           + ">도입자: " + esc(memberLabel(x)) + "</option>";
       }).join("");
 
-    // 붙일 수 있는 계정 — 승인 대기자, 그리고 아직 자리가 없는 내 계정
+    // 붙일 수 있는 계정 — 마이가디언에 로그인한 적 있는 사람 전부.
+    // 서버가 목록을 만든다(BOOT.pending만 보면 가입 신청 안 한 사람이 빠진다).
     var linkSel = p.querySelector("#mp-link");
     if (linkSel) {
-      var cands = (BOOT.pending || []).map(function (x) {
-        return { email: x.email, label: x.name + " · " + x.email + " (승인 대기)" };
+      linkSel.innerHTML = '<option value="">불러오는 중…</option>';
+      linkSel.disabled = true;
+      api("/admin/accounts").then(function (list) {
+        // 이 자리와 이름이 같은 계정을 맨 위로 — 대개 그 사람이다
+        var mine = (m && m.name) || "";
+        list.sort(function (a, b) {
+          return (b.name === mine ? 1 : 0) - (a.name === mine ? 1 : 0);
+        });
+        var opts = list.map(function (c) {
+          var tag = c.state === "명단" ? " (이미 명단에 있음 — 합치기)"
+            : c.state === "대기" ? " (승인 대기)" : "";
+          return '<option value="' + esc(c.email) + '">' + esc(c.name) + " · " + esc(c.email) + tag + "</option>";
+        });
+        if (!opts.length) {
+          linkSel.innerHTML = '<option value="">붙일 계정이 없습니다 — 먼저 로그인해야 합니다</option>';
+          return;
+        }
+        linkSel.innerHTML = '<option value="">계정 연결 안 함</option>' + opts.join("");
+        linkSel.disabled = false;
+      }).catch(function () {
+        linkSel.innerHTML = '<option value="">계정 목록을 불러오지 못했습니다</option>';
       });
-      if (!BOOT.members.some(function (x) { return x.email === BOOT.me.email; }))
-        cands.unshift({ email: BOOT.me.email, label: BOOT.me.name + " · " + BOOT.me.email + " (나)" });
-      linkSel.innerHTML = '<option value="">계정 연결 안 함</option>'
-        + cands.map(function (c) { return '<option value="' + esc(c.email) + '">' + esc(c.label) + "</option>"; }).join("");
-      if (!cands.length) {
-        linkSel.innerHTML = '<option value="">붙일 계정이 없습니다 — 먼저 로그인해야 합니다</option>';
-        linkSel.disabled = true;
-      }
     }
 
     // 순서는 저장과 따로 — 누르면 바로 옮긴다

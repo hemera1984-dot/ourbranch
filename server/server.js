@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, setSetting, getMember } from "./db.js";
-import { openAuthDb, accountForToken } from "./auth.js";
+import { openAuthDb, accountForToken, listAccounts } from "./auth.js";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8788);
@@ -1260,6 +1260,24 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
   mergeMember(seat.email, accEmail);          // 기록을 옮기고 빈 자리는 지운다
   db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
   send(res, 200, { ok: true });
+});
+
+// 자리에 붙일 수 있는 계정 목록.
+// 「승인 대기자」만 후보로 두면, 로그인은 했는데 가입 신청을 안 한 사람은
+// 영영 못 붙인다 (2026-08-05 사용자: 「연결이 안되는데」).
+route("GET", /^\/admin\/accounts$/, true, (req, res, user) => {
+  const seats = {};
+  db.prepare("SELECT email, name FROM members").all().forEach(m => { seats[m.email] = m.name; });
+  const pending = {};
+  db.prepare("SELECT email FROM pending").all().forEach(p => { pending[p.email] = true; });
+  const list = listAccounts(authDb).map(a => ({
+    email: a.email,
+    name: a.name || a.email,
+    // 이미 하랑지점 명단에 있는 계정도 후보로 둔다 — 자리와 계정이 두 줄로 갈린
+    // 사람을 합치는 길이다. 어느 쪽인지 화면이 알 수 있게 표시를 붙여 보낸다.
+    state: seats[a.email] !== undefined ? "명단" : pending[a.email] ? "대기" : "미신청"
+  }));
+  send(res, 200, list);
 });
 
 // 조직도 순서 — 끌어서 놓은 결과를 그대로 저장한다. 팀 하나 단위로 받는다.
