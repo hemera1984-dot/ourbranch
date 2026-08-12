@@ -198,6 +198,14 @@ function canSetGoal(user) {
   return user.isSuper || user.grade === "BM" || user.grade === "ESL";
 }
 
+// 남에게 줄 수 있는 직급인가 — 직급이 곧 권한이라 자기보다 높은 자리는 못 만든다.
+// 직급이 들어오는 모든 길(추가·수정·승인·초대)이 이 하나를 지난다.
+function canAssignRole(user, role) {
+  if (user.isSuper) return true;
+  if (!role) return true;
+  return roleRank(role) >= roleRank(user.role);
+}
+
 // 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
 function canApprove(user) {
   return user.isSuper || user.grade === "BM" || user.grade === "ESL" || user.isManager;
@@ -293,6 +301,22 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
 
 const DOC_EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                   "image/heic": ".heic", "application/pdf": ".pdf" };
+const DOC_QUOTA = 60 * 1024 * 1024;          // 한 사람이 쌓을 수 있는 총량 (디스크가 넉넉하지 않다)
+
+// 헤더는 보내는 쪽이 마음대로 쓴다. 내용이 실제로 그 형식인지 앞머리로 확인한다.
+function looksLike(mime, buf) {
+  const b = buf;
+  if (b.length < 12) return false;
+  const at = (i, ...bytes) => bytes.every((v, k) => b[i + k] === v);
+  switch (mime) {
+    case "application/pdf": return at(0, 0x25, 0x50, 0x44, 0x46);                    // %PDF
+    case "image/jpeg": return at(0, 0xff, 0xd8, 0xff);
+    case "image/png": return at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    case "image/webp": return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50);
+    case "image/heic": return b.slice(4, 8).toString("latin1") === "ftyp";
+    default: return false;
+  }
+}
 
 // 볼 수 있는 사람: 본인 / 직도입자 / 그 팀 부지점장 / 지점장·총관리자
 // (2026-08-05 사용자 확정). 관리자로 임명된 팀장·부팀장에게는 열지 않는다 —
@@ -302,16 +326,29 @@ function ownerSide(user, email) {
   if (email === user.email) return true;
   return user.recruits.includes(email);           // 직도입자
 }
+// 지금 그 사람이 속한 팀. 기록에 박힌 team_id는 만들 때의 스냅숏이라,
+// 팀을 옮기면 옛 팀 부지점장이 계속 열람하게 된다 (코덱스 검증 2026-08-05).
+function teamOfOwner(email, fallback) {
+  const m = email ? getMember(db, email) : null;
+  return m ? m.team_id : fallback;
+}
+// 개인 자료에는 canSeeTeam을 쓰지 않는다 — 그건 team_id가 null이면 전원 통과다
+// (지점 공통 공지용). 팀 없는 사람의 합격증이 전 부지점장에게 열리면 안 된다.
+function sameTeamLead(user, teamId) {
+  if (user.isSuper || user.grade === "BM") return true;     // 지점장·총관리자는 지점 전체
+  if (!canSetGoal(user)) return false;                      // 부지점장 미만은 남의 자료를 못 본다
+  return teamId != null && user.teamId === teamId;          // 부지점장은 자기 팀만
+}
 function canSeeDoc(user, d) {
   if (d.scope === "branch") return true;                    // 사업자등록증 등 지점 공용
   if (ownerSide(user, d.owner_email)) return true;
-  return canSetGoal(user) && canSeeTeam(user, d.team_id);   // 부지점장 이상
+  return sameTeamLead(user, teamOfOwner(d.owner_email, d.team_id));
 }
 // 올리기·지우기 — 본인, 또는 그 팀 부지점장·지점장. 직도입자는 보기만 한다.
 function canWriteDoc(user, d) {
   if (d.scope === "branch") return canSetGoal(user);
   if (d.owner_email && d.owner_email === user.email) return true;
-  return canSetGoal(user) && canWriteTeam(user, d.team_id);
+  return sameTeamLead(user, teamOfOwner(d.owner_email, d.team_id));
 }
 
 function readBody(req, limit) {
@@ -331,7 +368,9 @@ function readBody(req, limit) {
 route("GET", /^\/docs$/, false, (req, res, user) => {
   const list = db.prepare("SELECT * FROM docs ORDER BY created DESC, id DESC").all()
     .filter(d => canSeeDoc(user, d))
-    .map(d => ({ ...d, path: undefined }));      // 서버 경로는 내보내지 않는다
+    // 서버 경로와 업로더 이메일은 화면이 쓰지 않는다 — 필요한 것만 내보낸다
+    .map(d => ({ id: d.id, scope: d.scope, owner_email: d.owner_email, team_id: d.team_id,
+                 kind: d.kind, name: d.name, mime: d.mime, size: d.size, created: d.created }));
   send(res, 200, list);
 });
 
@@ -354,16 +393,32 @@ route("POST", /^\/docs$/, false, async (req, res, user) => {
   try { buf = await readBody(req, MAX_FILE); }
   catch { return send(res, 413, { error: "파일이 8MB를 넘습니다" }); }
   if (!buf.length) return send(res, 400, { error: "빈 파일입니다" });
+  if (!looksLike(mime, buf))
+    return send(res, 400, { error: "내용이 그 형식이 아닙니다. 원본 파일을 그대로 올려 주세요" });
+
+  // 디스크가 넉넉하지 않다 — 한 사람이 쌓을 수 있는 양을 묶어 둔다
+  const used = db.prepare(
+    owner ? "SELECT COALESCE(SUM(size),0) n FROM docs WHERE owner_email = ?"
+          : "SELECT COALESCE(SUM(size),0) n FROM docs WHERE scope = 'branch'"
+  ).get(...(owner ? [owner] : [])).n;
+  if (used + buf.length > DOC_QUOTA)
+    return send(res, 413, { error: "보관 용량(1인 60MB)을 넘습니다. 오래된 서류를 지워 주세요" });
 
   // 파일 이름은 서버가 짓는다 — 올린 이름을 그대로 쓰면 경로를 벗어나는 이름이 섞인다
   const rel = randomBytes(12).toString("hex") + ext;
   mkdirSync(FILE_DIR, { recursive: true });
   writeFileSync(join(FILE_DIR, rel), buf);
-  const r = db.prepare(
-    `INSERT INTO docs (scope, owner_email, team_id, kind, name, mime, size, path, uploader, created)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(scope, owner, draft.team_id, kind, name, mime, buf.length, rel, user.email, now());
-  send(res, 200, { id: Number(r.lastInsertRowid) });
+  try {
+    const r = db.prepare(
+      `INSERT INTO docs (scope, owner_email, team_id, kind, name, mime, size, path, uploader, created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(scope, owner, draft.team_id, kind, name, mime, buf.length, rel, user.email, now());
+    send(res, 200, { id: Number(r.lastInsertRowid) });
+  } catch (e) {
+    // 기록에 못 남겼으면 파일도 남기지 않는다 — 주인 없는 개인정보가 디스크에 뒹군다
+    try { unlinkSync(join(FILE_DIR, rel)); } catch { /* 이미 없으면 그만 */ }
+    throw e;
+  }
 });
 
 route("GET", /^\/docs\/(\d+)\/file$/, false, (req, res, user, m) => {
@@ -377,6 +432,7 @@ route("GET", /^\/docs\/(\d+)\/file$/, false, (req, res, user, m) => {
     "Content-Length": statSync(file).size,
     // 이름에 한글이 들어가므로 filename* 로 보낸다
     "Content-Disposition": "inline; filename*=UTF-8''" + encodeURIComponent(d.name),
+    "X-Content-Type-Options": "nosniff",
     "Cache-Control": "private, no-store"
   });
   res.end(readFileSync(file));
@@ -385,8 +441,12 @@ route("GET", /^\/docs\/(\d+)\/file$/, false, (req, res, user, m) => {
 route("DELETE", /^\/docs\/(\d+)$/, false, (req, res, user, m) => {
   const d = db.prepare("SELECT * FROM docs WHERE id = ?").get(Number(m[1]));
   if (!d || !canWriteDoc(user, d)) return send(res, 403, { error: "권한 없음" });
+  try { unlinkSync(join(FILE_DIR, d.path)); }
+  catch (e) {
+    // 파일이 원래 없으면 그냥 진행. 그 밖의 실패는 기록을 남겨 다시 지울 수 있게 한다
+    if (e && e.code !== "ENOENT") return send(res, 500, { error: "파일을 지우지 못했습니다" });
+  }
   db.prepare("DELETE FROM docs WHERE id = ?").run(d.id);
-  try { unlinkSync(join(FILE_DIR, d.path)); } catch { /* 이미 없으면 그만 */ }
   send(res, 200, { ok: true });
 });
 
@@ -1016,13 +1076,25 @@ route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
        member = excluded.member, member_email = excluded.member_email,
        goal = excluded.goal, cases = excluded.cases, intro = excluded.intro`
   );
+  // 대상은 그 팀 사람이어야 한다. 안 그러면 1팀 부지점장이 2팀원 목표를 자기 팀에
+  // 끼워 넣을 수 있고, 대소문자만 바꾼 주소로 같은 사람 목표가 둘이 된다
+  // (코덱스 검증 2026-08-05).
+  const emailOf = g =>
+    (g.memberEmail ? String(g.memberEmail).toLowerCase() : "") || emailForName(g.member) || null;
+  for (const g of b.goals) {
+    const em = emailOf(g);
+    if (!em) continue;                                    // 이메일 없는 이름 자리는 종전대로
+    const tm = getMember(db, em);
+    if (!tm || tm.team_id !== teamId)
+      return send(res, 400, { error: "그 팀 사람이 아닙니다: " + (g.member || em) });
+  }
   // 보낸 값만 갱신 — 목표만 고쳤다고 도입 실적이 0이 되면 안 된다.
   // 화면은 「바뀐 항목만」 보낸다. 빈 칸을 그대로 보내 목표가 조용히 지워지던 사고를 막는다.
   tx(() => {
     for (const g of b.goals) {
       if (!g.member) continue;
       if (g.goal === undefined && g.cases === undefined && g.intro === undefined) continue;   // 바뀐 게 없으면 건드리지 않는다
-      const em = g.memberEmail || emailForName(g.member) || null;
+      const em = emailOf(g);
       const key = keyOf(em, g.member);
       const prev = prevOf.get(teamId, b.month, key) || {};
       up.run(teamId, b.month, key, g.member, em,
@@ -1101,10 +1173,27 @@ function mergeMember(fromEmail, toEmail) {
     ["UPDATE ta_logs SET author_email = ? WHERE author_email = ?"],
     ["UPDATE perf SET member_email = ? WHERE member_email = ?"],
     ["UPDATE perf_goals SET member_email = ? WHERE member_email = ?"],
-    ["UPDATE OR REPLACE perf_goals SET member_key = ? WHERE member_key = ?"],
-    ["UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?"]
+    ["UPDATE members SET recruiter_email = ? WHERE recruiter_email = ?"],
+    // 서류·교육도 주인을 따라간다 — 안 옮기면 본인이 자기 합격증을 못 본다
+    ["UPDATE docs SET owner_email = ? WHERE owner_email = ?"],
+    ["UPDATE trainings SET member_email = ? WHERE member_email = ?"]
   ];
   for (const [sql] of moves) db.prepare(sql).run(toEmail, fromEmail);
+  // 목표 열쇠 옮기기 — 같은 팀·같은 달에 양쪽 목표가 있으면 열쇠가 부딪힌다.
+  // OR REPLACE로 밀어붙이면 남아 있던 쪽이 조용히 사라진다(코덱스 검증 2026-08-05).
+  // 빈 칸만 채우고, 이미 값이 있는 칸은 계정 쪽을 지킨다.
+  const dupe = db.prepare("SELECT * FROM perf_goals WHERE member_key = ?").all(fromEmail);
+  const keep = db.prepare("SELECT * FROM perf_goals WHERE team_id = ? AND month = ? AND member_key = ?");
+  const fill = db.prepare("UPDATE perf_goals SET goal = ?, cases = ?, intro = ? WHERE team_id = ? AND month = ? AND member_key = ?");
+  const move = db.prepare("UPDATE perf_goals SET member_key = ? WHERE team_id = ? AND month = ? AND member_key = ?");
+  const drop = db.prepare("DELETE FROM perf_goals WHERE team_id = ? AND month = ? AND member_key = ?");
+  for (const g of dupe) {
+    const to = keep.get(g.team_id, g.month, toEmail);
+    if (!to) { move.run(toEmail, g.team_id, g.month, fromEmail); continue; }
+    fill.run(to.goal || g.goal || "", to.cases || g.cases || 0, to.intro || g.intro || 0,
+             g.team_id, g.month, toEmail);
+    drop.run(g.team_id, g.month, fromEmail);
+  }
   // 출석·일일보고는 내용이 있는 기록이다. 같은 날 두 줄이 있으면 그냥 버리지 않고
   // 빈 칸만 채운다 — 버리면 그날 오전·점심·오후·특이사항이 통째로 사라진다.
   const attFields = ["reason", "work", "lunch", "afternoon", "note"];
@@ -1169,12 +1258,15 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   const teamId = from ? from.team_id
     : (b.teamId !== undefined ? (b.teamId ?? null) : (p.team_id ?? user.teamId));
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  const grantRole = (from && from.role) || b.role || p.role || "팀원";
+  if (!canAssignRole(user, grantRole))
+    return send(res, 403, { error: "자기보다 높은 직급으로는 승인할 수 없습니다" });
   db.prepare(
     `INSERT INTO members (email, name, team_id, role, recruiter_email) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
        role = excluded.role, recruiter_email = excluded.recruiter_email`
   ).run(email, (from && from.name) || b.name || p.name || "", teamId,
-        (from && from.role) || b.role || p.role || "팀원", from ? from.recruiter_email : null);
+        grantRole, from ? from.recruiter_email : null);
   if (from) mergeMember(from.email, email);   // 기존 기록을 실제 계정으로 옮기고 빈 자리는 지운다
   db.prepare("DELETE FROM pending WHERE email = ?").run(email);
   send(res, 200, { ok: true, merged: !!from });
@@ -1262,12 +1354,25 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   // 자기 직급은 총관리자만 바꾼다. 남에게도 자기보다 높은 직급은 주지 못한다.
   if (b.role !== undefined && b.role !== (prev.role || "팀원") && !user.isSuper) {
     if (email === user.email) return send(res, 403, { error: "자기 직급은 총관리자만 바꿉니다" });
-    if (roleRank(b.role) < roleRank(user.role))
+    if (!canAssignRole(user, b.role))
       return send(res, 403, { error: "자기보다 높은 직급은 줄 수 없습니다" });
   }
   // 보낸 값만 갱신 — 도입자만 바꾸려다 이름·팀·직급이 초기화되는 일이 없도록
   const teamId = b.teamId !== undefined ? (b.teamId ?? null) : (prev.team_id ?? null);
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  // 도입자 고리 방지 — 화면(isBelow)에만 두면 API를 직접 부르는 순간 뚫린다.
+  // 자기 자신이나 자기 아래 사람을 도입자로 삼으면 그 줄기가 통째로 사라진다.
+  if (b.recruiterEmail !== undefined && b.recruiterEmail) {
+    const up = String(b.recruiterEmail).toLowerCase();
+    if (up === email) return send(res, 400, { error: "자기 자신을 도입자로 둘 수 없습니다" });
+    if (!getMember(db, up)) return send(res, 404, { error: "도입자가 명단에 없습니다" });
+    let cur = up, guard = 0;
+    while (cur && guard++ < 100) {
+      if (cur === email) return send(res, 400, { error: "자기 아래 사람을 도입자로 둘 수 없습니다" });
+      const m2 = getMember(db, cur);
+      cur = m2 ? m2.recruiter_email : null;
+    }
+  }
   // 위촉 년월 — 차월을 여기서 센다. 「내 정보」에만 두면 실제로 일하지 않는 사람은
   // 로그인을 안 해서 영영 비어 있다. 그래서 관리자가 조직도에서 직접 넣는다(2026-08-04 사용자).
   let joined = b.joinedAt !== undefined ? String(b.joinedAt).trim() : undefined;
@@ -1374,7 +1479,9 @@ route("DELETE", /^\/admin\/members\/([^/]+)$/, true, (req, res, user, m) => {
                "SELECT COUNT(*) n FROM attendance WHERE email = ?",
                "SELECT COUNT(*) n FROM task_done WHERE email = ?",
                "SELECT COUNT(*) n FROM tasks WHERE targets LIKE '%' || ? || '%'",
-               "SELECT COUNT(*) n FROM events WHERE detail LIKE '%' || ? || '%'"]
+               "SELECT COUNT(*) n FROM events WHERE detail LIKE '%' || ? || '%'",
+               "SELECT COUNT(*) n FROM docs WHERE owner_email = ?",
+               "SELECT COUNT(*) n FROM trainings WHERE member_email = ?"]
     .some(sql => db.prepare(sql).get(email).n > 0);
   // 아래 사람들은 한 칸 위(그 사람의 도입자)로 올려붙인다 — 줄기가 끊기지 않게
   const gone = getMember(db, email);

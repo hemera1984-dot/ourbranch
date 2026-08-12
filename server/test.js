@@ -27,10 +27,11 @@ seed.run(4, "fc2@x.com", "팀원2", "승인", "FC", 0);        // 2팀
 seed.run(5, "wait@x.com", "대기자", "대기", null, 0);
 seed.run(6, "new@x.com", "신입", "승인", "FC", 0);          // 승인됐지만 지점 명단엔 없음
 seed.run(7, "bm@x.com", "지점장", "승인", "BM", 0);         // 지점장 — 지점 전체 관리
+seed.run(8, "up@x.com", "승급시도", "승인", "FC", 0);       // 승인 경로 직급 상승 시험용
 const tok = auth.prepare("INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)");
 tok.run("t-super", 1, far); tok.run("t-esl1", 2, far); tok.run("t-fc1", 3, far);
 tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far); tok.run("t-new", 6, far);
-tok.run("t-bm", 7, far);
+tok.run("t-bm", 7, far); tok.run("t-up", 8, far);
 auth.close();
 
 const FILES = "./test-files";
@@ -758,9 +759,9 @@ async function main() {
   const twins = (await (await api("t-esl1", "GET", "/perf?month=2027-12")).json())
     .goals.filter(g => g.member === "홍길동");
   assert.equal(twins.length, 2, "두 사람의 목표가 각각 남아야 한다");
-  assert.equal(twins.filter(g => g.member_email === "동명A@x.com")[0].goal, "A목표");
-  assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].goal, "B목표");
-  assert.equal(twins.filter(g => g.member_email === "동명B@x.com")[0].intro, 2);
+  assert.equal(twins.filter(g => g.member_email === "동명a@x.com")[0].goal, "A목표");
+  assert.equal(twins.filter(g => g.member_email === "동명b@x.com")[0].goal, "B목표");
+  assert.equal(twins.filter(g => g.member_email === "동명b@x.com")[0].intro, 2);
 
   // 43) 자리 이어받기가 같은 날 출석을 버리지 않는다 — 빈 칸만 채운다 (코덱스 지적)
   await api("t-super", "POST", "/admin/members", { email: "겹치는자리@미등록.local", name: "겹침", teamId: 1, role: "팀원" });
@@ -899,6 +900,62 @@ async function main() {
   // 날짜만 비우는 것도 된다 (모르면 비워 두는 게 기록을 남기는 길이다)
   assert.equal((await api("t-fc1", "POST", "/trainings/" + trMine.id, { doneOn: "" })).status, 200);
   assert.equal((await (await api("t-fc1", "GET", "/trainings")).json()).find(x => x.id === trMine.id).done_on, "");
+
+  // ── 51) 코덱스 반대심문(2026-08-05)에서 나온 구멍들 ──
+
+  // 51-1) 팀 없는 사람의 개인 서류가 모든 부지점장에게 열리던 문제.
+  // canSeeTeam(user, null)은 지점 공통 공지용이라 전원 통과다 — 개인 자료에 쓰면 안 된다.
+  await api("t-super", "POST", "/admin/members", { email: "무소속@x.com", name: "무소속", teamId: null, role: "팀원" });
+  await api("t-super", "POST", "/trainings", { email: "무소속@x.com", name: "입과교육", doneOn: "2026-06-01" });
+  const esl1Sees = await (await api("t-esl1", "GET", "/trainings")).json();
+  assert.ok(!esl1Sees.some(t => t.member_email === "무소속@x.com"),
+    "팀 없는 사람 자료가 남의 팀 부지점장에게 보이면 안 된다");
+  assert.ok((await (await api("t-super", "GET", "/trainings")).json()).some(t => t.member_email === "무소속@x.com"),
+    "총관리자는 본다");
+
+  // 51-2) 팀을 옮기면 옛 팀 부지점장은 손을 뗀다 (기록의 team_id는 만들 때의 스냅숏이다)
+  await api("t-super", "POST", "/admin/members", { email: "이사간@x.com", name: "이사간", teamId: 1, role: "팀원" });
+  const trMoved = await (await api("t-esl1", "POST", "/trainings", { email: "이사간@x.com", name: "GROW" })).json();
+  assert.ok(trMoved.id);
+  await api("t-super", "POST", "/admin/members", { email: "이사간@x.com", teamId: 2 });
+  assert.equal((await api("t-esl1", "POST", "/trainings/" + trMoved.id, { name: "가로채기" })).status, 403,
+    "옛 팀 부지점장은 더 이상 못 고친다");
+  assert.ok(!(await (await api("t-esl1", "GET", "/trainings")).json()).some(t => t.id === trMoved.id),
+    "옛 팀 부지점장에게 더 이상 보이지 않는다");
+
+  // 51-3) 승인 경로가 직급 상승 차단을 우회하던 문제 — 부지점장이 지점장을 만들 수 있었다
+  await api("t-up", "POST", "/join", { name: "승급시도" });
+  assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "up@x.com", teamId: 1, role: "지점장" })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "up@x.com", teamId: 1, role: "팀원" })).status, 200);
+
+  // 51-4) 헤더만 PDF라고 써 보내면 거절한다 (내용 앞머리를 본다)
+  assert.equal((await docPut("t-fc1", "?scope=member&name=가짜.pdf", Buffer.from("<html>hi</html>"))).status, 400);
+  assert.equal((await docPut("t-fc1", "?scope=member&name=진짜.pdf", Buffer.from("%PDF-1.4 진짜"))).status, 200);
+
+  // 51-5) 목록에 서버 경로·업로더 이메일이 새지 않는다
+  const docList = await (await api("t-fc1", "GET", "/docs")).json();
+  assert.ok(docList.length);
+  assert.equal(docList[0].path, undefined);
+  assert.equal(docList[0].uploader, undefined);
+
+  // 51-6) 도입자 고리 — 화면이 아니라 서버가 막는다
+  await api("t-super", "POST", "/admin/members", { email: "고리A@x.com", name: "고리A", teamId: 1, role: "팀원" });
+  await api("t-super", "POST", "/admin/members", { email: "고리B@x.com", name: "고리B", teamId: 1, role: "팀원", recruiterEmail: "고리A@x.com" });
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "고리A@x.com", recruiterEmail: "고리A@x.com" })).status, 400);
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "고리A@x.com", recruiterEmail: "고리B@x.com" })).status, 400);
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "고리A@x.com", recruiterEmail: "없는사람@x.com" })).status, 404);
+
+  // 51-7) 목표 대상은 그 팀 사람이어야 한다
+  assert.equal((await api("t-esl1", "POST", "/perf/goals", { teamId: 1, month: "2026-11",
+    goals: [{ member: "팀원2", memberEmail: "fc2@x.com", cases: 999 }] })).status, 400);
+
+  // 51-8) 서류·교육이 있는 사람은 명단에서 내려도 기록이 살아 있다 (통째로 지우지 않는다)
+  await api("t-super", "POST", "/admin/members", { email: "서류맨@x.com", name: "서류맨", teamId: 1, role: "팀원" });
+  await api("t-super", "POST", "/trainings", { email: "서류맨@x.com", name: "입과교육" });
+  assert.equal((await api("t-super", "DELETE", "/admin/members/" + encodeURIComponent("서류맨@x.com"))).status, 200);
+  const stillThere = (await (await api("t-super", "GET", "/bootstrap")).json()).members
+    .filter(m => m.email === "서류맨@x.com")[0];
+  assert.ok(stillThere && stillThere.active === 0, "기록이 있으면 지우지 않고 내린다");
 
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }

@@ -35,6 +35,7 @@ if [ ! -f "$APP_DIR/server/.env" ]; then
 PORT=8788
 DB_FILE=$DATA_DIR/ourbranch.db
 AUTH_DB_FILE=$AUTH_DB
+FILE_DIR=$DATA_DIR/files
 WEB_DIR=$APP_DIR/web
 ALLOWED_ORIGINS=https://app.insurguard.life
 EOF
@@ -42,7 +43,14 @@ EOF
   chmod 600 "$APP_DIR/server/.env"
 else
   echo "  기존 .env 유지"
+  # 서류함이 나중에 붙었다 — 옛 .env에는 FILE_DIR이 없다.
+  # 기본값은 서버 폴더 밑이라 ProtectSystem=strict에 막혀 업로드가 통째로 실패한다.
+  grep -q '^FILE_DIR=' "$APP_DIR/server/.env" || {
+    echo "FILE_DIR=$DATA_DIR/files" >> "$APP_DIR/server/.env"
+    echo "  FILE_DIR 추가"
+  }
 fi
+install -d -o myguardian -g myguardian "$DATA_DIR/files"
 
 echo "== 3/4 서비스 등록 =="
 cat > /etc/systemd/system/ourbranch.service <<EOF
