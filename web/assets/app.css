@@ -535,6 +535,8 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .doc-chip .doc-del:hover { color: var(--red); }
 .doc-miss { font-size: 12px; color: var(--amber); font-weight: 600; }
+.doc-chip .tr-name { padding: 3px 8px; font-size: 12px; font-weight: 600; }
+.doc-chip .tr-on { color: var(--ter); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* 앱 설치 안내 */
 .ins-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }

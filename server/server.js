@@ -294,16 +294,24 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
 const DOC_EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                   "image/heic": ".heic", "application/pdf": ".pdf" };
 
+// 볼 수 있는 사람: 본인 / 직도입자 / 그 팀 부지점장 / 지점장·총관리자
+// (2026-08-05 사용자 확정). 관리자로 임명된 팀장·부팀장에게는 열지 않는다 —
+// 합격증에는 실명과 생년월일이 있어서 「관리자」보다 좁게 잡는다.
+function ownerSide(user, email) {
+  if (!email) return false;
+  if (email === user.email) return true;
+  return user.recruits.includes(email);           // 직도입자
+}
 function canSeeDoc(user, d) {
   if (d.scope === "branch") return true;                    // 사업자등록증 등 지점 공용
-  if (d.owner_email && d.owner_email === user.email) return true;
-  return user.isManager && canSeeTeam(user, d.team_id);
+  if (ownerSide(user, d.owner_email)) return true;
+  return canSetGoal(user) && canSeeTeam(user, d.team_id);   // 부지점장 이상
 }
-// 올리기·지우기 — 본인 것이거나, 자기 팀에 쓰기 권한이 있는 관리자
+// 올리기·지우기 — 본인, 또는 그 팀 부지점장·지점장. 직도입자는 보기만 한다.
 function canWriteDoc(user, d) {
-  if (d.scope === "branch") return user.isManager;
+  if (d.scope === "branch") return canSetGoal(user);
   if (d.owner_email && d.owner_email === user.email) return true;
-  return user.isManager && canWriteTeam(user, d.team_id);
+  return canSetGoal(user) && canWriteTeam(user, d.team_id);
 }
 
 function readBody(req, limit) {
@@ -379,6 +387,46 @@ route("DELETE", /^\/docs\/(\d+)$/, false, (req, res, user, m) => {
   if (!d || !canWriteDoc(user, d)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM docs WHERE id = ?").run(d.id);
   try { unlinkSync(join(FILE_DIR, d.path)); } catch { /* 이미 없으면 그만 */ }
+  send(res, 200, { ok: true });
+});
+
+// ---------- 교육 이수 현황 ----------
+//
+// 수료증 파일이 아직 없어도 「언제 무엇을 이수했는지」는 남겨야 한다.
+// 보는 범위는 서류함과 같고, 쓰기는 본인과 그 팀 부지점장·지점장이다.
+
+route("GET", /^\/trainings$/, false, (req, res, user) => {
+  const list = db.prepare("SELECT * FROM trainings ORDER BY done_on DESC, id DESC").all()
+    .filter(t => canSeeDoc(user, { scope: "member", owner_email: t.member_email, team_id: t.team_id }));
+  send(res, 200, list);
+});
+
+route("POST", /^\/trainings$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  const email = String(b.email || user.email).toLowerCase();
+  const target = getMember(db, email);
+  if (!target) return send(res, 404, { error: "명단에 없는 사람입니다" });
+  if (!canWriteDoc(user, { scope: "member", owner_email: email, team_id: target.team_id }))
+    return send(res, 403, { error: "권한 없음" });
+  const name = String(b.name || "").trim().slice(0, 60);
+  if (!name) return send(res, 400, { error: "교육 이름이 없습니다" });
+  let on = String(b.doneOn || "").trim();
+  if (on) {
+    if (/^\d{4}-\d{2}$/.test(on)) on += "-01";
+    if (!isDate(on)) return send(res, 400, { error: "이수일은 2026-08-05 형식으로 넣어 주세요" });
+  }
+  const r = db.prepare(
+    `INSERT INTO trainings (member_email, team_id, name, done_on, note, created) VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(email, target.team_id, name, on, String(b.note || "").slice(0, 120), now());
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+
+route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
+  const t = db.prepare("SELECT * FROM trainings WHERE id = ?").get(Number(m[1]));
+  if (!t) return send(res, 404, { error: "없는 기록입니다" });
+  if (!canWriteDoc(user, { scope: "member", owner_email: t.member_email, team_id: t.team_id }))
+    return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM trainings WHERE id = ?").run(t.id);
   send(res, 200, { ok: true });
 });
 

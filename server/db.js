@@ -202,6 +202,17 @@ export function openDb(file) {
       created      TEXT NOT NULL
     );
 
+    -- 교육 이수 현황 — 수료증 파일이 아직 없어도 「언제 무엇을 이수했는지」는 남는다.
+    CREATE TABLE IF NOT EXISTS trainings (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_email TEXT NOT NULL,
+      team_id      INTEGER,
+      name         TEXT NOT NULL,
+      done_on      TEXT NOT NULL DEFAULT '',
+      note         TEXT NOT NULL DEFAULT '',
+      created      TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS tasks (
       id       INTEGER PRIMARY KEY AUTOINCREMENT,
       team_id  INTEGER NOT NULL REFERENCES teams(id),

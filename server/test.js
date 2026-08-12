@@ -869,6 +869,26 @@ async function main() {
   assert.ok(["미신청", "대기", "명단"].includes(candBy["wait@x.com"].state));
   assert.equal((await api("t-fc1", "GET", "/admin/accounts")).status, 403);   // 관리자만
 
+  // 50) 서류·교육 열람 범위 — 본인 / 직도입자 / 그 팀 부지점장 / 지점장
+  // (2026-08-05 사용자 확정). 관리자로 임명된 팀원에게는 열지 않는다.
+  await api("t-super", "POST", "/admin/members", { email: "도입된@x.com", name: "도입된사람", teamId: 1, role: "팀원", recruiterEmail: "fc1@x.com" });
+  const trOwn = await (await api("t-fc1", "POST", "/trainings", { email: "도입된@x.com", name: "입과교육", doneOn: "2026-07" })).json();
+  assert.ok(trOwn.id === undefined, "도입자는 보기만 한다 — 쓰기는 막힌다");
+  assert.equal((await api("t-esl1", "POST", "/trainings", { email: "도입된@x.com", name: "입과교육", doneOn: "2026-07" })).status, 200);
+  // 도입자는 자기가 뽑은 사람의 기록을 본다
+  const seenByRecruiter = await (await api("t-fc1", "GET", "/trainings")).json();
+  assert.ok(seenByRecruiter.some(t => t.member_email === "도입된@x.com"), "직도입자는 볼 수 있어야 한다");
+  // 남남인 팀원에게는 안 보인다
+  assert.equal((await (await api("t-fc2", "GET", "/trainings")).json()).length, 0);
+  // 관리자로 임명돼도 팀원 직급이면 남의 서류는 못 본다
+  await api("t-super", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, isManager: true });
+  assert.equal((await (await api("t-fc2", "GET", "/trainings")).json()).length, 0, "관리자 임명은 서류 열람 근거가 아니다");
+  await api("t-super", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, isManager: false });
+  // 이수일 형식 검사
+  assert.equal((await api("t-esl1", "POST", "/trainings", { email: "도입된@x.com", name: "GROW", doneOn: "7월" })).status, 400);
+  // 본인은 자기 것을 쓴다
+  assert.equal((await api("t-fc1", "POST", "/trainings", { name: "온라인 교육", doneOn: "2026-08-01" })).status, 200);
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 

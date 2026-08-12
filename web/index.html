@@ -468,7 +468,8 @@
       <p class="eyebrow">자료</p>
       <h1>서류함</h1>
       <p class="page-desc">합격증·수료증처럼 사람마다 한 장씩 쌓이는 자료를 여기 둡니다.
-        누가 무엇을 안 냈는지 한 화면에 보입니다. 본인과 팀 관리자만 볼 수 있습니다.</p>
+        누가 무엇을 안 냈는지 한 화면에 보입니다.
+        열람은 본인·도입자·그 팀 부지점장·지점장까지입니다.</p>
       <div class="section">
         <div class="section-head"><h2>지점 자료</h2><p>사업자등록증처럼 지점 전체가 함께 쓰는 서류입니다.</p></div>
         <div class="card" id="doc-branch"></div>
@@ -478,6 +479,11 @@
           <div class="toolbar"><select class="input" id="doc-team"></select></div>
         </div>
         <div class="card" id="doc-people"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>교육 이수 현황</h2>
+          <p>수료증 파일이 아직 없어도 언제 무엇을 이수했는지 남겨 둡니다.</p></div>
+        <div class="card" id="doc-train"></div>
       </div>
       <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,image/*,application/pdf" hidden>
     </section>
@@ -3141,6 +3147,39 @@
       + (email ? ' data-email="' + esc(email) + '"' : "") + ">올리기</button>";
   }
 
+  // 교육 이수 — 파일 없이도 남기는 기록. 보는 범위는 서류와 같다.
+  var TRAIN_KINDS = ["입과교육", "1차월 교육", "2차월 교육", "3차월 교육", "4차월 교육",
+    "7차월 교육", "10차월 교육", "GROW", "온라인 교육", "기타"];
+  var trainings = [];
+
+  function canWriteFor(email) {
+    return email === BOOT.me.email || BOOT.me.canSetGoal;
+  }
+
+  function renderTrain() {
+    var by = {};
+    trainings.forEach(function (t) { (by[t.member_email] = by[t.member_email] || []).push(t); });
+    var teamId = $("doc-team").hidden ? myTeamId() : Number($("doc-team").value);
+    var people = rosterOf(teamId);
+    if (!people.length) { $("doc-train").innerHTML = '<div class="empty">팀원 명단이 비어 있습니다.</div>'; return; }
+    $("doc-train").innerHTML = people.map(function (m) {
+      var mine = (by[m.email] || []).slice().sort(function (a, b) {
+        return (a.done_on || "") < (b.done_on || "") ? -1 : 1;
+      });
+      var edit = canWriteFor(m.email);
+      return '<div class="org-row">'
+        + '<span class="name">' + esc(memberLabel(m)) + "</span>"
+        + '<span class="meta">' + (mine.length ? mine.map(function (t) {
+            return '<span class="doc-chip"><span class="tr-name">' + esc(t.name)
+              + (t.done_on ? ' <span class="tr-on">' + esc(t.done_on) + "</span>" : "") + "</span>"
+              + (edit ? '<button type="button" class="doc-del tr-del" data-id="' + t.id + '" title="지우기">×</button>' : "")
+              + "</span>";
+          }).join(" ") : '<span class="cell-empty">이수 기록이 없습니다</span>') + "</span>"
+        + (edit ? '<button type="button" class="btn tr-add" data-email="' + esc(m.email) + '">교육 추가</button>' : "")
+        + "</div>";
+    }).join("");
+  }
+
   function loadDocs() {
     var t = $("doc-team");
     if (BOOT.me.seesAll && BOOT.teams.length > 1) {
@@ -3149,6 +3188,7 @@
         t.innerHTML = BOOT.teams.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + "</option>"; }).join("");
     } else t.hidden = true;
     api("/docs").then(function (list) { docs = list; renderDocs(); });
+    api("/trainings").then(function (list) { trainings = list; renderTrain(); });
   }
 
   function renderDocs() {
@@ -3185,7 +3225,7 @@
     }).join("");
   }
 
-  $("doc-team").addEventListener("change", renderDocs);
+  $("doc-team").addEventListener("change", function () { renderDocs(); renderTrain(); });
   $("screen-docs").addEventListener("click", function (e) {
     var open = e.target.closest(".doc-open");
     if (open) {
@@ -3198,6 +3238,23 @@
       var dd = docs.filter(function (x) { return String(x.id) === del.dataset.id; })[0];
       if (!dd || !confirm("「" + (dd.kind || dd.name) + "」을 지울까요?")) return;
       api("/docs/" + dd.id, { method: "DELETE" }).then(loadDocs);
+      return;
+    }
+    var trAdd = e.target.closest(".tr-add");
+    if (trAdd) {
+      var nm = prompt("어떤 교육인가요?\n\n" + TRAIN_KINDS.join(" · "), TRAIN_KINDS[0]);
+      if (nm === null || !nm.trim()) return;
+      var on = prompt("이수일 (2026-08-05, 몰라도 비워 두면 됩니다)", fmtDate(new Date()));
+      if (on === null) return;
+      api("/trainings", { method: "POST", body: { email: trAdd.dataset.email, name: nm.trim(), doneOn: on.trim() } })
+        .then(loadDocs).catch(function () {});
+      return;
+    }
+    var trDel = e.target.closest(".tr-del");
+    if (trDel) {
+      var tt = trainings.filter(function (x) { return String(x.id) === trDel.dataset.id; })[0];
+      if (!tt || !confirm("「" + tt.name + "」 이수 기록을 지울까요?")) return;
+      api("/trainings/" + tt.id, { method: "DELETE" }).then(loadDocs);
       return;
     }
     var add = e.target.closest(".doc-add");
