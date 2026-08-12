@@ -306,7 +306,18 @@ a.slot-title:hover { text-decoration: underline; }
 .cal-cell.pad { cursor: default; background: var(--canvas); }
 .cal-cell.pad:hover { background: var(--canvas); }
 .cal-cell.today .cal-daynum { color: #fff; background: var(--blue); }
-.cal-cell.sel { box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-cell.sel { box-shadow: inset 0 0 0 2px var(--blue); background: var(--surface); }
+/* 고른 날은 그 자리에서 펴진다 — 줄임표 없이 전부, 줄바꿈 허용.
+   칸이 커지면 그 주 줄만 함께 커진다(모달이 화면을 덮지 않는다). */
+.cal-cell.sel .cal-ev {
+  white-space: normal; align-items: flex-start; overflow: visible;
+  padding: 1px 0; line-height: 1.45;
+}
+/* 시간은 왼쪽 붙박이, 제목만 접힌다 — 시간이 아래로 떨어지면 훑기가 어렵다 */
+.cal-cell.sel .cal-ev .slot-time { flex: none; }
+.cal-cell.sel .cal-ev > span:last-child { overflow: visible; text-overflow: clip; }
+.cal-cell.sel .cal-ev .dot { margin-top: 6px; }
+.cal-cell.sel .cal-half { min-height: 0; }
 .cal-daynum {
   display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center;
   border-radius: 3px; font-size: 12px; font-weight: 700; margin-bottom: 3px;

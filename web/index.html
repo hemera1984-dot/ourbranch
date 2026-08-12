@@ -2727,13 +2727,17 @@
         // 칸을 반으로 — 위는 개인 활동, 아래는 공적 일정
         var mineSide = items.filter(function (e) { return !isOfficial(e); });
         var offSide = items.filter(isOfficial);
+        // 고른 날은 그 자리에서 펴진다 — 모달을 띄우지 않고 칸이 커지면서 전부 보인다
+        // (2026-08-05 사용자). 나머지 날은 평일 폭에 맞춰 세 줄까지.
+        var open = ds === selDate;
         function evLines(list) {
-          // 평일 칸이 넓어졌으니 한 줄 더 보여준다 (2026-08-05 사용자)
-          return list.slice(0, 3).map(function (e) {
+          var show = open ? list : list.slice(0, 3);
+          return show.map(function (e) {
             return '<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
               + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
               + "<span>" + esc(evLabel(e)) + "</span></div>";
-          }).join("") + (list.length > 3 ? '<div class="cal-more">+' + (list.length - 3) + "건</div>" : "");
+          }).join("")
+          + (!open && list.length > 3 ? '<div class="cal-more">+' + (list.length - 3) + "건</div>" : "");
         }
         cell.push('<div class="cal-half">' + evLines(mineSide) + "</div>");
         cell.push('<div class="cal-half official">' + evLines(offSide) + "</div>");
