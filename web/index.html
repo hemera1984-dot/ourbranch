@@ -3170,14 +3170,59 @@
       return '<div class="org-row">'
         + '<span class="name">' + esc(memberLabel(m)) + "</span>"
         + '<span class="meta">' + (mine.length ? mine.map(function (t) {
-            return '<span class="doc-chip"><span class="tr-name">' + esc(t.name)
-              + (t.done_on ? ' <span class="tr-on">' + esc(t.done_on) + "</span>" : "") + "</span>"
-              + (edit ? '<button type="button" class="doc-del tr-del" data-id="' + t.id + '" title="지우기">×</button>' : "")
-              + "</span>";
+            return '<span class="doc-chip">'
+              + '<button type="button" class="tr-name" data-tid="' + t.id + '"'
+              + (edit ? ' title="눌러서 고치기"' : " disabled") + ">" + esc(t.name)
+              + (t.done_on ? ' <span class="tr-on">' + esc(t.done_on) + "</span>" : "") + "</button></span>";
           }).join(" ") : '<span class="cell-empty">이수 기록이 없습니다</span>') + "</span>"
         + (edit ? '<button type="button" class="btn tr-add" data-email="' + esc(m.email) + '">교육 추가</button>' : "")
         + "</div>";
     }).join("");
+  }
+
+  // 교육 이수 한 줄 — 넣기와 고치기를 같은 창에서 한다.
+  // 이름은 칩으로 고르고 날짜는 달력으로 — 「치는 것」을 「고르는 것」으로 (입력 원칙).
+  function openTrainPop(anchor, o) {
+    closePop(); closeSheet();
+    var t = o.id ? trainings.filter(function (x) { return x.id === o.id; })[0] : null;
+    var email = t ? t.member_email : o.email;
+    var who = nameOf(email) || email;
+    var p = document.createElement("div");
+    p.className = "pop";
+    p.innerHTML = '<div class="pop-title">' + esc(who) + (t ? " 이수 기록 수정" : " 교육 추가") + "</div>"
+      + '<div class="pop-row" style="flex-wrap:wrap;gap:4px">'
+      + TRAIN_KINDS.map(function (k) {
+          return '<button type="button" class="btn tk" data-k="' + esc(k) + '">' + esc(k) + "</button>";
+        }).join("") + "</div>"
+      + '<div class="pop-row"><input type="text" class="input" id="tp-nm" placeholder="교육 이름"'
+      + ' value="' + esc(t ? t.name : "") + '"></div>'
+      + '<div class="pop-row"><input type="date" class="input" id="tp-on"'
+      + ' value="' + esc(t ? t.done_on : "") + '">'
+      + '<span class="note" style="font-size:11px">이수일 (모르면 비워 둡니다)</span></div>'
+      + '<div class="pop-row"><button class="btn primary" id="tp-ok">저장</button>'
+      + (t ? '<button class="btn" id="tp-rm">지우기</button>' : "")
+      + '<button class="btn" id="tp-x">닫기</button></div>';
+    document.body.appendChild(p);
+    placePop(p, anchor);
+    p.querySelectorAll(".tk").forEach(function (b) {
+      b.addEventListener("click", function () { p.querySelector("#tp-nm").value = b.dataset.k; });
+    });
+    p.querySelector("#tp-x").addEventListener("click", closePop);
+    if (t) p.querySelector("#tp-rm").addEventListener("click", function () {
+      if (!confirm("「" + t.name + "」 이수 기록을 지울까요?")) return;
+      api("/trainings/" + t.id, { method: "DELETE" }).then(function () { closePop(); loadDocs(); });
+    });
+    p.querySelector("#tp-ok").addEventListener("click", function () {
+      var nm = p.querySelector("#tp-nm").value.trim();
+      if (!nm) { alert("교육 이름을 넣어 주세요."); return; }
+      var body = { name: nm, doneOn: p.querySelector("#tp-on").value };
+      var path = t ? "/trainings/" + t.id : "/trainings";
+      if (!t) body.email = email;
+      api(path, { method: "POST", body: body })
+        .then(function () { closePop(); loadDocs(); })
+        .catch(function () {});
+    });
+    p.querySelector("#tp-nm").focus();
   }
 
   function loadDocs() {
@@ -3241,22 +3286,9 @@
       return;
     }
     var trAdd = e.target.closest(".tr-add");
-    if (trAdd) {
-      var nm = prompt("어떤 교육인가요?\n\n" + TRAIN_KINDS.join(" · "), TRAIN_KINDS[0]);
-      if (nm === null || !nm.trim()) return;
-      var on = prompt("이수일 (2026-08-05, 몰라도 비워 두면 됩니다)", fmtDate(new Date()));
-      if (on === null) return;
-      api("/trainings", { method: "POST", body: { email: trAdd.dataset.email, name: nm.trim(), doneOn: on.trim() } })
-        .then(loadDocs).catch(function () {});
-      return;
-    }
-    var trDel = e.target.closest(".tr-del");
-    if (trDel) {
-      var tt = trainings.filter(function (x) { return String(x.id) === trDel.dataset.id; })[0];
-      if (!tt || !confirm("「" + tt.name + "」 이수 기록을 지울까요?")) return;
-      api("/trainings/" + tt.id, { method: "DELETE" }).then(loadDocs);
-      return;
-    }
+    if (trAdd) { openTrainPop(trAdd, { email: trAdd.dataset.email }); return; }
+    var trChip = e.target.closest(".tr-name");
+    if (trChip && trChip.dataset.tid) { openTrainPop(trChip, { id: Number(trChip.dataset.tid) }); return; }
     var add = e.target.closest(".doc-add");
     if (!add) return;
     var kind = prompt("어떤 서류인가요?\n\n" + DOC_KINDS.join(" · "),

@@ -887,7 +887,18 @@ async function main() {
   // 이수일 형식 검사
   assert.equal((await api("t-esl1", "POST", "/trainings", { email: "도입된@x.com", name: "GROW", doneOn: "7월" })).status, 400);
   // 본인은 자기 것을 쓴다
-  assert.equal((await api("t-fc1", "POST", "/trainings", { name: "온라인 교육", doneOn: "2026-08-01" })).status, 200);
+  const trMine = await (await api("t-fc1", "POST", "/trainings", { name: "온라인 교육", doneOn: "2026-08-01" })).json();
+  assert.ok(trMine.id);
+  // 지우고 다시 넣지 않고 그 자리에서 고친다 (2026-08-05 사용자)
+  assert.equal((await api("t-fc1", "POST", "/trainings/" + trMine.id, { name: "10차월 교육", doneOn: "2026-08-02" })).status, 200);
+  const trAfter = (await (await api("t-fc1", "GET", "/trainings")).json()).find(x => x.id === trMine.id);
+  assert.equal(trAfter.name, "10차월 교육");
+  assert.equal(trAfter.done_on, "2026-08-02");
+  // 남이 고치는 것은 막는다
+  assert.equal((await api("t-fc2", "POST", "/trainings/" + trMine.id, { name: "가로채기" })).status, 403);
+  // 날짜만 비우는 것도 된다 (모르면 비워 두는 게 기록을 남기는 길이다)
+  assert.equal((await api("t-fc1", "POST", "/trainings/" + trMine.id, { doneOn: "" })).status, 200);
+  assert.equal((await (await api("t-fc1", "GET", "/trainings")).json()).find(x => x.id === trMine.id).done_on, "");
 
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }

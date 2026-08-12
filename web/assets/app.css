@@ -535,7 +535,14 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .doc-chip .doc-del:hover { color: var(--red); }
 .doc-miss { font-size: 12px; color: var(--amber); font-weight: 600; }
-.doc-chip .tr-name { padding: 3px 8px; font-size: 12px; font-weight: 600; }
+.doc-chip .tr-name {
+  border: 0; background: none; padding: 3px 8px; font-size: 12px; font-weight: 600;
+  color: inherit; cursor: pointer;
+}
+.doc-chip .tr-name:disabled { cursor: default; }
+.doc-chip .tr-name:not(:disabled):hover { color: var(--blue); }
+/* 교육 이름 고르기 칩 — 창 안에서만 쓰는 작은 단추 */
+.pop .btn.tk { padding: 3px 8px; font-size: 12px; }
 .doc-chip .tr-on { color: var(--ter); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* 앱 설치 안내 */

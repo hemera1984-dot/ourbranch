@@ -421,6 +421,23 @@ route("POST", /^\/trainings$/, false, async (req, res, user) => {
   send(res, 200, { id: Number(r.lastInsertRowid) });
 });
 
+route("POST", /^\/trainings\/(\d+)$/, false, async (req, res, user, m) => {
+  const t = db.prepare("SELECT * FROM trainings WHERE id = ?").get(Number(m[1]));
+  if (!t) return send(res, 404, { error: "없는 기록입니다" });
+  if (!canWriteDoc(user, { scope: "member", owner_email: t.member_email, team_id: t.team_id }))
+    return send(res, 403, { error: "권한 없음" });
+  const b = await readJson(req);
+  const name = b.name !== undefined ? String(b.name).trim().slice(0, 60) : t.name;
+  if (!name) return send(res, 400, { error: "교육 이름이 없습니다" });
+  let on = b.doneOn !== undefined ? String(b.doneOn).trim() : t.done_on;
+  if (on) {
+    if (/^\d{4}-\d{2}$/.test(on)) on += "-01";
+    if (!isDate(on)) return send(res, 400, { error: "이수일은 2026-08-05 형식으로 넣어 주세요" });
+  }
+  db.prepare("UPDATE trainings SET name = ?, done_on = ? WHERE id = ?").run(name, on, t.id);
+  send(res, 200, { ok: true });
+});
+
 route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
   const t = db.prepare("SELECT * FROM trainings WHERE id = ?").get(Number(m[1]));
   if (!t) return send(res, 404, { error: "없는 기록입니다" });
