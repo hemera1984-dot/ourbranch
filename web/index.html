@@ -2629,6 +2629,9 @@
   //        team = 팀 전체 / mine = 내 일정
   var calScope = null;   // BOOT 이후 초기화
   var selDate = fmtDate(new Date());
+  // 펴진 날 — 선택과 따로 둔다. 한 번 누르면 고르기만 하고, 한 번 더 눌러야 펴진다
+  // (2026-08-05 사용자). 다른 날을 고르면 저절로 접힌다.
+  var openDate = null;
   var calEvs = [];
 
   function roleOf(email) {
@@ -2713,8 +2716,11 @@
       var items = calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
         .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
       var dow = (pad + d - 1) % 7;                       // 0=월 … 5=토, 6=일
+      // 펴진 날인지 먼저 정한다 — 아래에서 선언하면 var 호이스팅으로 undefined가 된다
+      var open = ds === openDate;
       var cell = ['<div class="cal-cell' + (dow >= 5 ? " weekend" : "")
-        + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "") + '" data-date="' + ds + '">'];
+        + (ds === todayStr ? " today" : "") + (ds === selDate ? " sel" : "")
+        + (open ? " open" : "") + '" data-date="' + ds + '">'];
       cell.push('<span class="cal-daynum">' + d + "</span>");
       function kindClsOf(e) {
         return "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
@@ -2728,9 +2734,8 @@
         // 칸을 반으로 — 위는 개인 활동, 아래는 공적 일정
         var mineSide = items.filter(function (e) { return !isOfficial(e); });
         var offSide = items.filter(isOfficial);
-        // 고른 날은 그 자리에서 펴진다 — 모달을 띄우지 않고 칸이 커지면서 전부 보인다
+        // 펴진 날은 그 자리에서 커진다 — 모달을 띄우지 않고 전부 보인다
         // (2026-08-05 사용자). 나머지 날은 평일 폭에 맞춰 세 줄까지.
-        var open = ds === selDate;
         function evLines(list) {
           var show = open ? list : list.slice(0, 3);
           return show.map(function (e) {
@@ -2760,7 +2765,9 @@
   $("cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
-    selDate = cell.dataset.date;
+    // 이미 고른 날을 다시 누르면 펴고, 또 누르면 접는다. 다른 날이면 고르기만 한다
+    if (cell.dataset.date === selDate) openDate = openDate === selDate ? null : selDate;
+    else { selDate = cell.dataset.date; openDate = null; }
     // 날짜를 눌렀다는 건 그날 상세를 보겠다는 뜻이다 — 접어 뒀어도 편다 (2026-08-05 사용자)
     if (recall("일정칸접힘") === "1") { remember("일정칸접힘", "0"); applyFolds(); }
     renderCalGrid();

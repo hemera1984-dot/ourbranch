@@ -307,6 +307,21 @@ a.slot-title:hover { text-decoration: underline; }
 .cal-cell.pad:hover { background: var(--canvas); }
 .cal-cell.today .cal-daynum { color: #fff; background: var(--blue); }
 .cal-cell.sel { box-shadow: inset 0 0 0 2px var(--blue); background: var(--surface); }
+/* 펴진 칸은 칸 자체가 커진다 — 이웃 위로 떠오르되 달력 배치는 흔들지 않는다
+   (2026-08-05 사용자: 「그 칸 자체가 확대 및 커져야해」). */
+.cal-cell.open {
+  position: relative; z-index: 20;
+  transform: scale(1.35);
+  transform-origin: center center;
+  background: var(--surface); border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .24), inset 0 0 0 2px var(--blue);
+  transition: transform .16s ease;
+}
+/* 양끝 열은 바깥으로 넘치지 않게 안쪽을 기준으로 커진다
+   (앞 7칸은 요일 머리라 8번째부터가 월요일이다) */
+.cal-grid > .cal-cell.open:nth-child(7n + 1) { transform-origin: left center; }
+.cal-grid > .cal-cell.open:nth-child(7n) { transform-origin: right center; }
+@media (prefers-reduced-motion: reduce) { .cal-cell.open { transition: none; } }
 /* 고른 날은 그 자리에서 펴진다 — 줄임표 없이 전부, 줄바꿈 허용.
    칸이 커지면 그 주 줄만 함께 커진다(모달이 화면을 덮지 않는다). */
 .cal-cell.sel .cal-ev {
