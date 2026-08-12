@@ -545,6 +545,12 @@
     var g = GRADES.filter(function (x) { return x.name === name; })[0];
     return g ? g.code : "";
   }
+  // 내 직급 코드. 조직도에 적힌 직급이 먼저다 — 마이가디언 등급은 우리 조직도와
+  // 다를 수 있고, 화면에 뜨는 것은 지점이 정한 자리다.
+  function myGrade() {
+    var m = (BOOT.members || []).filter(function (x) { return x.email === BOOT.me.email; })[0];
+    return (m && gradeCode(m.role)) || BOOT.me.grade || "";
+  }
   // 현장에서 쓰는 말 그대로 (2026-08-03 부지점장 확인).
   // 「상담」은 외근에 들어가므로 「밸류업/이관」으로 바꿨다.
   var KINDS = [
@@ -851,7 +857,8 @@
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
     $("me-name").textContent = BOOT.me.name;
-    $("me-role").textContent = (BOOT.me.isSuper ? "총관리자" : BOOT.me.isManager ? "관리자" : "팀원");
+    // 직급이 먼저다. 총관리자는 직급이 아니라 권한이라 뒤에 덧붙인다
+    $("me-role").textContent = (myGrade() || "") + (BOOT.me.isSuper ? " · 총관리자" : "");
     var pick = $("team-pick");
     if (BOOT.me.seesAll && BOOT.teams.length) {
       var cur = pick.value;
@@ -1120,8 +1127,10 @@
     var DOW = ["일", "월", "화", "수", "목", "금", "토"];
     var d = new Date();
     $("home-date").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW[d.getDay()] + "요일";
-    var title = BOOT.me.isSuper ? " 총관리자" : BOOT.me.isManager ? " 관리자" : "";
-    $("home-greet").textContent = BOOT.me.name + title + "님의 오늘";
+    // 이름 옆에는 직급을 붙인다 — 「총관리자·관리자」는 권한이지 직급이 아니다
+    // (2026-08-05 사용자: 「GSL FC ESL 등등 이렇게」).
+    var g = myGrade();
+    $("home-greet").textContent = BOOT.me.name + (g ? " " + g : "") + "님의 오늘";
     // 하나가 실패해도 홈이 백지가 되지 않게 — 빈 값으로 대체하고 나머지를 그린다
     function soft(p, fallback) { return p.catch(function () { return fallback; }); }
     Promise.all([
