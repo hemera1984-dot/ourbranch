@@ -957,6 +957,18 @@ async function main() {
     .filter(m => m.email === "서류맨@x.com")[0];
   assert.ok(stillThere && stillThere.active === 0, "기록이 있으면 지우지 않고 내린다");
 
+  // 53) 자체 점검(2026-08-05)에서 나온 것 — 초대에 직급·팀 검사가 없었다.
+  // 초대에 심어 둔 직급은 승인 화면에 미리 채워져 뜬다. 무심코 누르면 그대로 넘어간다.
+  assert.equal((await api("t-fc1", "POST", "/invites", { role: "지점장" })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/invites", { role: "지점장" })).status, 403);
+  assert.equal((await api("t-esl1", "POST", "/invites", { role: "팀원" })).status, 200);
+  assert.equal((await api("t-super", "POST", "/invites", { role: "지점장" })).status, 200);
+  // 남의 팀 초대는 못 만든다
+  assert.equal((await api("t-esl1", "POST", "/invites", { teamId: 2, role: "팀원" })).status, 403);
+  // 팀원이 팀을 지정해도 자기 팀으로 떨어진다
+  const invFc = await (await api("t-fc1", "POST", "/invites", { teamId: 2, role: "팀원" })).json();
+  assert.equal(invFc.teamName, "1팀");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

@@ -1177,7 +1177,13 @@ route("POST", /^\/events\/copy-month$/, false, async (req, res, user) => {
 // 초대는 아무나 만든다 (카톡으로 링크 전달). 초대 자체로는 권한이 생기지 않는다.
 route("POST", /^\/invites$/, false, async (req, res, user) => {
   const b = await readJson(req);
-  const teamId = b.teamId !== undefined ? (b.teamId ?? null) : user.teamId;
+  // 팀원도 초대를 만들 수 있다 — 다만 자기 팀, 자기 직급 아래로만.
+  // 초대에 심어 둔 직급은 승인 화면에 미리 채워져 뜬다(무심코 누르게 된다).
+  let teamId = b.teamId !== undefined ? (b.teamId ?? null) : user.teamId;
+  if (!user.isManager) teamId = user.teamId;
+  else if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  if (!canAssignRole(user, b.role))
+    return send(res, 403, { error: "자기보다 높은 직급으로는 초대할 수 없습니다" });
   const code = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
   const expires = new Date(Date.now() + 14 * 86400e3).toISOString();
   db.prepare("INSERT INTO invites (code, team_id, role, by_email, by_name, created, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -1284,14 +1290,18 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   const grantRole = (from && from.role) || b.role || p.role || "팀원";
   if (!canAssignRole(user, grantRole))
     return send(res, 403, { error: "자기보다 높은 직급으로는 승인할 수 없습니다" });
-  db.prepare(
+  const upsert = db.prepare(
     `INSERT INTO members (email, name, team_id, role, recruiter_email) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
        role = excluded.role, recruiter_email = excluded.recruiter_email`
-  ).run(email, (from && from.name) || b.name || p.name || "", teamId,
-        grantRole, from ? from.recruiter_email : null);
-  if (from) mergeMember(from.email, email);   // 기존 기록을 실제 계정으로 옮기고 빈 자리는 지운다
-  db.prepare("DELETE FROM pending WHERE email = ?").run(email);
+  );
+  // 자리 이어받기는 통째로 되거나 통째로 안 돼야 한다 — 반쪽만 옮겨지면 기록의 주인이 갈린다
+  tx(() => {
+    upsert.run(email, (from && from.name) || b.name || p.name || "", teamId,
+               grantRole, from ? from.recruiter_email : null);
+    if (from) mergeMember(from.email, email);
+    db.prepare("DELETE FROM pending WHERE email = ?").run(email);
+  });
   send(res, 200, { ok: true, merged: !!from });
 });
 
@@ -1444,14 +1454,17 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
   const already = getMember(db, accEmail);
   if (already && !canWriteTeam(user, already.team_id))
     return send(res, 403, { error: "이미 다른 팀에 있는 계정입니다" });
-  // 자리의 팀·직급·도입자를 그대로 계정에 옮긴다
-  db.prepare(
+  // 자리의 팀·직급·도입자를 그대로 계정에 옮긴다. 통째로 되거나 통째로 안 되거나다.
+  const upsert = db.prepare(
     `INSERT INTO members (email, name, team_id, role, recruiter_email, sort_order) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(email) DO UPDATE SET name = excluded.name, team_id = excluded.team_id,
        role = excluded.role, recruiter_email = excluded.recruiter_email, sort_order = excluded.sort_order`
-  ).run(accEmail, seat.name, seat.team_id, seat.role, seat.recruiter_email, seat.sort_order);
-  mergeMember(seat.email, accEmail);          // 기록을 옮기고 빈 자리는 지운다
-  db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
+  );
+  tx(() => {
+    upsert.run(accEmail, seat.name, seat.team_id, seat.role, seat.recruiter_email, seat.sort_order);
+    mergeMember(seat.email, accEmail);        // 기록을 옮기고 빈 자리는 지운다
+    db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
+  });
   send(res, 200, { ok: true });
 });
 
