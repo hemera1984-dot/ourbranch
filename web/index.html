@@ -3248,11 +3248,14 @@
 
   function loadDocs() {
     var t = $("doc-team");
-    if (BOOT.me.seesAll && BOOT.teams.length > 1) {
+    // 서류는 「그 팀 부지점장」까지다 — 전체열람 부지점장에게 팀 선택칸을 주면
+    // 고를 수는 있는데 자료가 비어 보인다(코덱스 검증 2026-08-05).
+    if (BOOT.me.isBranchHead && BOOT.teams.length > 1) {
       t.hidden = false;
       if (!t.options.length)
         t.innerHTML = BOOT.teams.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + "</option>"; }).join("");
     } else t.hidden = true;
+    pasteTo = null;                     // 다시 그리면 지목도 풀린다
     api("/docs").then(function (list) { docs = list; renderDocs(); });
     api("/trainings").then(function (list) { trainings = list; renderTrain(); });
   }
@@ -3377,9 +3380,12 @@
     var items = (e.clipboardData && e.clipboardData.files) || [];
     if (!items.length) return;
     e.preventDefault();
-    var t = pasteTo || { scope: "member", email: BOOT.me.email };
-    openDocPop(document.querySelector(".org-row.paste-here") || $("doc-people"),
-      Object.assign({ file: items[0] }, t));
+    // 지목한 줄이 화면에 실제로 남아 있을 때만 그 줄로 간다.
+    // 팀을 바꾸거나 목록이 다시 그려지면 표시가 사라지는데, 그때도 옛 대상에
+    // 저장되면 「보이지 않는 사람」에게 서류가 들어간다 (코덱스 검증 2026-08-05).
+    var row = document.querySelector(".org-row.paste-here");
+    var t = (row && pasteTo) || { scope: "member", email: BOOT.me.email };
+    openDocPop(row || $("doc-people"), Object.assign({ file: items[0] }, t));
   });
 
   // 파일은 이미 정해졌다 — 종류만 고르면 끝난다

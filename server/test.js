@@ -969,6 +969,31 @@ async function main() {
   const invFc = await (await api("t-fc1", "POST", "/invites", { teamId: 2, role: "팀원" })).json();
   assert.equal(invFc.teamName, "1팀");
 
+  // 54) 코덱스 2차(2026-08-05) 지적
+  // 54-1) [상] 계정 연결로 스스로 지점장이 되던 길
+  await api("t-super", "POST", "/admin/teams", { name: "함정팀" });
+  await api("t-super", "POST", "/admin/members", { email: "지점장자리@미등록.local", name: "빈지점장", teamId: 1, role: "지점장" });
+  assert.equal((await api("t-esl1", "POST", "/admin/members/link",
+    { seatEmail: "지점장자리@미등록.local", accountEmail: "esl1@x.com" })).status, 403,
+    "부지점장이 지점장 자리에 자기 계정을 붙이면 안 된다");
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "지점장자리@미등록.local", accountEmail: "up@x.com" })).status, 200);
+
+  // 54-2) [중] 목록에 없는 직급은 받지 않는다
+  assert.equal((await api("t-super", "POST", "/admin/members", { email: "이상직급@x.com", name: "이상", teamId: 1, role: "임시직급" })).status, 400);
+  assert.equal((await api("t-super", "POST", "/invites", { role: "임시직급" })).status, 403);
+
+  // 54-3) [중] 명단에서 내려간 사람의 서류는 지점장·총관리자만 다룬다
+  await api("t-super", "POST", "/admin/members", { email: "퇴사자@x.com", name: "퇴사자", teamId: 1, role: "팀원" });
+  const trGone = await (await api("t-esl1", "POST", "/trainings", { email: "퇴사자@x.com", name: "입과교육" })).json();
+  assert.ok(trGone.id);
+  assert.equal((await api("t-super", "DELETE", "/admin/members/" + encodeURIComponent("퇴사자@x.com"))).status, 200);
+  assert.ok(!(await (await api("t-esl1", "GET", "/trainings")).json()).some(t => t.id === trGone.id),
+    "내려간 사람 자료는 그 팀 부지점장에게 더 이상 보이지 않는다");
+  assert.ok((await (await api("t-super", "GET", "/trainings")).json()).some(t => t.id === trGone.id),
+    "총관리자는 계속 본다");
+  assert.equal((await api("t-esl1", "POST", "/trainings/" + trGone.id, { name: "가로채기" })).status, 403);
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

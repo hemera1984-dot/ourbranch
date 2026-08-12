@@ -25,7 +25,11 @@ trap 'write_status false' ERR
 KEEP_DAYS=14
 DBS=("/var/lib/ourbranch/ourbranch.db" "/var/lib/myguardian/myguardian.db")
 # 서류 파일 — 합격증·수료증. DB에는 「어디 있는지」만 있어서 파일이 날아가면 못 되살린다.
-FILES_DIR=/var/lib/ourbranch/files
+# 경로는 서버가 실제로 쓰는 값(.env의 FILE_DIR)에서 읽는다. 여기 박아 두면
+# 서버가 다른 볼륨으로 옮겨간 뒤에도 옛 폴더를 뜨고 「성공」이라 적는다 (코덱스 검증).
+ENV_FILE=/opt/ourbranch/server/.env
+FILES_DIR=$(grep -s '^FILE_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2-)
+FILES_DIR=${FILES_DIR:-/var/lib/ourbranch/files}
 
 if [ "${1:-}" = "--install" ]; then
   install -m 755 "$0" /usr/local/bin/ourbranch-backup
@@ -86,11 +90,45 @@ done
 # ── 서류 파일 ──
 # DB만 떠 두면 「합격증이 있다」는 기록만 남고 파일은 사라진다.
 # 파일은 한 번 올라오면 바뀌지 않으므로, 지난 묶음보다 새 파일이 있을 때만 다시 뜬다.
-if [ -d "$FILES_DIR" ]; then
+DOC_ROWS=$(node -e "
+  const { DatabaseSync } = require('node:sqlite');
+  try {
+    const d = new DatabaseSync(process.argv[1], { readOnly: true });
+    process.stdout.write(String(d.prepare('SELECT COUNT(*) n FROM docs').get().n));
+    d.close();
+  } catch { process.stdout.write('0'); }
+" "/var/lib/ourbranch/ourbranch.db" 2>/dev/null || echo 0)
+
+if [ ! -d "$FILES_DIR" ]; then
+  # DB에 서류가 있는데 폴더가 없으면 「올린 서류가 없다」가 아니라 사고다
+  if [ "$DOC_ROWS" != "0" ]; then
+    echo "$(date '+%F %T') 서류 $DOC_ROWS건이 있는데 폴더가 없다: $FILES_DIR"
+    FAILED=1
+  else
+    echo "$(date '+%F %T') 서류 폴더 없음: $FILES_DIR (아직 올린 서류가 없으면 정상)"
+  fi
+elif true; then
   FOUT="$DEST/files-${STAMP}.tar.gz"
   LAST=$(ls -1t "$DEST"/files-*.tar.gz 2>/dev/null | head -1 || true)
-  if [ -n "$LAST" ] && [ -z "$(find "$FILES_DIR" -newer "$LAST" -type f -print -quit)" ]; then
+  # find가 권한·I/O로 죽으면 출력이 비어 「변경 없음」으로 둔갑한다. 종료 코드를 따로 본다.
+  NEWER=""
+  SKIP=0
+  if [ -n "$LAST" ]; then
+    if NEWER=$(find "$FILES_DIR" -newer "$LAST" -type f -print -quit 2>/dev/null); then
+      [ -z "$NEWER" ] && SKIP=1
+    else
+      echo "$(date '+%F %T') 서류 변경 확인 실패 — 그냥 새로 묶는다"
+    fi
+  fi
+  if [ "$SKIP" = "1" ]; then
     echo "$(date '+%F %T') 서류 변경 없음 — 지난 묶음 유지: $(basename "$LAST")"
+    # 매월 1일에는 변경이 없어도 장기 보관본을 남긴다.
+    # 안 남기면 월별 DB만 있고 그 시점 파일이 없어 복구가 반쪽이 된다.
+    if [ "$DAY" = "01" ]; then
+      mkdir -p "$DEST/monthly"
+      cp "$LAST" "$DEST/monthly/files-${STAMP}.tar.gz"
+      echo "$(date '+%F %T') 월별 보관에 지난 묶음 복사"
+    fi
   else
     tar -czf "$FOUT" -C "$(dirname "$FILES_DIR")" "$(basename "$FILES_DIR")" \
       || { echo "$(date '+%F %T') 서류 백업 실패"; FAILED=1; }
@@ -105,8 +143,6 @@ if [ -d "$FILES_DIR" ]; then
       cp "$FOUT" "$DEST/monthly/files-${STAMP}.tar.gz"
     fi
   fi
-else
-  echo "$(date '+%F %T') 서류 폴더 없음: $FILES_DIR (아직 올린 서류가 없으면 정상)"
 fi
 
 # 오래된 일별 백업 정리 (월별 보관함은 건드리지 않는다)

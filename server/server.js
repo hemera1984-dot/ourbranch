@@ -136,7 +136,8 @@ function userFor(req) {
   const grade = topGrade(member && GRADE_OF_ROLE[member.role], mgApproved ? acc.grade : null);
   const gradeManager = grade === "BM" || grade === "ESL";
   // 도입자: 팀이 달라도 자기가 도입한 팀원의 일정을 본다
-  const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ?").all(email).map(r => r.email);
+  const recruits = db.prepare("SELECT email FROM members WHERE recruiter_email = ? AND active <> 0")
+    .all(email).map(r => r.email);
   return {
     email,
     name: (member && member.name) || acc.name,
@@ -201,9 +202,13 @@ function canSetGoal(user) {
 // 남에게 줄 수 있는 직급인가 — 직급이 곧 권한이라 자기보다 높은 자리는 못 만든다.
 // 직급이 들어오는 모든 길(추가·수정·승인·초대)이 이 하나를 지난다.
 function canAssignRole(user, role) {
+  if (!role) return true;                                   // 안 바꾸는 요청
+  if (!ROLE_ORDER.includes(role)) return false;             // 목록에 없는 직급은 받지 않는다
   if (user.isSuper) return true;
-  if (!role) return true;
-  return roleRank(role) >= roleRank(user.role);
+  // 내 직급이 목록 밖이거나 비어 있으면 마이가디언 등급으로 자리를 잡는다.
+  // 그냥 99로 두면 팀원조차 못 주는 과잉 차단이 된다(코덱스 검증 2026-08-05).
+  const mine = ROLE_ORDER.includes(user.role) ? user.role : ROLE_OF_GRADE[user.grade];
+  return roleRank(role) >= roleRank(mine);
 }
 
 // 승인권자 — 지점장·부지점장·총관리자 (2026-08-01 확정)
@@ -272,9 +277,22 @@ function purgeOldTa() {
 // INSERT 직전의 파일을 청소가 먼저 지워 버리면 방금 올린 서류가 사라진다.
 const ORPHAN_GRACE = 60 * 60e3;          // 한 시간
 
+// 이 폴더가 이 DB의 것인지 표식으로 확인한다. FILE_DIR을 다른 DB의 폴더로
+// 잘못 가리킨 채 켜면, 남의 서류를 「주인 없는 파일」로 보고 통째로 지운다
+// (코덱스 검증 2026-08-05).
+const FILE_MARK = ".ourbranch-files";
+
 function purgeOrphanFiles() {
   if (!existsSync(FILE_DIR)) return;
+  const mark = join(FILE_DIR, FILE_MARK);
+  const mine = normalize(DB_FILE);
+  if (!existsSync(mark)) writeFileSync(mark, mine);
+  else if (readFileSync(mark, "utf8").trim() !== mine) {
+    console.warn("[서류 청소] 이 폴더는 다른 DB의 것이다 — 청소를 하지 않는다: " + FILE_DIR);
+    return;
+  }
   const known = new Set(db.prepare("SELECT path FROM docs").all().map(r => r.path));
+  known.add(FILE_MARK);
   const cutoff = Date.now() - ORPHAN_GRACE;
   let n = 0;
   for (const f of readdirSync(FILE_DIR)) {
@@ -336,7 +354,9 @@ function looksLike(mime, buf) {
     case "image/jpeg": return at(0, 0xff, 0xd8, 0xff);
     case "image/png": return at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
     case "image/webp": return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50);
-    case "image/heic": return b.slice(4, 8).toString("latin1") === "ftyp";
+    // ftyp만 보면 mp4도 통과한다 — 브랜드까지 확인한다
+    case "image/heic": return b.slice(4, 8).toString("latin1") === "ftyp"
+      && /^(heic|heix|hevc|hevx|mif1|msf1)/.test(b.slice(8, 12).toString("latin1"));
     default: return false;
   }
 }
@@ -351,27 +371,35 @@ function ownerSide(user, email) {
 }
 // 지금 그 사람이 속한 팀. 기록에 박힌 team_id는 만들 때의 스냅숏이라,
 // 팀을 옮기면 옛 팀 부지점장이 계속 열람하게 된다 (코덱스 검증 2026-08-05).
-function teamOfOwner(email, fallback) {
+// 지금 그 사람이 속한 팀. 못 찾으면 undefined를 돌려준다 —
+// 기록에 박힌 team_id(스냅숏)로 되돌아가면 옛 팀 부지점장이 계속 열람한다.
+// 명단에서 내려간 사람(active=0)의 자료도 지점장·총관리자만 다룬다
+// (코덱스 검증 2026-08-05).
+function teamOfOwner(email) {
   const m = email ? getMember(db, email) : null;
-  return m ? m.team_id : fallback;
+  if (!m || m.active === 0) return undefined;
+  return m.team_id;
 }
 // 개인 자료에는 canSeeTeam을 쓰지 않는다 — 그건 team_id가 null이면 전원 통과다
 // (지점 공통 공지용). 팀 없는 사람의 합격증이 전 부지점장에게 열리면 안 된다.
 function sameTeamLead(user, teamId) {
   if (user.isSuper || user.grade === "BM") return true;     // 지점장·총관리자는 지점 전체
   if (!canSetGoal(user)) return false;                      // 부지점장 미만은 남의 자료를 못 본다
-  return teamId != null && user.teamId === teamId;          // 부지점장은 자기 팀만
+  if (teamId == null) return false;                         // 주인이 명단에 없거나 팀이 없다
+  // 전체열람(can_view_all)은 여기서 통하지 않는다 — 서류는 「그 팀 부지점장」까지다
+  // (2026-08-05 사용자 지시). 대신 화면이 남의 팀 선택칸을 아예 안 준다.
+  return user.teamId === teamId;
 }
 function canSeeDoc(user, d) {
   if (d.scope === "branch") return true;                    // 사업자등록증 등 지점 공용
   if (ownerSide(user, d.owner_email)) return true;
-  return sameTeamLead(user, teamOfOwner(d.owner_email, d.team_id));
+  return sameTeamLead(user, teamOfOwner(d.owner_email));
 }
 // 올리기·지우기 — 본인, 또는 그 팀 부지점장·지점장. 직도입자는 보기만 한다.
 function canWriteDoc(user, d) {
   if (d.scope === "branch") return canSetGoal(user);
   if (d.owner_email && d.owner_email === user.email) return true;
-  return sameTeamLead(user, teamOfOwner(d.owner_email, d.team_id));
+  return sameTeamLead(user, teamOfOwner(d.owner_email));
 }
 
 function readBody(req, limit) {
@@ -1383,6 +1411,10 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
   // 자기 열람 범위 밖 구성원은 손대지 못한다 (다른 팀 사람을 빼오거나 지우는 것 차단)
   if (!canManageMember(user, email)) return send(res, 403, { error: "다른 팀 구성원입니다" });
   const prev = getMember(db, email) || {};
+  // 없는 직급은 총관리자라도 못 넣는다 — 목록 밖 값이 들어오면 순서 비교가 무너지고,
+  // 그 직급을 가진 사람은 아무 직급도 못 주게 된다 (코덱스 검증 2026-08-05).
+  if (b.role !== undefined && b.role && !ROLE_ORDER.includes(b.role))
+    return send(res, 400, { error: "없는 직급입니다: " + b.role });
   // 직급이 곧 권한이다(GRADE_OF_ROLE). 관리자가 자기 직급을 올리면 스스로 지점장이 된다.
   // 자기 직급은 총관리자만 바꾼다. 남에게도 자기보다 높은 직급은 주지 못한다.
   if (b.role !== undefined && b.role !== (prev.role || "팀원") && !user.isSuper) {
@@ -1454,6 +1486,11 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
   const already = getMember(db, accEmail);
   if (already && !canWriteTeam(user, already.team_id))
     return send(res, 403, { error: "이미 다른 팀에 있는 계정입니다" });
+  // 자리의 직급이 그대로 계정에 옮겨간다 — 줄 수 있는 직급인지 봐야 한다.
+  // 안 보면 자기 팀에 「지점장」 자리를 만들어 두고 거기에 자기 계정을 붙이면 된다
+  // (코덱스 검증 2026-08-05).
+  if (!canAssignRole(user, seat.role))
+    return send(res, 403, { error: "그 자리의 직급을 줄 권한이 없습니다" });
   // 자리의 팀·직급·도입자를 그대로 계정에 옮긴다. 통째로 되거나 통째로 안 되거나다.
   const upsert = db.prepare(
     `INSERT INTO members (email, name, team_id, role, recruiter_email, sort_order) VALUES (?, ?, ?, ?, ?, ?)
