@@ -957,6 +957,38 @@ async function main() {
     .filter(m => m.email === "서류맨@x.com")[0];
   assert.ok(stillThere && stillThere.active === 0, "기록이 있으면 지우지 않고 내린다");
 
+  // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
+  // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
+  {
+    const { readdirSync, writeFileSync, utimesSync, existsSync } = await import("node:fs");
+    const before = readdirSync(FILES);
+    // 방금 만든 고아 — 살아 있어야 한다
+    writeFileSync(FILES + "/방금고아.pdf", "%PDF-1.4 새것");
+    // 오래된 고아 — 지워져야 한다
+    writeFileSync(FILES + "/묵은고아.pdf", "%PDF-1.4 옛것");
+    const old = new Date(Date.now() - 3 * 3600e3);
+    utimesSync(FILES + "/묵은고아.pdf", old, old);
+    // 서버가 켜질 때 청소가 돈다 — 재시작해서 확인한다
+    const kill = new Promise(r => srv.on("exit", r));
+    srv.kill();
+    await kill;
+    const srv2 = spawn(process.execPath, ["server.js"], {
+      env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES },
+      stdio: "inherit"
+    });
+    for (let i = 0; i < 50; i++) {
+      try { await fetch(BASE + "/health"); break; } catch { await new Promise(r => setTimeout(r, 100)); }
+    }
+    assert.ok(existsSync(FILES + "/방금고아.pdf"), "막 올라온 파일을 지우면 방금 올린 서류가 사라진다");
+    assert.ok(!existsSync(FILES + "/묵은고아.pdf"), "주인 없는 옛 파일은 지운다");
+    // 진짜 서류는 남아 있다
+    const kept = readdirSync(FILES).filter(f => before.includes(f));
+    assert.equal(kept.length, before.length, "DB에 있는 서류가 지워지면 안 된다");
+    const exited = new Promise(r => srv2.on("exit", r));
+    srv2.kill();
+    await exited;
+  }
+
   console.log("전체 통과 — 인증·팀 분리·쓰기 권한·소유권·멱등키·부분갱신·초대승인·조직도수정·날짜검증·월복사·TA개인정보·KST·동명이인·조직도직급·내정보·생일·TA잠금·보관기간·반복일정·도입현황·계정연결·조직도순서·지난보고·목표보존·일괄저장·명단내리기·미션분모·요일복사·일정세부·대상이관·잠금시도제한·직급상승차단·전체열람쓰기차단·달력날짜·목표동명이인·출석병합·위촉년월 확인 완료");
 }
 

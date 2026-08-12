@@ -7,7 +7,7 @@
 // 외부 패키지를 쓰지 않는다 (Node 22+ 내장 http·sqlite).
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync, readdirSync } from "node:fs";
 import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken, listAccounts } from "./auth.js";
@@ -266,6 +266,29 @@ function purgeOldTa() {
   db.prepare("DELETE FROM ta_access WHERE created < ?").run(cutoff);
 }
 
+// 주인 없는 파일 청소 — 서류 파일에는 실명·생년월일이 들어 있다.
+// 업로드 도중 프로세스가 죽거나 DB만 되돌아가면 파일만 디스크에 남는다.
+// DB에 없는 파일은 지운다. 단, **막 올라온 것은 건드리지 않는다** —
+// INSERT 직전의 파일을 청소가 먼저 지워 버리면 방금 올린 서류가 사라진다.
+const ORPHAN_GRACE = 60 * 60e3;          // 한 시간
+
+function purgeOrphanFiles() {
+  if (!existsSync(FILE_DIR)) return;
+  const known = new Set(db.prepare("SELECT path FROM docs").all().map(r => r.path));
+  const cutoff = Date.now() - ORPHAN_GRACE;
+  let n = 0;
+  for (const f of readdirSync(FILE_DIR)) {
+    if (known.has(f)) continue;
+    const full = join(FILE_DIR, f);
+    try {
+      if (statSync(full).mtimeMs > cutoff) continue;      // 아직 기록될 수 있다
+      unlinkSync(full);
+      n += 1;
+    } catch { /* 다음 차례에 다시 본다 */ }
+  }
+  if (n) console.log("[서류 청소] 주인 없는 파일 " + n + "개 삭제");
+}
+
 // ---------- 라우팅 ----------
 
 const routes = [];
@@ -301,7 +324,7 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
 
 const DOC_EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
                   "image/heic": ".heic", "application/pdf": ".pdf" };
-const DOC_QUOTA = 60 * 1024 * 1024;          // 한 사람이 쌓을 수 있는 총량 (디스크가 넉넉하지 않다)
+const DOC_QUOTA = 30 * 1024 * 1024;          // 한 사람이 쌓을 수 있는 총량 (2026-08-05 사용자: 30MB면 충분)
 
 // 헤더는 보내는 쪽이 마음대로 쓴다. 내용이 실제로 그 형식인지 앞머리로 확인한다.
 function looksLike(mime, buf) {
@@ -402,7 +425,7 @@ route("POST", /^\/docs$/, false, async (req, res, user) => {
           : "SELECT COALESCE(SUM(size),0) n FROM docs WHERE scope = 'branch'"
   ).get(...(owner ? [owner] : [])).n;
   if (used + buf.length > DOC_QUOTA)
-    return send(res, 413, { error: "보관 용량(1인 60MB)을 넘습니다. 오래된 서류를 지워 주세요" });
+    return send(res, 413, { error: "보관 용량(1인 30MB)을 넘습니다. 오래된 서류를 지워 주세요" });
 
   // 파일 이름은 서버가 짓는다 — 올린 이름을 그대로 쓰면 경로를 벗어나는 이름이 섞인다
   const rel = randomBytes(12).toString("hex") + ext;
@@ -1605,3 +1628,7 @@ server.listen(PORT, () => console.log("ourbranch API :" + PORT));
 // 보관기간 청소 — 켤 때 한 번, 이후 하루 한 번
 purgeOldTa();
 setInterval(purgeOldTa, 24 * 3600e3).unref();
+
+// 주인 없는 서류 파일 청소 — 같은 주기
+purgeOrphanFiles();
+setInterval(purgeOrphanFiles, 24 * 3600e3).unref();

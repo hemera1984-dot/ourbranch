@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DB 백업 — 매일 새벽에 돌린다 (cron). 하랑지점 + 마이가디언 DB를 함께 지킨다.
+# 백업 — 매일 새벽에 돌린다 (cron). 하랑지점 + 마이가디언 DB, 그리고 서류 파일.
 #
 # 설치: bash backup.sh --install   (root)
 # 수동: bash backup.sh
@@ -17,13 +17,15 @@ STATUS=/var/lib/ourbranch/backup-status.json
 write_status() {
   local ok=$1
   mkdir -p "$(dirname "$STATUS")" 2>/dev/null || true
-  printf '{"시각":"%s","성공":%s,"개수":%s,"용량":"%s"}
-'     "$(date -Iseconds)" "$ok"     "$(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l)"     "$(du -sh "$DEST" 2>/dev/null | cut -f1)" > "$STATUS"
+  printf '{"시각":"%s","성공":%s,"개수":%s,"서류묶음":%s,"용량":"%s"}
+'     "$(date -Iseconds)" "$ok"     "$(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l)"     "$(ls -1 "$DEST"/files-*.tar.gz 2>/dev/null | wc -l)"     "$(du -sh "$DEST" 2>/dev/null | cut -f1)" > "$STATUS"
   chown myguardian:myguardian "$STATUS" 2>/dev/null || true
 }
 trap 'write_status false' ERR
 KEEP_DAYS=14
 DBS=("/var/lib/ourbranch/ourbranch.db" "/var/lib/myguardian/myguardian.db")
+# 서류 파일 — 합격증·수료증. DB에는 「어디 있는지」만 있어서 파일이 날아가면 못 되살린다.
+FILES_DIR=/var/lib/ourbranch/files
 
 if [ "${1:-}" = "--install" ]; then
   install -m 755 "$0" /usr/local/bin/ourbranch-backup
@@ -81,8 +83,35 @@ for SRC in "${DBS[@]}"; do
   echo "$(date '+%F %T') 백업 완료: ${NAME} → $(du -h "$OUT.gz" | cut -f1)"
 done
 
+# ── 서류 파일 ──
+# DB만 떠 두면 「합격증이 있다」는 기록만 남고 파일은 사라진다.
+# 파일은 한 번 올라오면 바뀌지 않으므로, 지난 묶음보다 새 파일이 있을 때만 다시 뜬다.
+if [ -d "$FILES_DIR" ]; then
+  FOUT="$DEST/files-${STAMP}.tar.gz"
+  LAST=$(ls -1t "$DEST"/files-*.tar.gz 2>/dev/null | head -1 || true)
+  if [ -n "$LAST" ] && [ -z "$(find "$FILES_DIR" -newer "$LAST" -type f -print -quit)" ]; then
+    echo "$(date '+%F %T') 서류 변경 없음 — 지난 묶음 유지: $(basename "$LAST")"
+  else
+    tar -czf "$FOUT" -C "$(dirname "$FILES_DIR")" "$(basename "$FILES_DIR")" \
+      || { echo "$(date '+%F %T') 서류 백업 실패"; FAILED=1; }
+    # 묶음이 실제로 풀리는지 확인한다 — 깨진 백업은 없는 백업보다 나쁘다
+    if [ -f "$FOUT" ]; then
+      tar -tzf "$FOUT" >/dev/null 2>&1 \
+        || { echo "$(date '+%F %T') 서류 백업 검증 실패"; rm -f "$FOUT"; FAILED=1; }
+    fi
+    [ -f "$FOUT" ] && echo "$(date '+%F %T') 서류 백업 완료 → $(du -h "$FOUT" | cut -f1)"
+    if [ "$DAY" = "01" ] && [ -f "$FOUT" ]; then
+      mkdir -p "$DEST/monthly"
+      cp "$FOUT" "$DEST/monthly/files-${STAMP}.tar.gz"
+    fi
+  fi
+else
+  echo "$(date '+%F %T') 서류 폴더 없음: $FILES_DIR (아직 올린 서류가 없으면 정상)"
+fi
+
 # 오래된 일별 백업 정리 (월별 보관함은 건드리지 않는다)
 find "$DEST" -maxdepth 1 -name '*.db.gz' -mtime +$KEEP_DAYS -delete
+find "$DEST" -maxdepth 1 -name 'files-*.tar.gz' -mtime +$KEEP_DAYS -delete
 echo "$(date '+%F %T') 보관 중: $(ls -1 "$DEST"/*.db.gz 2>/dev/null | wc -l)개"
 
 # 결과를 파일로 남긴다 — 앱이 읽어서 총관리자에게 보여준다.
