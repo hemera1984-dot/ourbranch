@@ -418,6 +418,13 @@ a.slot-title:hover { text-decoration: underline; }
   }
   .btn { padding: 9px 16px; }
   .input, select.input { padding: 9px 12px; }
+  /* 이름·설명·버튼이 한 줄에 다 들어가지 않는다 — 위아래로 쌓는다 */
+  .org-row { flex-wrap: wrap; align-items: flex-start; padding: 10px 14px; }
+  .org-row .name { min-width: 0; flex: 1 1 auto; }
+  .org-row .meta { flex: 1 0 100%; margin-top: 3px; }
+  .org-row .btn { padding: 7px 12px; }
+  /* 서류함 — 칩이 여러 개면 줄이 넘친다 */
+  .doc-chip { margin-bottom: 4px; }
   /* 상단 메뉴는 접어 두고 하단 탭으로 다닌다. 「더보기」를 누르면 펼쳐진다. */
   .nav, .side-user { display: none; }
   body.more-open .nav, body.more-open .side-user { display: block; }
@@ -626,6 +633,18 @@ a.slot-title:hover { text-decoration: underline; }
 @keyframes splash-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes splash-shine { to { transform: translateX(130%) } }
 @keyframes splash-out { to { opacity: 0; visibility: hidden } }
+/* 손가락으로 누르는 기기 — 서류함·조직도의 작은 단추를 키운다.
+   태블릿은 1024px이라 폭으로만 가르면 20px 단추를 그대로 받는다 (2026-08-05). */
+@media (pointer: coarse) {
+  .doc-chip .doc-open, .doc-chip .tr-name { padding: 12px; font-size: 13px; }
+  /* × 는 폭도 손가락만큼 줘야 한다 — 높이만 키우면 옆 칩을 누르게 된다 */
+  .doc-chip .doc-del { padding: 11px 12px; font-size: 15px; }
+  .org-row .btn { min-height: 44px; }
+  .oc-under, .oc-off { width: 30px; height: 30px; font-size: 15px; line-height: 28px; }
+  .pop .btn.tk { padding: 8px 12px; font-size: 13px; }
+  .edge-handle { width: 26px; height: 76px; line-height: 74px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .splash-shine { display: none }
   .app-splash { animation: none }
