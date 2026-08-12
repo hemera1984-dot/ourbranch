@@ -469,7 +469,8 @@
       <h1>서류함</h1>
       <p class="page-desc">합격증·수료증처럼 사람마다 한 장씩 쌓이는 자료를 여기 둡니다.
         누가 무엇을 안 냈는지 한 화면에 보입니다.
-        열람은 본인·도입자·그 팀 부지점장·지점장까지입니다.</p>
+        열람은 본인·도입자·그 팀 부지점장·지점장까지입니다.
+        <strong>파일을 그 사람 줄에 끌어다 놓거나, 줄을 누르고 붙여넣기(Ctrl+V)해도 올라갑니다.</strong></p>
       <div class="section">
         <div class="section-head"><h2>지점 자료</h2><p>사업자등록증처럼 지점 전체가 함께 쓰는 서류입니다.</p></div>
         <div class="card" id="doc-branch"></div>
@@ -3271,7 +3272,7 @@
       var missing = DOC_KINDS.slice(0, 3).filter(function (k) {
         return !mine.some(function (d) { return d.kind === k; });
       });
-      return '<div class="org-row">'
+      return '<div class="org-row" data-email="' + esc(m.email) + '">'
         + '<span class="name">' + esc(memberLabel(m)) + "</span>"
         + '<span class="meta">'
         + (mine.length ? mine.map(function (d) { return docChip(d, canEdit); }).join(" ") : "")
@@ -3303,21 +3304,116 @@
     var trChip = e.target.closest(".tr-name");
     if (trChip && trChip.dataset.tid) { openTrainPop(trChip, { id: Number(trChip.dataset.tid) }); return; }
     var add = e.target.closest(".doc-add");
-    if (!add) return;
-    var kind = prompt("어떤 서류인가요?\n\n" + DOC_KINDS.join(" · "),
-      add.dataset.scope === "branch" ? "사업자등록증" : DOC_KINDS[0]);
-    if (kind === null) return;
-    docPick = { scope: add.dataset.scope, email: add.dataset.email || "", kind: kind.trim() };
-    $("doc-file").value = "";
-    $("doc-file").click();
+    if (add) {
+      docPick = { scope: add.dataset.scope, email: add.dataset.email || "" };
+      $("doc-file").value = "";
+      $("doc-file").click();
+      return;
+    }
+    // 줄을 누르면 붙여넣기 대상이 된다 — 클립보드에는 「누구 것인지」가 없다
+    var row = e.target.closest("#doc-branch .org-row, #doc-people .org-row");
+    if (row) markPasteTarget(row);
   });
   $("doc-file").addEventListener("change", function () {
     var f = this.files && this.files[0];
     if (!f || !docPick) return;
-    if (f.size > 8 * 1024 * 1024) { alert("파일이 8MB를 넘습니다. 사진이라면 조금 줄여 주세요."); return; }
-    docUpload(f, docPick).then(loadDocs).catch(function () {});
+    openDocPop($("doc-people"), Object.assign({ file: f }, docPick));
     docPick = null;
   });
+
+  // ── 끌어다 놓기 · 붙여넣기 ──
+  // 카톡으로 받은 합격증을 저장했다가 다시 고르는 건 번거롭다. 줄 위에 떨어뜨리거나
+  // 그대로 붙여넣으면 된다 (2026-08-05 사용자).
+  function rowTarget(row) {
+    if (!row) return null;
+    if (row.closest("#doc-branch")) return { scope: "branch", email: "" };
+    return row.dataset.email ? { scope: "member", email: row.dataset.email } : null;
+  }
+  function markPasteTarget(row) {
+    var t = rowTarget(row);
+    if (!t) return;
+    document.querySelectorAll(".org-row.paste-here")
+      .forEach(function (x) { x.classList.remove("paste-here"); });
+    row.classList.add("paste-here");
+    pasteTo = t;
+  }
+  var pasteTo = null;
+
+  ["#doc-branch", "#doc-people"].forEach(function (sel) {
+    var box = document.querySelector(sel);
+    box.addEventListener("dragover", function (e) {
+      var row = e.target.closest(".org-row");
+      if (!row || !rowTarget(row)) return;
+      e.preventDefault();
+      document.querySelectorAll(".org-row.drop-on")
+        .forEach(function (x) { x.classList.remove("drop-on"); });
+      row.classList.add("drop-on");
+    });
+    box.addEventListener("dragleave", function (e) {
+      var row = e.target.closest(".org-row");
+      if (row) row.classList.remove("drop-on");
+    });
+    box.addEventListener("drop", function (e) {
+      var row = e.target.closest(".org-row");
+      var t = rowTarget(row);
+      if (!t) return;
+      e.preventDefault();
+      row.classList.remove("drop-on");
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      openDocPop(row, Object.assign({ file: f }, t));
+    });
+  });
+
+  document.addEventListener("paste", function (e) {
+    if (screen !== "docs" || document.querySelector(".pop")) return;
+    var items = (e.clipboardData && e.clipboardData.files) || [];
+    if (!items.length) return;
+    e.preventDefault();
+    var t = pasteTo || { scope: "member", email: BOOT.me.email };
+    openDocPop(document.querySelector(".org-row.paste-here") || $("doc-people"),
+      Object.assign({ file: items[0] }, t));
+  });
+
+  // 파일은 이미 정해졌다 — 종류만 고르면 끝난다
+  function openDocPop(anchor, o) {
+    closePop(); closeSheet();
+    if (o.file.size > 8 * 1024 * 1024) {
+      alert("파일이 8MB를 넘습니다. 사진이라면 조금 줄여 주세요.");
+      return;
+    }
+    var kinds = o.scope === "branch" ? ["사업자등록증"].concat(DOC_KINDS) : DOC_KINDS;
+    var who = o.scope === "branch" ? "지점 공용" : (nameOf(o.email) || o.email);
+    // 파일 이름에 서류 이름이 들어 있으면 미리 골라 둔다
+    var guess = kinds.filter(function (k) { return o.file.name.indexOf(k) >= 0; })[0] || kinds[0];
+    var p = document.createElement("div");
+    p.className = "pop";
+    p.innerHTML = '<div class="pop-title">' + esc(who) + " — 어떤 서류인가요?</div>"
+      + '<div class="pop-row"><span class="note" style="font-size:12px">' + esc(o.file.name)
+      + " · " + Math.max(1, Math.round(o.file.size / 1024)) + "KB</span></div>"
+      + '<div class="pop-row" style="flex-wrap:wrap;gap:4px">'
+      + kinds.map(function (k) {
+          return '<button type="button" class="btn tk" data-k="' + esc(k) + '">' + esc(k) + "</button>";
+        }).join("") + "</div>"
+      + '<div class="pop-row"><input type="text" class="input" id="dp-kind" value="' + esc(guess) + '"></div>'
+      + '<div class="pop-row"><button class="btn primary" id="dp-ok">올리기</button>'
+      + '<button class="btn" id="dp-x">닫기</button></div>';
+    document.body.appendChild(p);
+    placePop(p, anchor);
+    p.querySelectorAll(".tk").forEach(function (b) {
+      b.addEventListener("click", function () { p.querySelector("#dp-kind").value = b.dataset.k; });
+    });
+    p.querySelector("#dp-x").addEventListener("click", closePop);
+    p.querySelector("#dp-ok").addEventListener("click", function () {
+      var kind = p.querySelector("#dp-kind").value.trim();
+      if (!kind) { alert("어떤 서류인지 골라 주세요."); return; }
+      var btn = p.querySelector("#dp-ok");
+      btn.disabled = true; btn.textContent = "올리는 중…";
+      docUpload(o.file, { scope: o.scope, email: o.email, kind: kind })
+        .then(function () { closePop(); loadDocs(); })
+        .catch(function () { btn.disabled = false; btn.textContent = "올리기"; });
+    });
+  }
 
   // ── 미션·공지 ──
   function loadBoard() {
