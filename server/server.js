@@ -1174,8 +1174,10 @@ route("POST", /^\/events\/copy-month$/, false, async (req, res, user) => {
   const src = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? AND team_id = ? AND source IS NULL")
     .all(from + "-00", from + "-99", teamId)
     .filter(e => onlyTeam ? !e.member_email : true)
-    // 관리자가 아니면 자기 일정만 옮긴다
-    .filter(e => user.isManager || e.member_email === user.email);
+    // 옮기는 것도 새로 만드는 것이다 — POST /events와 같은 선으로 가른다.
+    // isManager로 두면 관리자로 임명된 팀장이 이 길로 지점 일정을 만들 수 있다
+    // (2026-08-05 자체 점검).
+    .filter(e => canSetGoal(user) || e.member_email === user.email);
 
   // 날짜(3일 → 3일)로 옮기면 요일이 어긋난다 — 월요일 조회가 수요일로 간다.
   // 「그 달의 몇째 주 무슨 요일」을 지켜서 옮긴다. 다섯째 주가 없으면 마지막 같은 요일로.

@@ -1012,6 +1012,17 @@ async function main() {
   const again = await (await api("t-fc1", "POST", "/events", { date: "2026-08-21", memberEmail: "fc1@x.com", kind: "외근", title: "내 일정" })).json();
   assert.ok(again.id && again.id !== evMine.id, "되돌리기는 같은 내용을 새로 넣는다");
 
+  // 56) 「지난달 일정 가져오기」도 지점 일정을 만드는 길이다 — 같은 선으로 막는다
+  await api("t-esl1", "POST", "/events", { date: "2026-09-07", kind: "지점일정", title: "팀미팅(복사원본)" });
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: true });
+  const cpNo = await (await api("t-fc1", "POST", "/events/copy-month",
+    { from: "2026-09", to: "2026-10", teamId: 1, onlyTeam: true })).json();
+  assert.equal(cpNo.copied, 0, "관리자 임명 팀원이 지점 일정을 복사로 만들면 안 된다");
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: false });
+  const cpOk = await (await api("t-esl1", "POST", "/events/copy-month",
+    { from: "2026-09", to: "2026-10", teamId: 1, onlyTeam: true })).json();
+  assert.ok(cpOk.copied > 0, "부지점장은 그대로 된다");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {
