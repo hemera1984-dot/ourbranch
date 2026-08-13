@@ -1054,7 +1054,8 @@
   function nameOf(email) {
     return labelByEmail(email);      // 동명이인이면 소속·직급을 덧붙여 구분한다
   }
-  function canWriteAs(name) { return BOOT.me.isManager || name === BOOT.me.name; }
+  // 남의 이름으로 쓰는 것은 부지점장 이상 (일정과 같은 선)
+  function canWriteAs(name) { return BOOT.me.canSetGoal || name === BOOT.me.name; }
 
   // 동명이인 구분 — 같은 이름이 둘 이상이면 뒤에 구분 표식을 붙인다.
   // 표식은 소속 팀, 팀도 같으면 직급, 그것도 같으면 이메일 앞부분.
@@ -2145,8 +2146,12 @@
         year: days[0].getFullYear(),
         rows: rows,
         fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "외근" },
-        canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.isManager; },
-        onDeleteRow: function (r, done) { api("/events/" + r._id, { method: "DELETE" }).then(done).then(loadWeek); }
+        canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.canSetGoal; },
+        onDeleteRow: function (r, done) {
+          var ev0 = evsById[r._id];
+          if (ev0) { removeEvent(ev0, loadWeek); done(); return; }
+          api("/events/" + r._id, { method: "DELETE" }).then(done).then(loadWeek);
+        }
       });
       if (!rows.length) evGrid.addRow();
     });
@@ -2169,7 +2174,7 @@
   document.addEventListener("keydown", function (e) {
     if (!pickedSlot || !document.body.contains(pickedSlot)) return;
     if (e.key === "Escape") { clearPick(); return; }
-    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    if (e.key !== "Delete") return;        // Backspace는 뒤로 가기와 헷갈린다
     // 글자를 치는 중이면 건드리지 않는다
     var t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
@@ -2189,6 +2194,8 @@
   // 「정말 지울까요?」는 매번 손이 한 번 더 가는데 실수는 그대로 난다.
   function removeEvent(ev, refresh) {
     var back = {
+      // 원래 팀을 실어 보낸다 — 안 보내면 지운 사람의 팀으로 되살아난다
+      teamId: ev.team_id ?? null,
       memberEmail: ev.member_email || null, date: ev.date, kind: ev.kind,
       start: ev.start || "", end: ev.end || "", title: ev.title || "", place: ev.place || "",
       detail: (function () { try { return ev.detail ? JSON.parse(ev.detail) : undefined; } catch (err) { return undefined; } })()
@@ -2600,7 +2607,11 @@
       req.then(function () { closePop(); refresh(); });
     });
     if (!isNew) p.querySelector("#pop-del").addEventListener("click", function () {
-      api("/events/" + o.id, { method: "DELETE" }).then(function () { closePop(); refresh(); });
+      // 삭제는 한 길로만 — 되돌리기 띠가 안 뜨는 지우기가 남아 있으면 안 된다
+      var ev0 = evsById[o.id];
+      closePop();
+      if (ev0) removeEvent(ev0, refresh);
+      else api("/events/" + o.id, { method: "DELETE" }).then(refresh);
     });
     // 구분이 정해진 일정(TS1 등)에는 내용 칸이 없다 — 있을 때만 포커스
     var t0 = p.querySelector("#pop-title");
@@ -2849,16 +2860,19 @@
       + '<label class="q-week"><input type="checkbox" id="q-week"'
       + (recall("빠른매주") === "1" ? " checked" : "") + '> 매주 12주</label></div>';
   }
-  function quickAdd(text) {
+  function quickAdd(text, btn) {
     var st = $("q-start").value, en = $("q-end").value;
     var wk = $("q-week").checked;
     remember("빠른시작", st); remember("빠른끝", en); remember("빠른매주", wk ? "1" : "0");
     var det = { "종류": text };
+    // 지금 보고 있는 팀에 넣는다. 안 보내면 서버가 내 소속 팀으로 넣어서,
+    // 다른 팀을 보며 누른 12건이 엉뚱한 팀에 들어간다 (코덱스 검증 2026-08-05).
+    if (btn) btn.disabled = true;                 // 연타하면 12건이 24건이 된다
     api("/events", { method: "POST", body: {
-      memberEmail: null, date: selDate, kind: "지점일정",
+      teamId: myTeamId(), memberEmail: null, date: selDate, kind: "지점일정",
       start: st, end: en, title: composeTitle("지점일정", det), detail: det,
       repeat: wk ? { every: "week", count: 12 } : undefined
-    } }).then(loadCal);
+    } }).then(loadCal).catch(function () { if (btn) btn.disabled = false; });
   }
 
   function renderCalDay() {
@@ -2883,7 +2897,7 @@
   });
   $("cal-day").addEventListener("click", function (e) {
     var q = e.target.closest(".q-add");
-    if (q) { quickAdd(q.dataset.k); return; }
+    if (q) { quickAdd(q.dataset.k, q); return; }
     if (e.target.id === "cal-day-add") {
       openPop(e.target, { em: BOOT.me.email, date: selDate, pickMember: true, onDone: loadCal });
       return;

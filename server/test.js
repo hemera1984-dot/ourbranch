@@ -28,10 +28,11 @@ seed.run(5, "wait@x.com", "대기자", "대기", null, 0);
 seed.run(6, "new@x.com", "신입", "승인", "FC", 0);          // 승인됐지만 지점 명단엔 없음
 seed.run(7, "bm@x.com", "지점장", "승인", "BM", 0);         // 지점장 — 지점 전체 관리
 seed.run(8, "up@x.com", "승급시도", "승인", "FC", 0);       // 승인 경로 직급 상승 시험용
+seed.run(9, "무팀@x.com", "무팀", "승인", "FC", 0);         // 팀 없는 구성원 시험용
 const tok = auth.prepare("INSERT INTO sessions (token, account_id, expires_at) VALUES (?, ?, ?)");
 tok.run("t-super", 1, far); tok.run("t-esl1", 2, far); tok.run("t-fc1", 3, far);
 tok.run("t-fc2", 4, far); tok.run("t-wait", 5, far); tok.run("t-new", 6, far);
-tok.run("t-bm", 7, far); tok.run("t-up", 8, far);
+tok.run("t-bm", 7, far); tok.run("t-up", 8, far); tok.run("t-noteam", 9, far);
 auth.close();
 
 const FILES = "./test-files";
@@ -1022,6 +1023,42 @@ async function main() {
   const cpOk = await (await api("t-esl1", "POST", "/events/copy-month",
     { from: "2026-09", to: "2026-10", teamId: 1, onlyTeam: true })).json();
   assert.ok(cpOk.copied > 0, "부지점장은 그대로 된다");
+
+  // 57) 코덱스 3차(2026-08-05) 지적
+  // 57-1) [상] 팀 없는 사람의 개인 일정이 지점 전체에 열리던 문제
+  await api("t-super", "POST", "/admin/members", { email: "무팀@x.com", name: "무팀", teamId: null, role: "팀원" });
+  // 팀 없는 사람의 개인 일정은 마이가디언 연동으로만 들어온다 (POST /events는 팀을 요구한다)
+  assert.equal((await api("t-noteam", "POST", "/events/upsert",
+    { "출처": "myguardian", "출처키": "noteam-1", "일시": "2026-08-24T10:00", "고객코드": "C-2026-777" })).status, 200);
+  const seenByFc2 = await (await api("t-fc2", "GET", "/events?from=2026-08-24&to=2026-08-24")).json();
+  assert.equal(seenByFc2.filter(e => e.member_email === "무팀@x.com").length, 0,
+    "팀 없는 사람 개인 일정이 남에게 보이면 안 된다");
+  assert.equal((await (await api("t-super", "GET", "/events?from=2026-08-24&to=2026-08-24")).json())
+    .filter(e => e.member_email === "무팀@x.com").length, 1, "총관리자는 본다");
+  assert.equal((await (await api("t-noteam", "GET", "/events?from=2026-08-24&to=2026-08-24")).json())
+    .filter(e => e.member_email === "무팀@x.com").length, 1, "본인은 본다");
+
+  // 57-2) [상] 남의 명의로 우리 팀에 일정을 심지 못한다
+  assert.equal((await api("t-esl1", "POST", "/events",
+    { teamId: 1, memberEmail: "fc2@x.com", date: "2026-08-25", kind: "외근" })).status, 400);
+  assert.equal((await api("t-esl1", "POST", "/events",
+    { teamId: 1, memberEmail: "없는사람@x.com", date: "2026-08-25", kind: "외근" })).status, 404);
+
+  // 57-3) [중] 반복 횟수는 정수만 — 소수를 주면 한 건이 더 생겼다
+  const rep13 = await (await api("t-esl1", "POST", "/events",
+    { teamId: 1, date: "2026-11-02", kind: "지점일정", title: "정수확인", repeat: { every: "week", count: 12.9 } })).json();
+  assert.equal(rep13.count, 12);
+
+  // 57-4) [중] 마이가디언 일정은 지우지도 못한다 (수정만 막고 있었다)
+  assert.equal((await api("t-fc1", "POST", "/events/upsert",
+    { "출처": "myguardian", "출처키": "del-test", "일시": "2026-08-26T10:00", "고객코드": "C-2026-001" })).status, 200);
+  const mgEv = (await (await api("t-fc1", "GET", "/events?from=2026-08-26&to=2026-08-26")).json())
+    .find(e => e.source === "myguardian");
+  assert.ok(mgEv, "연동 일정이 들어갔다");
+  assert.equal((await api("t-fc1", "DELETE", "/events/" + mgEv.id)).status, 400);
+  // 57-5) [중] 연동 일정도 날짜를 검증한다
+  assert.equal((await api("t-fc1", "POST", "/events/upsert",
+    { "출처": "myguardian", "출처키": "bad-date", "일시": "not-a-date" })).status, 400);
 
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.

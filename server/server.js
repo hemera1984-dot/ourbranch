@@ -160,6 +160,19 @@ function canManageMember(user, targetEmail) {
   return canWriteTeam(user, t.team_id);
 }
 
+// 일정 열람 — 주인이 있는 일정에는 canSeeTeam을 그대로 쓰지 않는다.
+// canSeeTeam(_, null)은 「대상 없는 지점 공통」이라 전원 통과인데, 팀이 없는 사람의
+// 개인 일정까지 그 길로 새어 나갔다 (코덱스 검증 2026-08-05).
+function canSeeEvent(user, e) {
+  if (e.kind === "강의") return true;                           // 강의는 지점 전체 대상이다
+  if (!e.member_email) return canSeeTeam(user, e.team_id);      // 대상 없는 팀·지점 일정
+  if (e.member_email === user.email) return true;
+  if (user.recruits.includes(e.member_email)) return true;      // 내가 도입한 사람
+  const t = teamOfOwner(e.member_email);                        // 지금 그 사람의 팀
+  if (t == null) return user.isSuper || user.grade === "BM";    // 팀이 없으면 지점장 이상만
+  return canSeeTeam(user, t);
+}
+
 // 열람 가능한 team_id (지점 공통 = NULL은 전원 열람)
 function canSeeTeam(user, teamId) {
   if (teamId == null) return true;
@@ -607,7 +620,7 @@ route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
-    .filter(e => canSeeTeam(user, e.team_id) || (e.member_email && user.recruits.includes(e.member_email)))
+    .filter(e => canSeeEvent(user, e))
     .map(e => e.kind === "강의"
       ? { ...e, attendees: db.prepare("SELECT email, name FROM event_attendees WHERE event_id = ? ORDER BY created").all(e.id) }
       : e);
@@ -638,17 +651,30 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   if (memberEmail == null && !canSetGoal(user)) return send(res, 403, { error: "팀 일정은 부지점장 이상만" });
   if (memberEmail != null && memberEmail !== user.email && !canSetGoal(user))
     return send(res, 403, { error: "본인 일정만" });
+  // 대상은 지금 명단에 있는 사람이어야 하고, 그 사람의 팀으로 들어가야 한다.
+  // 안 보면 남의 팀 사람 명의로 우리 팀에 일정을 심을 수 있다 (코덱스 검증 2026-08-05).
+  if (memberEmail != null && memberEmail !== user.email) {
+    const tm = getMember(db, memberEmail);
+    if (!tm || tm.active === 0) return send(res, 404, { error: "명단에 없는 사람입니다" });
+    if (tm.team_id !== teamId) return send(res, 400, { error: "그 팀 사람이 아닙니다" });
+    if (!canWriteTeam(user, tm.team_id)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  }
   // 반복 — 규칙을 저장하지 않고 그 자리에서 날짜를 펼쳐 넣는다.
   // 수정·삭제가 한 건 단위로 단순해지고, 조회에 규칙 해석이 끼지 않는다.
   const rep = b.repeat || {};
   const stepDays = { day: 1, week: 7, "2week": 14 }[rep.every] || 0;
   const byMonth = rep.every === "month";            // 매월 같은 날짜 (교육·정기 회의)
-  const count = stepDays || byMonth ? Math.min(Math.max(Number(rep.count) || 1, 1), 52) : 1;
+  // 소수를 주면 루프가 한 번 더 돌아 13건이 된다 — 정수로 못박는다
+  const count = stepDays || byMonth
+    ? Math.min(Math.max(Math.floor(Number(rep.count)) || 1, 1), 52) : 1;
 
   const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
   const detail = b.detail ? JSON.stringify(b.detail).slice(0, 2000) : "";
   const base = new Date(b.date + "T00:00:00");
   const ids = [];
+  // 반복은 통째로 되거나 통째로 안 된다 — 중간에 멈추면 앞부분만 남고,
+  // 다시 누르면 그만큼 겹친다 (코덱스 검증 2026-08-05).
+  tx(() => {
   for (let i = 0; i < count; i++) {
     const d = byMonth
       // 31일에 매월을 걸면 2월은 3월로 넘어간다 — 말일로 당겨 그 달에 남긴다
@@ -659,6 +685,7 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
     ids.push(Number(ins.run(teamId, memberEmail, ds, b.start || null, b.end || null,
       b.kind || "기타", b.title || "", b.place || "", detail).lastInsertRowid));
   }
+  });
   send(res, 200, { id: ids[0], ids, count: ids.length });
 });
 
@@ -670,6 +697,8 @@ route("POST", /^\/events\/upsert$/, false, async (req, res, user) => {
     return send(res, 400, { error: "출처·출처키·일시가 필요합니다" });
   const iso = String(b["일시"]);
   const date = iso.slice(0, 10), start = iso.slice(11, 16) || null;
+  // 이 경로만 날짜 검증이 빠져 있었다 — 이상한 값이 들어가면 달력에서 조용히 사라진다
+  if (!isDate(date)) return send(res, 400, { error: "일시가 올바르지 않습니다: " + iso });
   const code = String(b["고객코드"] || "");
   const title = code + (b["차수"] ? " · " + b["차수"] + "차" : "");
   const status = ["예정", "완료", "취소"].includes(b["상태"]) ? b["상태"] : "예정";
@@ -725,6 +754,9 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
 
 route("DELETE", /^\/events\/(\d+)$/, false, (req, res, user, m) => {
   const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
+  // 마이가디언에서 넘어온 일정은 여기서 손대지 않는다 — 수정만 막고 삭제는 열려 있었다
+  if (e && e.source === "myguardian")
+    return send(res, 400, { error: "마이가디언 일정은 마이가디언에서 고칩니다" });
   if (!e) return send(res, 404, { error: "없음" });
   if (!canEditEvent(user, e)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM events WHERE id = ?").run(e.id);
@@ -1214,7 +1246,9 @@ route("POST", /^\/invites$/, false, async (req, res, user) => {
   // 초대에 심어 둔 직급은 승인 화면에 미리 채워져 뜬다(무심코 누르게 된다).
   let teamId = b.teamId !== undefined ? (b.teamId ?? null) : user.teamId;
   if (!user.isManager) teamId = user.teamId;
-  else if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
+  // 관리자든 아니든 최종 팀에 쓰기 권한이 있어야 한다.
+  // 관리자만 검사하면 팀 없는 구성원이 그냥 통과한다 (코덱스 검증 2026-08-05).
+  if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없는 팀입니다" });
   if (!canAssignRole(user, b.role))
     return send(res, 403, { error: "자기보다 높은 직급으로는 초대할 수 없습니다" });
   const code = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
