@@ -994,6 +994,24 @@ async function main() {
     "총관리자는 계속 본다");
   assert.equal((await api("t-esl1", "POST", "/trainings/" + trGone.id, { name: "가로채기" })).status, 403);
 
+  // 55) 일정 쓰기는 「부지점장 이상」 (2026-08-05 사용자)
+  // 관리자로 임명된 팀원은 조직도를 고칠 뿐 팀 일정에는 손대지 못한다.
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: true });
+  assert.equal((await api("t-fc1", "POST", "/events", { date: "2026-08-20", kind: "지점일정", title: "팀미팅" })).status, 403,
+    "팀 공유 일정은 부지점장 이상만");
+  const evTeam = await (await api("t-esl1", "POST", "/events", { date: "2026-08-20", kind: "지점일정", title: "팀미팅" })).json();
+  assert.ok(evTeam.id);
+  assert.equal((await api("t-fc1", "DELETE", "/events/" + evTeam.id)).status, 403, "지우는 것도 마찬가지");
+  // 남의 개인 일정도 부지점장 이상만
+  const evOther = await (await api("t-esl1", "POST", "/events", { date: "2026-08-20", memberEmail: "도입된@x.com", kind: "외근" })).json();
+  assert.equal((await api("t-fc1", "POST", "/events/" + evOther.id, { title: "가로채기" })).status, 403);
+  await api("t-super", "POST", "/admin/members", { email: "fc1@x.com", name: "팀원1", teamId: 1, isManager: false });
+  // 본인 것은 본인이 지운다 — 되돌리기는 화면이 같은 내용을 다시 넣는 방식이라 서버는 그대로다
+  const evMine = await (await api("t-fc1", "POST", "/events", { date: "2026-08-21", memberEmail: "fc1@x.com", kind: "외근", title: "내 일정" })).json();
+  assert.equal((await api("t-fc1", "DELETE", "/events/" + evMine.id)).status, 200);
+  const again = await (await api("t-fc1", "POST", "/events", { date: "2026-08-21", memberEmail: "fc1@x.com", kind: "외근", title: "내 일정" })).json();
+  assert.ok(again.id && again.id !== evMine.id, "되돌리기는 같은 내용을 새로 넣는다");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

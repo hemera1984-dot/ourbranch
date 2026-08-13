@@ -830,6 +830,31 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .slot:hover .slot-del { color: var(--ter); }
 .slot-del:hover { color: var(--red); }
+/* 되돌리기 띠 — 지운 직후 8초. 안 보이는 되돌리기는 없는 것과 같다 */
+.undo-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; z-index: 90;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 6px;
+  background: var(--navy); color: #fff; font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+.undo-bar .btn {
+  padding: 5px 12px; font-size: 13px;
+  background: transparent; border-color: rgba(255,255,255,.4); color: #fff;
+}
+.undo-bar .btn:hover { background: rgba(255,255,255,.12); border-color: #fff; color: #fff; }
+@media (max-width: 900px) { .undo-bar { left: 10px; right: 10px; bottom: 74px; transform: none; } }
+
+/* 고른 일정 — 이 상태에서 Del을 누르면 지워진다 */
+.slot.picked {
+  outline: 2px solid var(--blue); outline-offset: -1px; border-radius: 4px;
+  background: var(--blue-bg);
+}
+.slot.picked::after {
+  content: "Del 키로 삭제"; margin-left: 6px; font-size: 11px; color: var(--blue); font-weight: 600;
+}
+.slot:focus { outline: none; }
+@media (pointer: coarse) { .slot.picked::after { content: ""; } }
 @media (pointer: coarse) {
   .slot-del { color: var(--ter); padding: 8px 10px; }
   .quick-add .btn { padding: 9px 12px; font-size: 13px; }

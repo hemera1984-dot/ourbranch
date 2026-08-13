@@ -635,8 +635,8 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   if (!canWriteTeam(user, teamId) && !(b.kind === "강의" && teamId == null)) return send(res, 403, { error: "권한 없음" });
   // 팀 공유 일정(개인 지정 없음)은 관리자만, 개인 일정은 본인 것만 (관리자는 팀원 것도)
   const memberEmail = b.memberEmail ? b.memberEmail.toLowerCase() : null;
-  if (memberEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
-  if (memberEmail != null && memberEmail !== user.email && !user.isManager)
+  if (memberEmail == null && !canSetGoal(user)) return send(res, 403, { error: "팀 일정은 부지점장 이상만" });
+  if (memberEmail != null && memberEmail !== user.email && !canSetGoal(user))
     return send(res, 403, { error: "본인 일정만" });
   // 반복 — 규칙을 저장하지 않고 그 자리에서 날짜를 펼쳐 넣는다.
   // 수정·삭제가 한 건 단위로 단순해지고, 조회에 규칙 해석이 끼지 않는다.
@@ -689,10 +689,13 @@ route("POST", /^\/events\/upsert$/, false, async (req, res, user) => {
 // 일정 수정·삭제 권한: 본인 것이거나, 자기 팀 일정을 관리자가.
 // 지점 공통(team_id NULL, 강의 등)은 등록자 본인 또는 총관리자만 — 다른 팀 관리자가
 // 남의 강의를 지우는 일이 없도록.
+// 일정에 손대는 기준 — 본인 것은 본인, 남의 것과 팀 공유는 부지점장 이상
+// (2026-08-05 사용자: 「부지점장이나 총관리자만, 팀원은 본인이 넣은 것만」).
+// 관리자로 임명된 팀장·부팀장은 조직도를 고칠 뿐 남의 일정을 지우지 않는다.
 function canEditEvent(user, e) {
   if (e.member_email === user.email) return true;
   if (e.team_id == null) return user.isSuper;
-  return user.isManager && canWriteTeam(user, e.team_id);
+  return canSetGoal(user) && canWriteTeam(user, e.team_id);
 }
 
 route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
@@ -704,8 +707,8 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   // 바꾸려는 대상도 검사한다 — 안 그러면 팀원이 자기 일정을 팀 공유나 남의 일정으로 바꾼다
   const nextEmail = b.memberEmail !== undefined
     ? (b.memberEmail ? String(b.memberEmail).toLowerCase() : null) : e.member_email;
-  if (nextEmail !== e.member_email && !user.isManager) return send(res, 403, { error: "대상 변경은 관리자만" });
-  if (nextEmail == null && !user.isManager) return send(res, 403, { error: "팀 일정은 관리자만" });
+  if (nextEmail !== e.member_email && !canSetGoal(user)) return send(res, 403, { error: "대상 변경은 부지점장 이상만" });
+  if (nextEmail == null && !canSetGoal(user)) return send(res, 403, { error: "팀 일정은 부지점장 이상만" });
   // 남의 달력에 심지 못하게 — 대상은 내가 쓸 수 있는 팀 소속이어야 한다
   if (nextEmail && nextEmail !== user.email) {
     const t = getMember(db, nextEmail);

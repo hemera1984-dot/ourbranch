@@ -83,6 +83,8 @@
     <button type="button" id="tab-more"><span>더보기</span></button>
   </nav>
 
+  <div id="undo-bar" class="undo-bar" hidden></div>
+
   <button type="button" id="side-handle" class="edge-handle desktop-only" title="메뉴 접기">◀</button>
 
   <main class="main">
@@ -2151,15 +2153,81 @@
   }
 
   var evsById = {};
+  // 고른 일정 한 건 — Del로 지운다 (2026-08-05 사용자)
+  var pickedSlot = null, pickedRefresh = null;
+  function clearPick() {
+    document.querySelectorAll(".slot.picked").forEach(function (x) { x.classList.remove("picked"); });
+    pickedSlot = null;
+  }
+  function pickSlot(slot, refresh) {
+    clearPick();
+    slot.classList.add("picked");
+    slot.focus({ preventScroll: true });
+    pickedSlot = slot;
+    pickedRefresh = refresh || loadCal;
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!pickedSlot || !document.body.contains(pickedSlot)) return;
+    if (e.key === "Escape") { clearPick(); return; }
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    // 글자를 치는 중이면 건드리지 않는다
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    e.preventDefault();
+    var ev = evsById[pickedSlot.dataset.eid];
+    if (!ev) { clearPick(); return; }
+    // Del 키로는 내 일정만 지운다 — 키 한 번에 팀 일정이 날아가면 안 된다
+    // (2026-08-05 사용자). 남의 것·팀 공유는 줄의 × 로만.
+    if (ev.member_email !== BOOT.me.email) {
+      alert("Del 키로는 내 일정만 지울 수 있습니다. 팀 일정은 줄 오른쪽 × 를 눌러 주세요.");
+      return;
+    }
+    removeEvent(ev, pickedRefresh);
+  });
+
+  // 지우기 — 물어보지 않고 지우되 되돌릴 수 있게 한다.
+  // 「정말 지울까요?」는 매번 손이 한 번 더 가는데 실수는 그대로 난다.
+  function removeEvent(ev, refresh) {
+    var back = {
+      memberEmail: ev.member_email || null, date: ev.date, kind: ev.kind,
+      start: ev.start || "", end: ev.end || "", title: ev.title || "", place: ev.place || "",
+      detail: (function () { try { return ev.detail ? JSON.parse(ev.detail) : undefined; } catch (err) { return undefined; } })()
+    };
+    clearPick();
+    api("/events/" + ev.id, { method: "DELETE" }).then(function () {
+      refresh();
+      showUndo((ev.title || ev.kind) + " 일정을 지웠습니다", function () {
+        api("/events", { method: "POST", body: back }).then(refresh);
+      });
+    });
+  }
+
+  // 되돌리기 띠 — 화면 아래에 잠깐 머문다. 안 보이는 되돌리기는 없는 것과 같다.
+  var undoTimer = null;
+  function showUndo(text, onUndo) {
+    var bar = $("undo-bar");
+    bar.innerHTML = "<span>" + esc(text) + "</span>"
+      + '<button type="button" class="btn" id="undo-go">되돌리기</button>';
+    bar.hidden = false;
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(function () { bar.hidden = true; }, 8000);
+    bar.querySelector("#undo-go").onclick = function () {
+      bar.hidden = true;
+      if (undoTimer) clearTimeout(undoTimer);
+      onUndo();
+    };
+  }
+
   function canWriteCell(em) {
-    // 빈 em = 팀 공유(관리자만). 본인 칸은 본인, 남의 칸은 관리자.
-    return em ? (em === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager;
+    // 빈 em = 팀 공유. 본인 칸은 본인, 남의 칸과 팀 공유는 부지점장 이상
+    // (2026-08-05 사용자). 서버도 같은 선으로 막는다.
+    return em ? (em === BOOT.me.email || BOOT.me.canSetGoal) : BOOT.me.canSetGoal;
   }
   function slotHtml(e) {
     var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
     // 고객미팅(마이가디언 연동)은 여기서 수정하지 않는다 — 코드 표기 + 고객 상세 딥링크만
     var fromMg = e.source === "myguardian";
-    var editable = !fromMg && (e.member_email ? (e.member_email === BOOT.me.email || BOOT.me.isManager) : BOOT.me.isManager);
+    var editable = !fromMg && canWriteCell(e.member_email || "");
     var title = e.title
       ? (fromMg && e.customer_code
         ? '<a class="slot-title" target="_blank" href="https://app.insurguard.life/web/customers/?code=' + encodeURIComponent(e.customer_code) + '">' + esc(e.title) + "</a>"
@@ -2181,7 +2249,8 @@
         + (isOwner && att.length ? " (" + esc(att.map(function (a) { return a.name; }).join(", ")) + ")" : "") + "</span>"
         + (!isOwner ? '<button class="btn att-btn' + (meIn ? "" : " primary") + '" data-eid="' + e.id + '" style="padding:1px 8px;font-size:12px">' + (meIn ? "신청 취소" : "신청") + "</button>" : "");
     }
-    return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '">'
+    return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '"'
+      + (editable ? ' tabindex="0"' : "") + ">"
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
       + '<span class="chip ' + kindCls + '">' + esc(e.kind) + (e.status === "완료" ? " 완료" : "") + "</span>"
       + title
@@ -2228,9 +2297,7 @@
     if (rm) {
       e.stopPropagation();
       var ev0 = evsById[rm.dataset.eid];
-      if (!ev0) return;
-      if (!confirm("「" + (ev0.title || ev0.kind) + "」 일정을 지울까요?")) return;
-      api("/events/" + rm.dataset.eid, { method: "DELETE" }).then(refresh);
+      if (ev0) removeEvent(ev0, refresh);
       return;
     }
     var att = e.target.closest(".att-btn");
@@ -2243,6 +2310,9 @@
     if (!ev || ev.source === "myguardian") return;
     var em = ev.member_email || "";
     if (!canWriteCell(em)) return;
+    // 첫 클릭은 고르기만 한다 — 그 상태에서 Del을 누르면 지워진다.
+    // 한 번 더 누르면 수정 창이 열린다 (달력 칸과 같은 규칙).
+    if (!slot.classList.contains("picked")) { pickSlot(slot, refresh); return; }
     openPop(anchor, { id: ev.id, em: em, date: ev.date, kind: ev.kind, start: ev.start, end: ev.end, title: ev.title, place: ev.place, onDone: refresh });
   }
   function renderWeekView(evs, days) {
