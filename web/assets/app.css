@@ -307,31 +307,27 @@ a.slot-title:hover { text-decoration: underline; }
 .cal-cell.pad:hover { background: var(--canvas); }
 .cal-cell.today .cal-daynum { color: #fff; background: var(--blue); }
 .cal-cell.sel { box-shadow: inset 0 0 0 2px var(--blue); background: var(--surface); }
-/* 펴진 칸은 칸 자체가 커진다 — 이웃 위로 떠오르되 달력 배치는 흔들지 않는다
-   (2026-08-05 사용자: 「그 칸 자체가 확대 및 커져야해」). */
+/* 펴진 칸은 상자만 커진다 — 글자는 그대로다.
+   확대(scale)로 키우면 글자도 같이 커져서 정작 들어갈 일정이 줄어든다
+   (2026-08-05 사용자: 「팀원 여러명이 본인 일정 올릴텐데 안될걸」). */
 .cal-cell.open {
   position: relative; z-index: 20;
-  transform: scale(1.35);
-  transform-origin: center center;
+  width: 210%; min-height: 320px;
   background: var(--surface); border-radius: 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, .24), inset 0 0 0 2px var(--blue);
-  transition: transform .16s ease;
 }
-/* 양끝 열은 바깥으로 넘치지 않게 안쪽을 기준으로 커진다
+/* 토·일은 오른쪽으로 뻗을 자리가 없다 — 왼쪽으로 자란다
    (앞 7칸은 요일 머리라 8번째부터가 월요일이다) */
-.cal-grid > .cal-cell.open:nth-child(7n + 1) { transform-origin: left center; }
-.cal-grid > .cal-cell.open:nth-child(7n) { transform-origin: right center; }
-@media (prefers-reduced-motion: reduce) { .cal-cell.open { transition: none; } }
+.cal-grid > .cal-cell.open:nth-child(7n + 6),
+.cal-grid > .cal-cell.open:nth-child(7n) { margin-left: -110%; }
 /* 고른 날은 그 자리에서 펴진다 — 줄임표 없이 전부, 줄바꿈 허용.
    칸이 커지면 그 주 줄만 함께 커진다(모달이 화면을 덮지 않는다). */
 .cal-cell.sel .cal-ev {
   white-space: normal; align-items: flex-start; overflow: visible;
-  /* 고른 칸은 글자도 한 단 키운다 — 「펴졌다」가 눈에 보여야 한다
-     (2026-08-05 사용자: 일정이 두어 건이면 칸이 안 커져서 티가 안 났다) */
-  font-size: 14.5px; padding: 2px 0; line-height: 1.5;
+  /* 글자는 키우지 않는다 — 상자가 커지는 것으로 충분하고,
+     글자를 키우면 그만큼 일정이 덜 들어간다 */
+  padding: 2px 0; line-height: 1.5;
 }
-.cal-cell.sel .cal-ev .slot-time { font-size: 13px; color: var(--sub); }
-.cal-cell.sel .cal-daynum { font-size: 13px; }
 /* 시간은 왼쪽 붙박이, 제목만 접힌다 — 시간이 아래로 떨어지면 훑기가 어렵다 */
 .cal-cell.sel .cal-ev .slot-time { flex: none; }
 .cal-cell.sel .cal-ev > span:last-child { overflow: visible; text-overflow: clip; }
