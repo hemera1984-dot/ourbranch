@@ -2188,6 +2188,7 @@
       + line2
       + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "")
       + lecture
+      + (editable ? '<button type="button" class="slot-del" data-eid="' + e.id + '" title="지우기">×</button>' : "")
       + "</div>";
   }
 
@@ -2223,6 +2224,15 @@
 
   // 목록 컨테이너 공통 클릭: 강의 신청 → 일정 수정 순으로 판정
   function dayListClick(e, refresh) {
+    var rm = e.target.closest(".slot-del");
+    if (rm) {
+      e.stopPropagation();
+      var ev0 = evsById[rm.dataset.eid];
+      if (!ev0) return;
+      if (!confirm("「" + (ev0.title || ev0.kind) + "」 일정을 지울까요?")) return;
+      api("/events/" + rm.dataset.eid, { method: "DELETE" }).then(refresh);
+      return;
+    }
     var att = e.target.closest(".att-btn");
     if (att) { api("/events/" + att.dataset.eid + "/attend", { method: "POST" }).then(refresh); return; }
     var slot = e.target.closest(".slot");
@@ -2754,12 +2764,39 @@
     h.push("</div>");
     $(targetId).innerHTML = h.join("");
   }
+  // 늘 있는 팀 공적 일정 — 한 번 누르면 그 날짜에 바로 들어간다
+  var QUICK = ["팀미팅", "지점조회", "지점행사"];
+  function quickAddHtml() {
+    if (!BOOT.me.isManager) return "";      // 팀 공유 일정은 관리자만
+    return '<div class="quick-add"><span class="note">빠른 추가</span>'
+      + '<input type="time" class="input" id="q-start" value="' + esc(recall("빠른시작") || "07:30") + '">'
+      + '<input type="time" class="input" id="q-end" value="' + esc(recall("빠른끝") || "08:00") + '">'
+      + QUICK.map(function (k) {
+          return '<button type="button" class="btn q-add" data-k="' + esc(k) + '">' + esc(k) + "</button>";
+        }).join("")
+      // 팀미팅은 매주 같은 요일에 선다 — 한 번 눌러 12주치를 넣는다
+      + '<label class="q-week"><input type="checkbox" id="q-week"'
+      + (recall("빠른매주") === "1" ? " checked" : "") + '> 매주 12주</label></div>';
+  }
+  function quickAdd(text) {
+    var st = $("q-start").value, en = $("q-end").value;
+    var wk = $("q-week").checked;
+    remember("빠른시작", st); remember("빠른끝", en); remember("빠른매주", wk ? "1" : "0");
+    var det = { "종류": text };
+    api("/events", { method: "POST", body: {
+      memberEmail: null, date: selDate, kind: "지점일정",
+      start: st, end: en, title: composeTitle("지점일정", det), detail: det,
+      repeat: wk ? { every: "week", count: 12 } : undefined
+    } }).then(loadCal);
+  }
+
   function renderCalDay() {
     var d = new Date(selDate + "T00:00:00");
     var items = calEvs.filter(function (e) { return e.date === selDate && scopePass(e); });
     $("cal-day").innerHTML = '<div class="cal-day-head"><strong>'
       + (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()] + "</strong>"
       + '<button class="btn primary" id="cal-day-add">일정 추가</button></div>'
+      + quickAddHtml()
       + daySplitHtml(items, myTeamId());
   }
   $("cal-view").addEventListener("click", function (e) {
@@ -2774,6 +2811,8 @@
     renderCalDay();
   });
   $("cal-day").addEventListener("click", function (e) {
+    var q = e.target.closest(".q-add");
+    if (q) { quickAdd(q.dataset.k); return; }
     if (e.target.id === "cal-day-add") {
       openPop(e.target, { em: BOOT.me.email, date: selDate, pickMember: true, onDone: loadCal });
       return;

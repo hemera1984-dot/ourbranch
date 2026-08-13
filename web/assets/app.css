@@ -814,6 +814,28 @@ a.slot-title:hover { text-decoration: underline; }
 /* 오른쪽 목록의 두 갈래 —
    머리(.cal-day-head)는 14px 안쪽인데 여기엔 여백이 없어 글자가 카드 모서리에 붙어
    잘려 보였다. 같은 14px로 맞춘다 (2026-08-05 사용자). */
+/* 빠른 추가 — 늘 있는 팀 일정은 한 번 누르기로 들어간다 */
+.quick-add {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--canvas);
+}
+.quick-add .note { font-size: 12px; color: var(--ter); font-weight: 600; }
+.quick-add .input { padding: 4px 6px; font-size: 12px; }
+.quick-add .btn { padding: 4px 10px; font-size: 12px; }
+.q-week { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--sub); cursor: pointer; }
+/* 상세 줄의 지우기 — 평소엔 흐리게, 줄에 손을 올리면 뚜렷하게 */
+.slot-del {
+  margin-left: auto; border: 0; background: none; padding: 2px 4px;
+  color: var(--line-input); font-size: 14px; cursor: pointer;
+}
+.slot:hover .slot-del { color: var(--ter); }
+.slot-del:hover { color: var(--red); }
+@media (pointer: coarse) {
+  .slot-del { color: var(--ter); padding: 8px 10px; }
+  .quick-add .btn { padding: 9px 12px; font-size: 13px; }
+  .quick-add .input { padding: 8px; font-size: 13px; }
+}
+
 .day-band { padding: 12px 14px; }
 .day-band + .day-band { padding-top: 10px; }
 .day-band-label {
