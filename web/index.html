@@ -2384,11 +2384,12 @@
     var isNew = o.id == null;
     var refresh = o.onDone || loadWeek;
     var who = o.em ? (nameOf(o.em) || o.em) : "팀 공유";
-    // 모바일 추가 버튼에서 열면 대상 선택을 준다 (관리자는 팀원 대신 입력·팀 공유 가능)
+    // 모바일 추가 버튼에서 열면 대상 선택을 준다.
+    // 팀 공유(지점 일정)와 팀원 대신 입력은 부지점장 이상만 (2026-08-05 사용자).
     var memberSel = "";
     if (o.pickMember) {
       var opts = ['<option value="' + esc(BOOT.me.email) + '">' + esc(BOOT.me.name) + " (나)</option>"];
-      if (BOOT.me.isManager) {
+      if (BOOT.me.canSetGoal) {
         opts.push('<option value="">팀 공유</option>');
         rosterOf(myTeamId()).forEach(function (m) {
           if (m.email !== BOOT.me.email) opts.push('<option value="' + esc(m.email) + '">' + esc(m.name) + "</option>");
@@ -2837,7 +2838,7 @@
   // 늘 있는 팀 공적 일정 — 한 번 누르면 그 날짜에 바로 들어간다
   var QUICK = ["팀미팅", "지점조회", "지점행사"];
   function quickAddHtml() {
-    if (!BOOT.me.isManager) return "";      // 팀 공유 일정은 관리자만
+    if (!BOOT.me.canSetGoal) return "";     // 지점 일정은 부지점장 이상만
     return '<div class="quick-add"><span class="note">빠른 추가</span>'
       + '<input type="time" class="input" id="q-start" value="' + esc(recall("빠른시작") || "07:30") + '">'
       + '<input type="time" class="input" id="q-end" value="' + esc(recall("빠른끝") || "08:00") + '">'
@@ -2901,7 +2902,7 @@
     var from = fmtDate(prev).slice(0, 7);
     // 기본은 안전한 쪽(팀 공유만). 전부 가져오려면 한 번 더 명시적으로 동의받는다
     var onlyTeam = true;
-    if (BOOT.me.isManager) {
+    if (BOOT.me.canSetGoal) {
       onlyTeam = !confirm("팀원 개인 일정까지 전부 가져올까요?\n\n확인 = 팀원 개인 일정까지 전부\n취소 = 팀 공유 일정만 (권장)");
     }
     api("/events/copy-month", { method: "POST", body: { from: from, to: to, teamId: myTeamId(), onlyTeam: onlyTeam } })
