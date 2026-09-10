@@ -549,6 +549,16 @@ a.slot-title:hover { text-decoration: underline; }
   transition: background .14s;
 }
 .oc-add:hover { background: var(--blue-bg); }
+/* 표 아래 「+ 줄 추가」 — 표가 길어져도 손이 있는 자리에서 넣는다 */
+.row-add {
+  display: block; width: 100%; margin-top: -1px;
+  padding: 10px; border: 1px dashed var(--line-input); border-radius: 0 0 6px 6px;
+  background: var(--surface); color: var(--blue);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .14s;
+}
+.row-add:hover { background: var(--blue-bg); }
+@media (pointer: coarse) { .row-add { padding: 14px; font-size: 14px; } }
 .oc-chip.oc-add-direct { color: var(--blue); border-style: dashed; cursor: pointer; }
 
 /* 사이드바 그룹 라벨 */

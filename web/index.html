@@ -429,12 +429,12 @@
           <h2>이번 달 기록</h2>
           <div class="toolbar">
             <span class="save-state" id="ta-state"></span>
-            <button class="btn" id="ta-add">줄 추가</button>
             <button class="btn" id="ta-flagged">주의 명단</button>
           </div>
         </div>
         <div id="ta-flag-box" class="card card-pad" hidden style="margin-bottom:12px"></div>
         <div id="ta-grid" class="card"></div>
+        <button type="button" class="row-add" id="ta-add">+ 줄 추가</button>
       </div>
       <div class="toolbar" id="ta-admin" hidden style="margin-top:12px">
         <button class="btn" id="ta-pw-set">공용 비밀번호 변경</button>
@@ -3917,7 +3917,14 @@
           : '<p class="empty">아직 표시된 사람이 없습니다.</p>');
     });
   });
-  $("ta-add").addEventListener("click", function () { if (taGrid) taGrid.addRow(); });
+  // 새 줄은 표 아래에서 넣는다. 넣은 줄이 화면 밖이면 끌어와 준다 —
+  // 눌렀는데 아무 일도 안 일어난 것처럼 보이면 안 된다 (2026-09-10 사용자).
+  $("ta-add").addEventListener("click", function () {
+    if (!taGrid) return;
+    taGrid.addRow();
+    var td = document.activeElement;
+    if (td && td.scrollIntoView) td.scrollIntoView({ block: "center" });
+  });
   // ── 지점 전체가 한 장을 같이 쓴다 ──
   // 남이 저장하면 내 화면에도 바로 떠야 한다. 무거운 목록을 계속 받지 않고
   // 「바뀜 표식」만 5초마다 확인하고, 달라졌을 때만 목록을 받아 갈아끼운다.
