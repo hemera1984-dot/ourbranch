@@ -629,7 +629,7 @@ a.slot-title:hover { text-decoration: underline; }
 .grid tr.warn td { background: var(--red-bg); }
 .grid tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--red); }
 
-/* 도입 깔때기 — 막대 길이로 어디서 끊기는지 한눈에 */
+/* 도입 단계별 인원 — 막대 길이로 어디서 끊기는지 한눈에 */
 .funnel { display: flex; flex-direction: column; gap: 8px; }
 .fn-row { display: flex; align-items: center; gap: 10px; }
 .fn-k { font-size: 13px; font-weight: 700; min-width: 34px; }
