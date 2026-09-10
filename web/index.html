@@ -407,7 +407,8 @@
     <section id="screen-ta" hidden>
       <p class="eyebrow">도입 활동</p>
       <h1>TA 일지</h1>
-      <p class="page-desc">한 줄이 통화 한 건입니다. 엑셀에서 범위를 복사해 그대로 붙여넣을 수 있습니다. 마지막 줄에서 Enter를 누르면 새 줄이 생깁니다.
+      <p class="page-desc">한 줄이 통화 한 건입니다. <strong>칸을 벗어나면 그 자리에서 저장되고, 지점 전체 화면에 곧바로 반영됩니다.</strong>
+        엑셀에서 범위를 복사해 그대로 붙여넣을 수 있습니다. 마지막 줄에서 Enter를 누르면 새 줄이 생깁니다.
         <strong>지점 전체가 함께 봅니다</strong> — 걸러야 할 상대는 「주의」 칸에 표시해 주세요. 수정·삭제는 쓴 사람만 할 수 있습니다.
         후보자 실명·연락처가 들어가는 화면이라 6개월이 지난 기록은 자동으로 지워집니다.</p>
 
@@ -427,8 +428,8 @@
         <div class="section-head">
           <h2>이번 달 기록</h2>
           <div class="toolbar">
+            <span class="save-state" id="ta-state"></span>
             <button class="btn" id="ta-add">줄 추가</button>
-            <button class="btn primary" id="ta-save">저장</button>
             <button class="btn" id="ta-flagged">주의 명단</button>
           </div>
         </div>
@@ -944,7 +945,7 @@
     if (name === "sched") { if (isMobile()) loadDay(); else setSchedView(schedView); }
     if (name === "att") loadAtt();
     if (name === "board") loadBoard();
-    if (name === "ta") loadTa();
+    if (name === "ta") loadTa(); else taWatchStop();
     if (name === "perf") loadPerf();
     if (name === "recruit") loadRecruit();
     if (name === "docs") loadDocs();
@@ -3728,9 +3729,45 @@
       if (!lk.enabled && lk.canSetPassword)
         $("ta-lock-msg").textContent = "";
       loadTaRows();
+      taWatchStart();
       // 비밀번호가 아직 없다 — 잠글 사람에게만 알린다
       if (!lk.enabled && lk.canSetPassword)
         $("ta-pw-set").textContent = "공용 비밀번호 설정 (아직 없음)";
+    });
+  }
+
+  // 저장 상태 한 줄 — 「저장」 버튼을 없앤 대신 무슨 일이 일어났는지 보여준다
+  var taSaveTimer = null;
+  function taState(text, cls) {
+    var el = $("ta-state");
+    if (!el) return;
+    el.textContent = text;
+    el.className = "save-state" + (cls ? " " + cls : "");
+    if (taSaveTimer) clearTimeout(taSaveTimer);
+    if (cls !== "bad") taSaveTimer = setTimeout(function () { el.textContent = ""; }, 4000);
+  }
+
+  // 줄 하나가 채워질 때마다 서버로 넘긴다. 새 줄은 「쓸 내용이 생겼을 때」만 —
+  // 날짜만 자동으로 찬 빈 줄까지 저장하면 표가 빈 줄로 덮인다.
+  function taRowReady(r) {
+    return r.date && (r.cand_name || r.result || r.real_phone || r.safe_phone || r.note);
+  }
+  function taCommitRow(r) {
+    if (!taGrid) return;
+    if (r._id == null && !taRowReady(r)) return;
+    taState("저장 중…");
+    var req = r._id == null
+      ? api("/ta", { method: "POST", body: { teamId: myTeamId(), rows: [r] } })
+          .then(function (out) { taGrid.markRowSaved(r, out.ids && out.ids[0]); })
+      : api("/ta/" + r._id, { method: "POST", body: r })
+          .then(function () { taGrid.markRowSaved(r, r._id); });
+    req.then(function () {
+      taState("저장됨", "ok");
+      taVersion = null;              // 내 저장으로 바뀐 것은 남의 변경으로 세지 않는다
+      taCheckSoon();
+    }).catch(function (e) {
+      // 실패하면 화면을 되돌리지 않는다 — 방금 친 내용이 사라지면 다시 칠 방법이 없다
+      taState("저장 실패 — " + (e && e.message ? e.message : "다시 시도해 주세요"), "bad");
     });
   }
 
@@ -3751,7 +3788,12 @@
           return r.author_email ? r.author_email === BOOT.me.email : r.author === BOOT.me.name;
         },
         rowClass: function (r) { return r.flag ? "warn" : ""; },
-        onDeleteRow: function (r, done) { api("/ta/" + r._id, { method: "DELETE" }).then(done); }
+        onRowCommit: taCommitRow,
+        onDeleteRow: function (r, done) {
+          api("/ta/" + r._id, { method: "DELETE" }).then(done).then(function () {
+            taState("지웠습니다", "ok"); taVersion = null; taCheckSoon();
+          });
+        }
       });
       if (!rows.length) taGrid.addRow();
     });
@@ -3827,28 +3869,45 @@
     });
   });
   $("ta-add").addEventListener("click", function () { if (taGrid) taGrid.addRow(); });
-  $("ta-save").addEventListener("click", function () {
+  // ── 지점 전체가 한 장을 같이 쓴다 ──
+  // 남이 저장하면 내 화면에도 바로 떠야 한다. 무거운 목록을 계속 받지 않고
+  // 「바뀜 표식」만 5초마다 확인하고, 달라졌을 때만 목록을 받아 갈아끼운다.
+  var taVersion = null, taPoll = null, taPending = false;
+
+  function taApplyRows(rows) {
     if (!taGrid) return;
-    taGrid.commitActive();
-    if (!taGrid.hasChanges()) return;
-    var teamId = myTeamId();
-    // 날짜만 자동으로 찬 빈 줄은 저장하지 않는다
-    var news = taGrid.newRows().filter(function (r) {
-      return r.date && (r.cand_name || r.result || r.real_phone || r.safe_phone || r.note);
-    });
-    var edits = taGrid.dirtyRows();
-    var jobs = [];
-    // 새 줄은 한 요청으로 묶여 서버에서 전부 되거나 전부 안 된다.
-    // 수정은 줄마다 따로 가므로 성공한 줄만 저장 표시한다.
-    if (news.length) news.forEach(function (r, i) {
-      if (i === 0) jobs.push({ r: r, p: api("/ta", { method: "POST", body: { teamId: teamId, rows: news } }) });
-      else jobs.push({ r: r, p: jobs[0].p });
-    });
-    edits.forEach(function (r) { jobs.push({ r: r, p: api("/ta/" + r._id, { method: "POST", body: r }) }); });
-    if (!jobs.length) return;
-    // 실패하면 화면을 다시 그리지 않는다 — 방금 친 내용이 눈앞에서 사라지면
-    // 다시 칠 방법이 없다. 입력은 그대로 두고 무엇이 잘못됐는지만 알린다.
-    saveEach(taGrid, jobs, function () { taGrid.markSaved(); loadTaRows(); });
+    // 내가 칸에 손을 대고 있으면 미룬다 — 치는 도중에 표가 다시 그려지면 손이 튄다
+    if (taGrid.isEditing()) { taPending = true; return; }
+    taPending = false;
+    rows = rows.map(function (r) { r._id = r.id; return r; });
+    renderTaStats(rows);
+    taGrid.mergeRows(rows);
+  }
+
+  function taCheck() {
+    if (screen !== "ta" || document.hidden || !taGrid) return;
+    api("/ta/version?month=" + month).then(function (out) {
+      if (taVersion === out.v) { if (taPending) taPullRows(); return; }
+      taVersion = out.v;
+      taPullRows();
+    }).catch(function () { /* 잠깐 끊긴 것은 다음 차례에 다시 본다 */ });
+  }
+  function taPullRows() {
+    api("/ta?month=" + month).then(taApplyRows).catch(function () {});
+  }
+  function taCheckSoon() { setTimeout(taCheck, 300); }
+
+  function taWatchStart() {
+    taWatchStop();
+    taPoll = setInterval(taCheck, 5000);
+  }
+  function taWatchStop() { if (taPoll) { clearInterval(taPoll); taPoll = null; } }
+  // 화면을 다시 보면 곧바로 맞춘다 — 5초를 기다리게 하지 않는다
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) taCheck(); });
+  // 칸에서 손을 떼면 미뤄둔 갱신을 넣는다
+  document.addEventListener("focusout", function (e) {
+    if (screen !== "ta" || !taPending) return;
+    setTimeout(function () { if (taGrid && !taGrid.isEditing()) taPullRows(); }, 150);
   });
 
   // ── 업적현황 ──

@@ -265,6 +265,8 @@ export function openDb(file) {
     "ALTER TABLE attendance ADD COLUMN note TEXT NOT NULL DEFAULT ''",
     // 동명이인 구분 — 소유자를 이메일로 못박는다
     "ALTER TABLE ta_logs ADD COLUMN author_email TEXT",
+    // 실시간 반영 — 남이 고친 것을 내 화면이 알아채려면 「언제 바뀌었나」가 있어야 한다
+    "ALTER TABLE ta_logs ADD COLUMN updated TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE perf ADD COLUMN member_email TEXT",
     "ALTER TABLE perf_goals ADD COLUMN member_email TEXT",
     // 목표 건수 — CANP와 따로 센다 (2026-08-05 사용자)

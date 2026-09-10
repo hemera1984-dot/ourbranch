@@ -895,6 +895,19 @@ route("DELETE", /^\/notices\/(\d+)$/, true, (req, res, user, m) => {
 // 엑셀형 그리드 전제: 조회는 월 단위 한 방, 저장은 여러 줄 한 방(붙여넣기 대응).
 const TA_FIELDS = ["date", "cand_name", "gender", "age", "region", "safe_phone", "real_phone", "result", "reject_sms", "cis_sms", "note", "flag", "stage"];
 
+// 일지가 바뀐 표식. 지점 전체가 한 장을 같이 쓰므로, 내 화면이 남의 저장을
+// 알아채야 한다. 무거운 목록을 계속 받지 않고 이 표식만 5초마다 확인한다.
+route("GET", /^\/ta\/version$/, false, (req, res, user) => {
+  if (!taUnlocked(user)) return send(res, 403, { error: "TA 일지 비밀번호를 입력해 주세요", taLocked: true });
+  const q = new URL(req.url, "http://x").searchParams;
+  const month = /^\d{4}-\d{2}$/.test(q.get("month") || "") ? q.get("month") : today().slice(0, 7);
+  const r = db.prepare(
+    `SELECT COUNT(*) n, IFNULL(MAX(id),0) mx, IFNULL(MAX(updated),'') up
+     FROM ta_logs WHERE date >= ? AND date <= ?`
+  ).get(month + "-00", month + "-99");
+  send(res, 200, { v: r.n + ":" + r.mx + ":" + r.up });
+});
+
 // 도입 단계 — 순서가 곧 깔때기다. 빈 값은 「통화」로 본다(일지를 쓴 것 자체가 통화다).
 const STAGES = ["통화", "면접", "위촉", "거절"];
 
@@ -1050,8 +1063,9 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !Array.isArray(b.rows)) return send(res, 400, { error: "팀·행이 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, author_email, ${TA_FIELDS.join(", ")})
-    VALUES (?, ?, ?${", ?".repeat(TA_FIELDS.length)})`);
+  const ins = db.prepare(`INSERT INTO ta_logs (team_id, author, author_email, updated, ${TA_FIELDS.join(", ")})
+    VALUES (?, ?, ?, ?${", ?".repeat(TA_FIELDS.length)})`);
+  const stamp = now();
   // 형식 검사는 한 줄이라도 틀리면 아예 시작하지 않는다 — 절반만 저장되는 일이 없게
   for (const r of b.rows) {
     if (r.date && !isDate(r.date))
@@ -1072,7 +1086,7 @@ route("POST", /^\/ta$/, false, async (req, res, user) => {
     }
     if (!authorEmail) authorEmail = r.author === user.name ? user.email : null;
     if (!user.isManager && authorEmail !== user.email) throw new Error("본인 일지만 입력할 수 있습니다");
-    ids.push(Number(ins.run(teamId, author, authorEmail, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
+    ids.push(Number(ins.run(teamId, author, authorEmail, stamp, ...TA_FIELDS.map(f => String(r[f] ?? ""))).lastInsertRowid));
   }
   });
   } catch (e) { return send(res, 403, { error: e.message || "저장하지 못했습니다" }); }
@@ -1097,8 +1111,8 @@ route("POST", /^\/ta\/(\d+)$/, false, async (req, res, user, m) => {
     if (em) db.prepare("UPDATE ta_logs SET author_email = ? WHERE id = ?").run(em, row.id);
   }
   if (!sets.length) return send(res, 400, { error: "고칠 값이 없습니다" });
-  db.prepare(`UPDATE ta_logs SET ${sets.map(f => f + " = ?").join(", ")} WHERE id = ?`)
-    .run(...sets.map(f => String(b[f])), row.id);
+  db.prepare(`UPDATE ta_logs SET ${sets.map(f => f + " = ?").join(", ")}, updated = ? WHERE id = ?`)
+    .run(...sets.map(f => String(b[f])), now(), row.id);
   send(res, 200, { ok: true });
 });
 
@@ -1109,6 +1123,9 @@ route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
   if (!isOwner(user, row.author_email, row.author) && !(user.isManager && canWriteTeam(user, row.team_id)))
     return send(res, 403, { error: "본인 기록만" });
   db.prepare("DELETE FROM ta_logs WHERE id = ?").run(row.id);
+  // 지운 것도 남의 화면에 알려야 한다. 남은 줄 하나에 표식을 새로 찍어
+  // 버전 문자열이 바뀌게 한다 (줄이 하나도 없으면 개수가 이미 달라진다).
+  db.prepare("UPDATE ta_logs SET updated = ? WHERE id = (SELECT MAX(id) FROM ta_logs)").run(now());
   send(res, 200, { ok: true });
 });
 

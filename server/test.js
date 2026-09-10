@@ -303,9 +303,11 @@ async function main() {
   assert.equal(p9.premium, 1000000); assert.equal(p9.canp, 1200);
 
   // 12-10) TA 월 조회에 와일드카드가 통하지 않는다
+  // 「이번 달」은 실제 오늘 기준이다 — 8월로 못박으면 달이 바뀔 때 테스트가 깨진다
+  const nowMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const wild = await (await api("t-fc1", "GET", "/ta?month=%25")).json();
-  const aug = await (await api("t-fc1", "GET", "/ta?month=2026-08")).json();
-  assert.equal(wild.length, aug.length);   // %는 무시되고 이번 달 기본값으로 처리
+  const cur = await (await api("t-fc1", "GET", "/ta?month=" + nowMonth)).json();
+  assert.equal(wild.length, cur.length);   // %는 무시되고 이번 달 기본값으로 처리
 
   // 13) 초대 → 가입 신청 → 승인
   // 13-1) 명단 미등록 계정은 자료를 못 보고 가입 신청만 가능
@@ -1059,6 +1061,29 @@ async function main() {
   // 57-5) [중] 연동 일정도 날짜를 검증한다
   assert.equal((await api("t-fc1", "POST", "/events/upsert",
     { "출처": "myguardian", "출처키": "bad-date", "일시": "not-a-date" })).status, 400);
+
+  // 58) TA 일지는 지점 전체가 한 장을 같이 쓴다 — 남의 저장을 내 화면이 알아채야 한다
+  // (2026-09-10 사용자: 「저장과 동시에 실시간 반영」). 무거운 목록 대신 표식만 확인한다.
+  const taM = "2026-12";
+  const v0 = (await (await api("t-fc1", "GET", "/ta/version?month=" + taM)).json()).v;
+  // 1팀 사람이 쓰면
+  await api("t-fc1", "POST", "/ta", { rows: [{ date: taM + "-01", cand_name: "후보", result: "통화함" }] });
+  const v1 = (await (await api("t-fc1", "GET", "/ta/version?month=" + taM)).json()).v;
+  assert.notEqual(v0, v1, "새 줄이 들어가면 표식이 바뀐다");
+  // 2팀 사람 화면에서도 같은 표식이 보인다 (지점 전체가 한 장을 본다)
+  assert.equal((await (await api("t-fc2", "GET", "/ta/version?month=" + taM)).json()).v, v1);
+  const taRow = (await (await api("t-fc1", "GET", "/ta?month=" + taM)).json())[0];
+  // 고쳐도 바뀐다 — 개수·최대 id가 그대로라 「바뀐 시각」이 없으면 못 알아챈다
+  await api("t-fc1", "POST", "/ta/" + taRow.id, { result: "다시 통화" });
+  const v2 = (await (await api("t-fc1", "GET", "/ta/version?month=" + taM)).json()).v;
+  assert.notEqual(v1, v2, "고친 것도 표식이 바뀐다");
+  // 지워도 바뀐다
+  await api("t-fc1", "DELETE", "/ta/" + taRow.id);
+  assert.notEqual(v2, (await (await api("t-fc1", "GET", "/ta/version?month=" + taM)).json()).v);
+  // 잠긴 사람에게는 표식도 안 준다 (일지 내용을 짐작하게 하면 안 된다)
+  await api("t-super", "POST", "/ta/password", { password: "지점공용1234" });
+  assert.equal((await api("t-fc2", "GET", "/ta/version?month=" + taM)).status, 403);
+  await api("t-super", "POST", "/ta/password", { password: "" });
 
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.

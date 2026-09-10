@@ -152,6 +152,9 @@ function makeGrid(root, opts) {
     if (cols[ci].sticky) writeMem(key, v);
     if (r._id != null) dirty.add(r._id); else added.add(r);
     td.parentNode.classList.add("dirty");
+    // 칸을 벗어난 순간 그 줄을 넘긴다. 저장 버튼을 누르지 않아도 남아야 한다
+    // (2026-09-10 사용자: 「저장과 동시에 실시간 반영」).
+    if (opts.onRowCommit) opts.onRowCommit(r);
   }
 
   function addRow(preset) {
@@ -253,6 +256,22 @@ function makeGrid(root, opts) {
     dirtyRows: function () { return rows.filter(function (r) { return r._id != null && dirty.has(r._id); }); },
     hasChanges: function () { return added.size > 0 || dirty.size > 0; },
     markSaved: function () { dirty.clear(); added.clear(); render(); },
+    // 지금 이 표에 손을 대고 있는가 — 남의 변경을 밀어 넣기 전에 확인한다
+    isEditing: function () {
+      var el = document.activeElement;
+      return !!(el && root.contains(el) && el.matches && el.matches("td[contenteditable]"));
+    },
+    // 남이 고친 결과로 갈아끼운다. 내가 아직 넘기지 못한 줄은 그대로 둔다 —
+    // 눈앞에서 친 것이 사라지면 다시 칠 방법이 없다.
+    mergeRows: function (incoming) {
+      var keepNew = rows.filter(function (r) { return added.has(r); });
+      var mine = {};
+      rows.forEach(function (r) { if (r._id != null && dirty.has(r._id)) mine[r._id] = r; });
+      rows.length = 0;
+      incoming.forEach(function (r) { rows.push(mine[r._id] || r); });
+      keepNew.forEach(function (r) { rows.push(r); });
+      render();
+    },
     // 한 줄만 저장됐다고 표시한다. 여러 건을 따로 보낼 때 일부만 성공하면
     // 성공한 줄을 남겨둬야 다시 눌렀을 때 중복 저장되지 않는다.
     markRowSaved: function (r, id) {
