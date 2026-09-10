@@ -106,6 +106,34 @@ const GRADE_OF_ROLE = {
   "지점장": "BM", "수석 부지점장": "ESL", "부지점장": "ESL",
   "팀장": "SSL", "부팀장": "GSL", "팀원": "FC"
 };
+// ---------- 마이가디언 계정 승인 ----------
+// 어느 쪽으로 초대받아 로그인하든 둘 다 가입된다(2026-09-10 사용자). 여기서 명단에 넣으면
+// 마이가디언 계정도 승인한다. 마이가디언 DB는 읽기 전용으로만 연다 — 쓰기는 그쪽 API로,
+// 승인자의 세션을 그대로 넘겨서(권한은 그쪽 규칙이 가른다). 실패해도 여기 승인은 되돌리지
+// 않는다. 이미 승인된 계정이면 아무것도 안 한다. 마이가디언은 승인하며 다시 여기 명단에
+// 넣으려 들지만, 이미 있으니 그쪽이 스스로 멈춘다.
+const MG_API = (process.env.MG_API || "https://api.insurguard.life").replace(/[/]$/, "");
+async function approveInMyguardian(req, email, role, recruiterEmail) {
+  const auth = req.headers.authorization;
+  if (!auth) return;
+  const acc = authDb.prepare("SELECT id, status FROM accounts WHERE lower(email) = ?").get(String(email).toLowerCase());
+  if (!acc || acc.status !== "대기") return;
+  const up = recruiterEmail
+    ? authDb.prepare("SELECT id FROM accounts WHERE lower(email) = ? AND status = '승인'").get(String(recruiterEmail).toLowerCase())
+    : null;
+  const r = await fetch(MG_API + "/admin/approve", {
+    method: "POST",
+    headers: { Authorization: auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ "대상": acc.id, "직급": GRADE_OF_ROLE[role] || "FC", "상위": up ? up.id : null, "자리": "" })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("마이가디언 승인 " + r.status + " " + (j.error || ""));
+  console.log(`마이가디언 계정 승인: ${email} (${role})`);
+}
+const mirrorApprove = (req, email, role, recruiterEmail) =>
+  approveInMyguardian(req, email, role, recruiterEmail)
+    .catch((e) => console.error("마이가디언 계정 승인 실패:", email, e && e.message));
+
 // 권한 순서 — 총관리자(isSuper) > 지점장 > 수석 부지점장 > 부지점장 > 팀장 > 부팀장 > 팀원.
 // 마이가디언 등급(GRADE)은 다섯 칸뿐이라 수석·부지점장을 가르지 못한다. 여기서 가른다.
 const ROLE_ORDER = ["지점장", "수석 부지점장", "부지점장", "팀장", "부팀장", "팀원"];
@@ -1369,6 +1397,7 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
     if (from) mergeMember(from.email, email);
     db.prepare("DELETE FROM pending WHERE email = ?").run(email);
   });
+  mirrorApprove(req, email, grantRole, from ? from.recruiter_email : null);
   send(res, 200, { ok: true, merged: !!from });
 });
 
@@ -1502,6 +1531,8 @@ route("POST", /^\/admin\/members$/, true, async (req, res, user) => {
       : (prev.recruiter_email ?? null),
     joined !== undefined ? joined : (prev.joined_at || "")
   );
+  mirrorApprove(req, email, b.role !== undefined ? b.role : (prev.role || "팀원"),
+    b.recruiterEmail !== undefined ? b.recruiterEmail : prev.recruiter_email);
   send(res, 200, { ok: true });
 });
 
@@ -1541,6 +1572,7 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
     mergeMember(seat.email, accEmail);        // 기록을 옮기고 빈 자리는 지운다
     db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
   });
+  mirrorApprove(req, accEmail, seat.role, seat.recruiter_email);
   send(res, 200, { ok: true });
 });
 
