@@ -559,6 +559,15 @@ a.slot-title:hover { text-decoration: underline; }
 .nav-group-label:first-child { margin-top: 4px; }
 /* 계정 미연결 표시 */
 .oc-member .r { min-width: 0; }
+/* 두 줄로 갈린 한 사람 — 그 자리에서 합친다 */
+.oc-merge {
+  margin-left: auto; flex: none; padding: 1px 7px;
+  border: 1px solid var(--blue); border-radius: 3px;
+  background: var(--blue-bg); color: var(--blue);
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.oc-merge:hover { background: var(--blue); color: #fff; }
+@media (pointer: coarse) { .oc-merge { padding: 8px 12px; font-size: 12px; } }
 .oc-nolink {
   margin-left: auto; padding: 0 5px; border-radius: 3px;
   background: var(--canvas); border: 1px solid var(--line);

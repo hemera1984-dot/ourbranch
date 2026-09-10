@@ -545,6 +545,11 @@
 
   var ROLE_RANK = {};
   GRADES.forEach(function (g, i) { ROLE_RANK[g.name] = i; });
+  // 화면에 뜨는 직급은 마이가디언과 같은 코드로 통일한다 — BM·ESL·SSL·GSL·FC
+  // (2026-09-10 사용자: 「직함 통일하자, 마이가디언이랑」).
+  // 코드가 없는 옛 값은 적힌 그대로 둔다.
+  function roleTag(role) { return gradeCode(role) || role || ""; }
+
   function gradeCode(name) {
     var g = GRADES.filter(function (x) { return x.name === name; })[0];
     return g ? g.code : "";
@@ -1072,28 +1077,30 @@
     var cnt = dupNames();
     if ((cnt[m.name] || 0) < 2) return m.name;
     var same = BOOT.members.filter(function (x) { return x.name === m.name; });
+    // 같은 사람이 「자리」와 「계정」 두 줄로 갈린 경우다. 진짜 동명이인이 아니라
+    // 아직 안 합친 한 사람이므로, 미연결 쪽에만 표를 달고 계정 쪽은 이름만 쓴다
+    // (2026-09-10 사용자: 「최연(chldus419)」처럼 이메일이 뜨던 문제).
+    var linked = same.filter(function (x) { return !isUnlinked(x); });
+    if (linked.length === 1 && same.length - linked.length >= 1)
+      return isUnlinked(m) ? m.name + "(미연결)" : m.name;
     var teamOf = function (x) {
       return (BOOT.teams.filter(function (t) { return t.id === x.team_id; })[0] || {}).name || "";
     };
-    // 실제로 나만 남는 표식을 고른다 — 팀 → 팀·직급 → 이메일 순으로 좁힌다
-    var cands = [
-      teamOf(m),
-      [teamOf(m), m.role].filter(Boolean).join(" "),
-      m.role,
-      String(m.email || "").split("@")[0]
-    ];
-    for (var i = 0; i < cands.length; i++) {
-      var tag = cands[i];
-      if (!tag) continue;
-      var uniq = same.filter(function (x) {
-        var t = [teamOf(x), [teamOf(x), x.role].filter(Boolean).join(" "), x.role,
-                 String(x.email || "").split("@")[0]][i];
-        return t === tag;
-      }).length === 1;
+    // 실제로 나만 남는 표식을 고른다 — 직급 → 팀 → 팀·직급 순으로 좁힌다.
+    // 사람을 가르는 말은 직함이다. 이메일은 마지막 수단이다 (2026-09-10 사용자).
+    var tagsOf = function (x) {
+      return [roleTag(x.role), teamOf(x), [teamOf(x), roleTag(x.role)].filter(Boolean).join(" ")];
+    };
+    var mine = tagsOf(m);
+    for (var i = 0; i < mine.length; i++) {
+      var tag = mine[i];
+      if (!tag || tag === m.name) continue;
+      var uniq = same.filter(function (x) { return tagsOf(x)[i] === tag; }).length === 1;
       if (uniq) return m.name + "(" + tag + ")";
     }
-    // 여기까지 왔으면 이메일로도 못 가르는 상태 — 이메일 전체를 쓴다
-    return m.name + "(" + String(m.email || "") + ")";
+    // 직함·팀으로도 못 가른다 — 그래도 누구인지는 알아야 하니 직함에 계정을 덧붙인다
+    var last = [roleTag(m.role), String(m.email || "").split("@")[0]].filter(Boolean).join(" · ");
+    return m.name + "(" + last + ")";
   }
   function labelByEmail(email) {
     var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
@@ -1390,7 +1397,7 @@
         ? mine.map(function (m) {
           var tn = (BOOT.teams.filter(function (t2) { return t2.id === m.team_id; })[0] || {}).name || "지점 직속";
           return '<div class="rep-row"><span class="slot-title">' + esc(memberLabel(m)) + "</span>"
-            + '<span class="slot-place">' + esc(tn) + " · " + esc(m.role)
+            + '<span class="slot-place">' + esc(tn) + " · " + esc(roleTag(m.role))
             + (m.joined_at ? " · 위촉 " + esc(m.joined_at) : "") + "</span></div>";
         }).join("")
         : '<p class="empty">아직 없습니다. 조직도에서 팀원의 도입자를 지정하면 여기에 모입니다.</p>';
@@ -1484,7 +1491,7 @@
       return '<div class="org-row">'
         + '<span class="badge ' + (ok ? "green" : "gray") + '">' + (ok ? "로그인 가능" : "자리만 있음") + "</span>"
         + '<span class="name">' + esc(memberLabel(m)) + "</span>"
-        + '<span class="meta">' + esc(m.role) + " · " + esc(tn)
+        + '<span class="meta">' + esc(roleTag(m.role)) + " · " + esc(tn)
         + (ok ? " · " + esc(m.email)
               : twin ? " · 같은 이름의 계정이 있습니다 — " + esc(twin.email)
               : " · 계정 미연결 — 초대 문구를 보내세요") + "</span>"
@@ -1509,15 +1516,29 @@
     return n > 0 ? n : 0;
   }
 
+  // 이 자리와 같은 이름을 쓰는 「계정 붙은」 줄 — 두 줄로 갈린 한 사람을 찾는다
+  function twinAccount(m) {
+    return BOOT.members.filter(function (x) {
+      return x.name === m.name && x.email !== m.email && !isUnlinked(x) && x.active !== 0;
+    })[0] || null;
+  }
+
   function memberBox(m, teamId, mg, depth) {
     return '<div class="oc-member d' + Math.min(depth, 3)
       + (m.email === BOOT.me.email ? " me" : "") + (mg ? " editable" : "") + '"'
       + (mg ? ' draggable="true"' : "")
       + ' data-team="' + teamId + '" data-email="' + esc(m.email) + '">'
-      + '<span class="r ' + roleCls(m.role) + '">' + esc(m.role) + "</span>"
+      + '<span class="r ' + roleCls(m.role) + '">' + esc(roleTag(m.role)) + "</span>"
       + "<span>" + esc(memberLabel(m)) + "</span>"
       + (monthsIn(m.joined_at) ? '<span class="oc-mm">' + monthsIn(m.joined_at) + "차월</span>" : "")
-      + (isUnlinked(m) ? '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>' : "")
+      + (isUnlinked(m)
+          ? (mg && twinAccount(m)
+              // 같은 이름의 계정이 이미 명단에 있다 — 두 줄로 갈린 한 사람이다.
+              // 그 자리에서 합치게 한다. 「미연결」만 띄우면 무엇을 해야 할지 모른다.
+              ? '<button type="button" class="oc-merge" data-merge-seat="' + esc(m.email)
+                + '" title="같은 이름의 계정과 하나로 합칩니다">합치기</button>'
+              : '<span class="oc-nolink" title="계정이 연결되지 않아 로그인할 수 없습니다. 초대 문구를 보내세요.">미연결</span>')
+          : "")
       + (mg ? '<button type="button" class="oc-under" title="이 사람이 뽑은 사람 추가" data-under="'
               + esc(m.email) + '" data-team="' + teamId + '">+</button>'
             + '<button type="button" class="oc-off" title="명단에서 내리기" data-off="'
@@ -1602,7 +1623,7 @@
             + '<span class="r">지점장</span>' + esc(memberLabel(head)) + "</span>" : "")
         + others.map(function (m) {
           return '<span class="oc-chip' + (mg ? " editable" : "") + '" data-email="' + esc(m.email) + '">'
-            + '<span class="r ' + roleCls(m.role) + '">' + esc(m.role) + "</span>" + esc(memberLabel(m)) + "</span>";
+            + '<span class="r ' + roleCls(m.role) + '">' + esc(roleTag(m.role)) + "</span>" + esc(memberLabel(m)) + "</span>";
         }).join("")
         + (mg ? '<span class="oc-chip oc-add-direct">+ 지점 직속</span>' : "")
         + "</div>");
@@ -1625,7 +1646,7 @@
       h.push('<div class="oc-team-head' + (BOOT.me.isBranchHead ? " editable" : "") + '"'
         + ' data-team="' + t.id + '" data-name="' + esc(t.name) + '">'
         + "<strong>" + esc(t.name) + "</strong>"
-        + '<span>' + (lead ? esc(memberLabel(lead)) + " " + esc(lead.role) : "부지점장 미지정") + "</span></div>");
+        + '<span>' + (lead ? esc(memberLabel(lead)) + " " + esc(roleTag(lead.role)) : "부지점장 미지정") + "</span></div>");
       h.push('<div class="oc-members">');
       var shown = (lead ? [lead] : []).concat(rest);
       if (shown.length) {
@@ -1686,7 +1707,7 @@
     var p = document.createElement("div");
     p.className = "pop";
     p.innerHTML = '<div class="pop-title">' + esc(memberLabel(m)) + "</div>"
-      + line("소속", esc(tn) + " · " + esc(m.role))
+      + line("소속", esc(tn) + " · " + esc(roleTag(m.role)))
       + line("연락처", m.phone ? '<a href="tel:' + esc(m.phone) + '">' + esc(m.phone) + "</a>" : "")
       + line("생일", m.birthday ? esc(mdLabel(m.birthday)) : "")
       + line("위촉", m.joined_at ? esc(m.joined_at) + (monthsIn(m.joined_at) ? " · " + monthsIn(m.joined_at) + "차월" : "") : "")
@@ -1949,6 +1970,18 @@
   $("org-chart").addEventListener("click", function (e) {
     var off = e.target.closest(".oc-off");
     if (off) { removeMember(off.dataset.off); return; }
+    var mergeBtn = e.target.closest(".oc-merge");
+    if (mergeBtn) {
+      var seat = BOOT.members.filter(function (x) { return x.email === mergeBtn.dataset.mergeSeat; })[0];
+      var twin = seat && twinAccount(seat);
+      if (!seat || !twin) return;
+      if (!confirm(seat.name + " 두 줄을 하나로 합칩니다.\n\n남는 계정: " + twin.email
+        + "\n직급·팀: " + seat.role + " (자리 쪽을 따릅니다)\n\n합칠까요?")) return;
+      api("/admin/members/link", { method: "POST", body: { seatEmail: seat.email, accountEmail: twin.email } })
+        .then(refreshBoot).then(renderOrg)
+        .catch(function () { refreshBoot().then(renderOrg); });
+      return;
+    }
     var under = e.target.closest(".oc-under");
     if (under) {   // 그 사람이 뽑은 사람으로 새로 만든다 — 도입자를 빼먹지 않게
       openMemberPop(under, { teamId: Number(under.dataset.team), recruiter: under.dataset.under });
@@ -2288,7 +2321,7 @@
   // 하루 상세 목록 — 모바일 하루 보기와 달력 우측 패널이 같이 쓴다
   function dayGroupsHtml(evs, teamId, onlyWithItems) {
     var groups = [{ em: "", name: "팀 공유", sub: "" }];
-    rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: memberLabel(m), sub: m.role }); });
+    rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: memberLabel(m), sub: roleTag(m.role) }); });
     evs.forEach(function (e) {
       if (e.member_email && !groups.some(function (g) { return g.em === e.member_email; }))
         groups.push({ em: e.member_email, name: nameOf(e.member_email), sub: BOOT.me.recruits.indexOf(e.member_email) >= 0 ? "내 도입" : "명단 외" });
@@ -2363,7 +2396,7 @@
     rowCells(function (e) { return !e.member_email; }, "");
     var roster = rosterOf(myTeamId());
     roster.forEach(function (m) {
-      h.push('<div class="week-name">' + esc(memberLabel(m)) + '<span class="sub">' + esc(m.role) + "</span></div>");
+      h.push('<div class="week-name">' + esc(memberLabel(m)) + '<span class="sub">' + esc(roleTag(m.role)) + "</span></div>");
       rowCells(function (e) { return e.member_email === m.email; }, m.email);
     });
     // 명단 밖 인원(총관리자 등)의 개인 일정도 놓치지 않는다
@@ -3199,7 +3232,7 @@
           : (a.id != null ? '<span class="badge gray">미출근' + (a.reason ? " · " + esc(a.reason) : "") + "</span>"
             : '<span class="cell-empty">' + (due.indexOf(m) >= 0 ? "미보고" : "—") + "</span>");
         h.push("<tr>"
-          + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(m.role) + "</span></td>"
+          + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(roleTag(m.role)) + "</span></td>"
           + '<td class="ro">' + state + "</td>"
           + '<td class="ro">' + esc(a.work || "") + "</td>"
           + '<td class="ro">' + esc(a.lunch || "") + "</td>"

@@ -198,8 +198,58 @@ function makeGrid(root, opts) {
     } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       var next = cellAt(ri + (e.key === "ArrowDown" ? 1 : -1), ci);
       if (next) { e.preventDefault(); commitCell(td); next.focus(); }
+    } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      // 칸 안에서 글자를 고치는 것이 먼저다 — 커서가 끝에 닿았을 때만 옆 칸으로 넘어간다
+      var toRight = e.key === "ArrowRight";
+      if (toRight ? !caretAtEnd(td) : !caretAtStart(td)) return;
+      var side = nextEditable(ri, ci, toRight ? 1 : -1);
+      if (!side) return;
+      e.preventDefault();
+      commitCell(td);
+      side.focus();
+      putCaret(side, toRight ? "start" : "end");
     }
   });
+
+  // 커서가 칸의 맨 앞/맨 뒤에 있는가
+  function caretAt(td, atEnd) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+    var r = sel.getRangeAt(0).cloneRange();
+    r.selectNodeContents(td);
+    r.setStart(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+    if (atEnd) return r.toString().length === 0;
+    var r2 = sel.getRangeAt(0).cloneRange();
+    r2.selectNodeContents(td);
+    r2.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+    return r2.toString().length === 0;
+  }
+  function caretAtEnd(td) { return caretAt(td, true); }
+  function caretAtStart(td) { return caretAt(td, false); }
+
+  // 옆 칸 — 읽기 전용 칸(담당자 등)은 건너뛰고, 줄 끝이면 윗줄·아랫줄로 넘어간다
+  function nextEditable(ri, ci, step) {
+    var r = ri, c = ci + step;
+    for (var guard = 0; guard < 200; guard++) {
+      if (c < 0) { r -= 1; c = cols.length - 1; }
+      else if (c >= cols.length) { r += 1; c = 0; }
+      if (r < 0 || r >= rows.length) return null;
+      var td = cellAt(r, c);
+      if (td) return td;                       // 읽기 전용 칸은 cellAt이 안 잡는다
+      c += step;
+    }
+    return null;
+  }
+
+  function putCaret(td, where) {
+    var sel = window.getSelection();
+    if (!sel) return;
+    var r = document.createRange();
+    r.selectNodeContents(td);
+    r.collapse(where === "start");
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
 
   // 엑셀 붙여넣기: 탭·줄바꿈으로 갈라 현재 셀부터 채운다. 줄이 모자라면 만든다.
   // 남의 행(읽기 전용)은 건너뛴다 — 저장 시 403이 나고 내 행까지 못 저장하게 된다.
