@@ -987,6 +987,10 @@ a.slot-title:hover { text-decoration: underline; }
     overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
     transition: width .18s ease;
   }
+  /* 세로 flex 안에서는 자식이 눌려 들어간다 — 그러면 사이드바는 「넘칠 게 없다」고
+     보고 스크롤을 안 만든다. 메뉴는 제 키를 지키게 못박는다. */
+  .sidebar > * { flex-shrink: 0; }
+  .sidebar .nav { flex: 1 0 auto; }
   .main { margin-left: 216px; transition: margin-left .18s ease; }
   #side-handle { left: 216px; }
 
