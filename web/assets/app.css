@@ -671,6 +671,8 @@ a.slot-title:hover { text-decoration: underline; }
 /* 손가락으로 누르는 기기 — 서류함·조직도의 작은 단추를 키운다.
    태블릿은 1024px이라 폭으로만 가르면 20px 단추를 그대로 받는다 (2026-08-05). */
 @media (pointer: coarse) {
+  /* 태블릿도 손가락으로 누른다 — 폭으로만 가르면 27px 줄을 그대로 받는다 */
+  .nav a { min-height: 44px; display: flex; align-items: center; }
   .doc-chip .doc-open, .doc-chip .tr-name { padding: 12px; font-size: 13px; }
   /* × 는 폭도 손가락만큼 줘야 한다 — 높이만 키우면 옆 칩을 누르게 된다 */
   .doc-chip .doc-del { padding: 11px 12px; font-size: 15px; }
@@ -978,7 +980,11 @@ a.slot-title:hover { text-decoration: underline; }
 @media (min-width: 901px) {
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 60;
-    width: 216px; overflow: hidden;
+    width: 216px;
+    /* 세로는 스크롤한다. overflow:hidden으로 두면 화면이 낮은 기기(태블릿 가로)에서
+       마지막 항목(앱 설치)에 손이 닿지 않는다 (2026-09-10 사용자).
+       가로만 숨긴다 — 접힐 때 폭이 0이 되는 동안 글자가 삐져나오지 않게. */
+    overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
     transition: width .18s ease;
   }
   .main { margin-left: 216px; transition: margin-left .18s ease; }
