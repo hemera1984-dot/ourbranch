@@ -984,13 +984,20 @@ a.slot-title:hover { text-decoration: underline; }
     /* 세로는 스크롤한다. overflow:hidden으로 두면 화면이 낮은 기기(태블릿 가로)에서
        마지막 항목(앱 설치)에 손이 닿지 않는다 (2026-09-10 사용자).
        가로만 숨긴다 — 접힐 때 폭이 0이 되는 동안 글자가 삐져나오지 않게. */
-    overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+    overflow: hidden;                 /* 접힐 때 폭이 0이 되는 동안 글자가 삐져나오지 않게 */
     transition: width .18s ease;
   }
-  /* 세로 flex 안에서는 자식이 눌려 들어간다 — 그러면 사이드바는 「넘칠 게 없다」고
-     보고 스크롤을 안 만든다. 메뉴는 제 키를 지키게 못박는다. */
+  /* 스크롤은 사이드바가 아니라 「메뉴」가 한다.
+     바깥 상자에 맡기면, 세로 flex 안에서 메뉴가 눌려 들어가 상자는 「넘칠 게 없다」고
+     보고 스크롤을 안 만든다 — 손가락이 사이드바를 못 잡고 본문이 대신 움직인다
+     (2026-09-10 사용자: 「오른쪽 본문만 움직임」).
+     지점명과 내 계정 줄은 제자리에 두고 메뉴만 굴린다. */
   .sidebar > * { flex-shrink: 0; }
-  .sidebar .nav { flex: 1 0 auto; }
+  .sidebar .nav {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;   /* 끝에서 페이지로 넘어가지 않게 */
+  }
   .main { margin-left: 216px; transition: margin-left .18s ease; }
   #side-handle { left: 216px; }
 
