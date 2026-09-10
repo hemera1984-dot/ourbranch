@@ -444,6 +444,19 @@ a.slot-title:hover { text-decoration: underline; }
   .nav, .side-user { display: none; }
   body.more-open .nav, body.more-open .side-user { display: block; }
   body.more-open .nav { display: flex; flex-wrap: wrap; }
+  /* 펼친 메뉴는 화면을 덮는 시트다. 본문 위에 얹혀 흐르면 스크롤이 본문으로 새고,
+     마지막 항목(앱 설치)이 하단 탭에 가려 손이 닿지 않는다 (2026-09-10 사용자).
+     하단 탭 위까지만 차지하고, 길면 시트 안에서 스크롤한다. */
+  body.more-open .sidebar {
+    position: fixed; left: 0; right: 0; top: 0; z-index: 80;
+    bottom: calc(55px + env(safe-area-inset-bottom, 0px));
+    width: auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .38);
+  }
+  /* 시트가 열려 있는 동안 뒤 본문은 움직이지 않는다 */
+  body.more-open { overflow: hidden; }
+  body.more-open .nav a { min-height: 48px; align-items: center; }
+  body.more-open .side-user { padding-bottom: 20px; }
   .main { padding-bottom: 74px; }
 }
 
