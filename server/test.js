@@ -1085,6 +1085,19 @@ async function main() {
   assert.equal((await api("t-fc2", "GET", "/ta/version?month=" + taM)).status, 403);
   await api("t-super", "POST", "/ta/password", { password: "" });
 
+  // 59) 자리와 계정을 합칠 때 명부 칸이 사라지지 않는다 (2026-09-11 사용자: 최연 두 줄)
+  // 위촉 년월은 자리 쪽(관리자가 조직도에서 넣은 값), 휴대폰·생일은 계정 쪽(본인 입력)이 이긴다.
+  await api("t-super", "POST", "/admin/members",
+    { email: "합칠자리@미등록.local", name: "합칠사람", teamId: 1, role: "팀원", joinedAt: "2026-08" });
+  await api("t-super", "POST", "/admin/members",
+    { email: "wait@x.com", name: "합칠사람", teamId: 1, role: "팀원", joinedAt: "2026-08-15" });
+  assert.equal((await api("t-super", "POST", "/admin/members/link",
+    { seatEmail: "합칠자리@미등록.local", accountEmail: "wait@x.com" })).status, 200);
+  const merged59 = (await (await api("t-super", "GET", "/bootstrap")).json()).members
+    .filter(m => m.name === "합칠사람");
+  assert.equal(merged59.length, 1, "한 사람으로 합쳐진다");
+  assert.equal(merged59[0].joined_at, "2026-08-01", "위촉 년월은 자리 쪽이 이긴다");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

@@ -2072,14 +2072,24 @@
       var body = { email: ok.dataset.email, teamId: teamId };
       if (roleSel && roleSel.value) body.role = roleSel.value;
       if (seatSel && seatSel.value) body.mergeFrom = seatSel.value;   // 조직도 자리 이어받기
+      // 승인은 되는데 목록이 그대로 남아, 다시 누르면 「신청이 없습니다」가 떴다
+      // (2026-09-11 사용자). 조직도만 다시 그리고 승인 대기 목록은 안 그렸던 탓이다.
+      ok.disabled = true;
+      var who = p.name || ok.dataset.email;
       api("/pending/approve", { method: "POST", body: body })
-        .then(refreshBoot).then(renderOrg);
+        .then(refreshBoot)
+        .then(function () { renderInvite(); renderOrg(); toast(who + " 님을 승인했습니다"); })
+        .catch(function () { ok.disabled = false; refreshBoot().then(renderInvite); });
       return;
     }
     var no = e.target.closest(".pd-no");
-    if (no && confirm("이 신청을 거절할까?"))
+    if (no && confirm("이 신청을 거절할까요?")) {
+      no.disabled = true;
       api("/pending/reject", { method: "POST", body: { email: no.dataset.email } })
-        .then(refreshBoot).then(renderOrg);
+        .then(refreshBoot)
+        .then(function () { renderInvite(); renderOrg(); toast("신청을 거절했습니다"); })
+        .catch(function () { no.disabled = false; refreshBoot().then(renderInvite); });
+    }
   });
 
   // 초대 문구 — 카톡으로 그대로 보낸다
@@ -2261,6 +2271,14 @@
 
   // 되돌리기 띠 — 화면 아래에 잠깐 머문다. 안 보이는 되돌리기는 없는 것과 같다.
   var undoTimer = null;
+  function toast(text) {
+    var bar = $("undo-bar");
+    bar.innerHTML = "<span>" + esc(text) + "</span>";
+    bar.hidden = false;
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(function () { bar.hidden = true; }, 3000);
+  }
+
   function showUndo(text, onUndo) {
     var bar = $("undo-bar");
     bar.innerHTML = "<span>" + esc(text) + "</span>"

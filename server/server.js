@@ -1307,6 +1307,21 @@ route("POST", /^\/invites$/, false, async (req, res, user) => {
 // 명단 전용 계정(이메일 모른 채 이름만 등록한 사람)을 실제 구글 계정으로 이어받는다.
 // 이걸 안 하면 조직도에 같은 사람이 두 줄로 갈라지고, 미리 넣어둔 일정·업적이
 // 본인에게 붙지 않는다.
+// 자리와 계정을 합칠 때 명부 칸을 채운다 (2026-09-11 사용자: 최연 두 줄).
+// - 위촉 년월: 자리 쪽이 이긴다. 관리자가 조직도에서 넣는 값이 차월의 기준이다.
+//   자리에 없으면 계정 쪽을 둔다.
+// - 휴대폰·생일: 계정 쪽이 이긴다. 본인이 「내 정보」에서 넣는 값이다.
+//   계정에 비어 있을 때만 자리 쪽으로 채운다.
+function carryProfile(seat, toEmail) {
+  db.prepare(
+    `UPDATE members SET
+       joined_at = CASE WHEN ? <> '' THEN ? ELSE joined_at END,
+       phone     = CASE WHEN IFNULL(phone,'')    = '' THEN ? ELSE phone END,
+       birthday  = CASE WHEN IFNULL(birthday,'') = '' THEN ? ELSE birthday END
+     WHERE email = ?`
+  ).run(seat.joined_at || "", seat.joined_at || "", seat.phone || "", seat.birthday || "", toEmail);
+}
+
 function mergeMember(fromEmail, toEmail) {
   if (!fromEmail || !toEmail || fromEmail === toEmail) return;
   const moves = [
@@ -1411,7 +1426,7 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   tx(() => {
     upsert.run(email, (from && from.name) || b.name || p.name || "", teamId,
                grantRole, from ? from.recruiter_email : null);
-    if (from) mergeMember(from.email, email);
+    if (from) { carryProfile(from, email); mergeMember(from.email, email); }
     db.prepare("DELETE FROM pending WHERE email = ?").run(email);
   });
   mirrorApprove(req, email, grantRole, from ? from.recruiter_email : null);
@@ -1586,6 +1601,7 @@ route("POST", /^\/admin\/members\/link$/, true, async (req, res, user) => {
   );
   tx(() => {
     upsert.run(accEmail, seat.name, seat.team_id, seat.role, seat.recruiter_email, seat.sort_order);
+    carryProfile(seat, accEmail);             // 위촉 년월·연락처가 한쪽에서 사라지지 않게
     mergeMember(seat.email, accEmail);        // 기록을 옮기고 빈 자리는 지운다
     db.prepare("DELETE FROM pending WHERE email = ?").run(accEmail);
   });
