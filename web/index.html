@@ -426,11 +426,23 @@
       <div class="stat-row" id="ta-stats" hidden></div>
       <div class="section">
         <div class="section-head">
-          <h2>이번 달 기록</h2>
+          <h2 id="ta-title">이번 달 기록</h2>
           <div class="toolbar">
             <span class="save-state" id="ta-state"></span>
             <button class="btn" id="ta-flagged">주의 명단</button>
           </div>
+        </div>
+        <div class="ta-filter">
+          <input type="search" class="input" id="ta-q" placeholder="이름·번호로 찾기 — 지난 6개월 전체" autocomplete="off">
+          <div class="ta-chips" id="ta-stage">
+            <button type="button" class="chip-f on" data-stage="">전체</button>
+            <button type="button" class="chip-f" data-stage="통화">통화</button>
+            <button type="button" class="chip-f" data-stage="면접">면접</button>
+            <button type="button" class="chip-f" data-stage="위촉">위촉</button>
+            <button type="button" class="chip-f" data-stage="거절">거절</button>
+          </div>
+          <label class="ta-toggle"><input type="checkbox" id="ta-mine"> 내 기록만</label>
+          <span class="note" id="ta-count"></span>
         </div>
         <div id="ta-flag-box" class="card card-pad" hidden style="margin-bottom:12px"></div>
         <div id="ta-grid" class="card"></div>
@@ -3838,16 +3850,56 @@
     });
   }
 
+  // ── 찾기·거르기 (2026-09-11 사용자) ──
+  // 달 기록(taAll)은 그대로 두고 보이는 줄만 고른다. 찾기는 서버에서 전 기간을 뒤진다.
+  var taAll = [], taFound = null, taQuery = "", taStageF = "", taMineF = false, taSearchTimer = null;
+
+  function taIsMine(r) {
+    return r.author_email ? r.author_email === BOOT.me.email : r.author === BOOT.me.name;
+  }
+  function taVisible() {
+    return (taFound || taAll).filter(function (r) {
+      if (taStageF && (r.stage || "통화") !== taStageF) return false;   // 빈 단계는 통화다
+      if (taMineF && !taIsMine(r)) return false;
+      return true;
+    });
+  }
+  function taShowCount() {
+    var n = taVisible().length, total = (taFound || taAll).length;
+    $("ta-count").textContent = taFound
+      ? "찾은 기록 " + n + "건" + (taFound.length >= 200 ? " (앞 200건만)" : "")
+      : (n === total ? "" : total + "건 중 " + n + "건");
+    $("ta-title").textContent = taFound ? "「" + taQuery + "」 찾은 기록" : "이번 달 기록";
+  }
+  function taRefresh() {
+    if (!taGrid) return;
+    taGrid.mergeRows(taVisible());
+    taShowCount();
+  }
+  function taSearch(qv) {
+    taQuery = qv;
+    if (!qv) { taFound = null; taRefresh(); return; }
+    if (qv.length < 2) { $("ta-count").textContent = "두 글자 이상 넣어 주세요"; return; }
+    api("/ta?q=" + encodeURIComponent(qv)).then(function (rows) {
+      if (taQuery !== qv) return;                 // 그새 다른 것을 쳤다
+      taFound = rows.map(function (r) { r._id = r.id; return r; });
+      taRefresh();
+    }).catch(function () {});
+  }
+
   function loadTaRows() {
     api("/ta?month=" + month).then(function (rows) {
       // 지점 전체가 함께 본다 — 팀으로 거르지 않는다 (2026-08-02 사용자 지시)
       rows = rows.map(function (r) { r._id = r.id; return r; });
+      taAll = rows;
+      // 달을 옮기면 찾던 것은 푼다 — 제목과 표가 서로 다른 것을 말하게 되니까
+      taFound = null; taQuery = ""; $("ta-q").value = "";
       renderTaStats(rows);
       taGrid = makeGrid($("ta-grid"), {
         cols: TA_COLS,
         memoryKey: "ta",
         year: Number(month.slice(0, 4)),
-        rows: rows,
+        rows: taVisible(),
         fixed: { author: BOOT.me.name, authorEmail: BOOT.me.email, date: fmtDate(new Date()) },
         // 소유는 이메일로 판정 — 동명이인이 서로의 일지를 고치지 못하게
         canEditRow: function (r) {
@@ -3863,6 +3915,7 @@
         }
       });
       if (!rows.length) taGrid.addRow();
+      taShowCount();
     });
   }
   function renderTaStats(rows) {
@@ -3937,6 +3990,24 @@
   });
   // 새 줄은 표 아래에서 넣는다. 넣은 줄이 화면 밖이면 끌어와 준다 —
   // 눌렀는데 아무 일도 안 일어난 것처럼 보이면 안 된다 (2026-09-10 사용자).
+  $("ta-q").addEventListener("input", function () {
+    var v = this.value.trim();
+    if (taSearchTimer) clearTimeout(taSearchTimer);
+    taSearchTimer = setTimeout(function () { taSearch(v); }, 300);
+  });
+  $("ta-q").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { if (taSearchTimer) clearTimeout(taSearchTimer); taSearch(this.value.trim()); }
+    if (e.key === "Escape") { this.value = ""; taSearch(""); }
+  });
+  $("ta-stage").addEventListener("click", function (e) {
+    var b = e.target.closest(".chip-f");
+    if (!b) return;
+    taStageF = b.dataset.stage;
+    this.querySelectorAll(".chip-f").forEach(function (x) { x.classList.toggle("on", x === b); });
+    taRefresh();
+  });
+  $("ta-mine").addEventListener("change", function () { taMineF = this.checked; taRefresh(); });
+
   $("ta-add").addEventListener("click", function () {
     if (!taGrid) return;
     taGrid.addRow();
@@ -3954,8 +4025,11 @@
     if (taGrid.isEditing()) { taPending = true; return; }
     taPending = false;
     rows = rows.map(function (r) { r._id = r.id; return r; });
+    taAll = rows;
     renderTaStats(rows);
-    taGrid.mergeRows(rows);
+    // 찾는 중이면 찾은 목록을 새로 받는다 — 남이 고친 것이 검색 결과에도 떠야 한다
+    if (taFound) { taSearch(taQuery); return; }
+    taRefresh();
   }
 
   function taCheck() {

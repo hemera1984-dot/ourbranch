@@ -1006,6 +1006,23 @@ route("GET", /^\/ta$/, false, (req, res, user) => {
   // 알바몬 등에서 걸러야 할 상대를 지점이 공유하는 것이 이 일지의 주된 쓸모다 —
   // 팀별로 갈라두면 옆 팀이 이미 거른 사람에게 또 연락하게 된다.
   // 쓰기(수정·삭제)는 그대로 본인·관리자만.
+  // 걸기 전에 찾기 — 이번 달이 아니라 보관 중인 전 기간(6개월)을 뒤진다.
+  // 옆 팀이 이미 통화한 사람인지 확인하는 것이 이 일지의 주된 쓸모다 (2026-09-11 사용자).
+  // LIKE는 %·_ 와일드카드가 통해서 전 기간이 덤프된다 — instr로 글자 그대로 찾는다.
+  const qRaw = String(q.get("q") || "").trim().slice(0, 40);
+  if (qRaw) {
+    if (qRaw.length < 2) return send(res, 400, { error: "두 글자 이상 넣어 주세요" });
+    const digits = qRaw.replace(/\D/g, "");
+    const phone = digits.length >= 4 ? digits : "";      // 숫자 서너 개로는 아무나 걸린다
+    const strip = c => `replace(replace(replace(${c},'-',''),' ',''),'.','')`;
+    const found = db.prepare(
+      `SELECT * FROM ta_logs WHERE
+         instr(cand_name, ?) > 0 OR instr(region, ?) > 0 OR instr(result, ?) > 0 OR instr(note, ?) > 0
+         OR (? <> '' AND (instr(${strip("real_phone")}, ?) > 0 OR instr(${strip("safe_phone")}, ?) > 0))
+       ORDER BY date DESC, id DESC LIMIT 200`
+    ).all(qRaw, qRaw, qRaw, qRaw, phone, phone, phone);
+    return send(res, 200, found);
+  }
   const flagged = q.get("flagged") === "1";
   const list = flagged
     // 주의 표시는 기간을 가리지 않는다 — 연락하기 전에 훑어보는 명단이다

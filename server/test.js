@@ -1098,6 +1098,25 @@ async function main() {
   assert.equal(merged59.length, 1, "한 사람으로 합쳐진다");
   assert.equal(merged59[0].joined_at, "2026-08-01", "위촉 년월은 자리 쪽이 이긴다");
 
+  // 60) 걸기 전에 찾기 — 이번 달이 아니라 보관 중인 전 기간에서 이름·번호로 찾는다
+  // (2026-09-11 사용자). 잠금 상태가 앞 시험에 흔들리지 않게 여기서 확실히 연다.
+  await api("t-super", "POST", "/ta/password", { password: "찾기시험1234" });
+  await api("t-fc1", "POST", "/ta/unlock", { password: "찾기시험1234" });
+  await api("t-fc2", "POST", "/ta/unlock", { password: "찾기시험1234" });
+  await api("t-fc1", "POST", "/ta", { rows: [
+    { date: "2026-07-03", cand_name: "검색대상", real_phone: "010-5555-1234", result: "부재" }
+  ] });
+  const taByName = await (await api("t-fc2", "GET", "/ta?q=" + encodeURIComponent("검색대상"))).json();
+  assert.ok(taByName.some(r => r.cand_name === "검색대상"), "지난달 기록도 이름으로 찾는다 (다른 팀 사람도)");
+  const taByPhone = await (await api("t-fc2", "GET", "/ta?q=55551234")).json();
+  assert.ok(taByPhone.some(r => r.cand_name === "검색대상"), "하이픈 없이 번호로 찾는다");
+  const taByPhone2 = await (await api("t-fc2", "GET", "/ta?q=" + encodeURIComponent("5555-1234"))).json();
+  assert.ok(taByPhone2.some(r => r.cand_name === "검색대상"), "하이픈을 넣어도 찾는다");
+  const taWild = await (await api("t-fc2", "GET", "/ta?q=" + encodeURIComponent("%%"))).json();
+  assert.equal(taWild.length, 0, "% 는 글자 그대로 찾는다 — 전 기간이 덤프되면 안 된다");
+  assert.equal((await api("t-fc2", "GET", "/ta?q=a")).status, 400, "한 글자는 받지 않는다");
+  await api("t-super", "POST", "/ta/password", { password: "" });
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

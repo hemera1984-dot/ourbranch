@@ -558,6 +558,22 @@ a.slot-title:hover { text-decoration: underline; }
   transition: background .14s;
 }
 .row-add:hover { background: var(--blue-bg); }
+/* TA 일지 — 표를 화면 높이 안에 가둔다. 줄이 많아도 가로 스크롤바가 늘 화면 안에 있고
+   머리줄이 위에 붙어 따라온다 (2026-09-11 사용자: 옆으로 넘기려면 맨 아래까지 가야 했다) */
+#ta-grid .grid-wrap { max-height: max(320px, calc(100vh - 240px)); overflow: auto; }
+#ta-grid .grid th { z-index: 2; }
+/* 찾기·거르기 줄 */
+.ta-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ta-filter #ta-q { flex: 1 1 260px; min-width: 200px; }
+.ta-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.chip-f {
+  padding: 5px 11px; border: 1px solid var(--line-input); border-radius: 4px;
+  background: var(--surface); font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--sub); cursor: pointer; transition: background .14s, color .14s, border-color .14s;
+}
+.chip-f.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.ta-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--sub); cursor: pointer; }
+@media (pointer: coarse) { .chip-f { padding: 10px 14px; } .ta-toggle input { width: 20px; height: 20px; } }
 @media (pointer: coarse) { .row-add { padding: 14px; font-size: 14px; } }
 .oc-chip.oc-add-direct { color: var(--blue); border-style: dashed; cursor: pointer; }
 
