@@ -50,9 +50,15 @@ function makeGrid(root, opts) {
     return y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
   }
 
+  // 열이 실제 칸 두 개를 한 칸으로 보여줄 수 있다(문자: 거절·CIS). 읽고 쓰는 길을 한 곳에 둔다.
+  function getVal(r, c) { return c.get ? c.get(r) : r[c.key]; }
+  function setVal(r, c, v) { if (c.set) c.set(r, v); else r[c.key] = v; }
+
   function render() {
     var h = ['<div class="grid-wrap"><table class="grid"><thead><tr>'];
-    cols.forEach(function (c) { h.push("<th" + (c.width ? ' style="min-width:' + c.width + 'px"' : "") + ">" + esc(c.label) + "</th>"); });
+    cols.forEach(function (c) {
+      h.push("<th" + (c.pin ? ' class="pin"' : "") + (c.width ? ' style="min-width:' + c.width + 'px"' : "") + ">" + esc(c.label) + "</th>");
+    });
     h.push("<th></th></tr></thead><tbody>");
     rows.forEach(function (r, ri) {
       var editable = opts.canEditRow ? opts.canEditRow(r) : true;
@@ -60,15 +66,25 @@ function makeGrid(root, opts) {
         .filter(Boolean).join(" ");
       h.push('<tr data-ri="' + ri + '"' + (cls ? ' class="' + cls + '"' : "") + ">");
       cols.forEach(function (c, ci) {
-        var v = esc(r[c.key]);
-        if (!editable) h.push('<td class="ro' + (c.num ? " num" : "") + '">' + v + "</td>");
-        else h.push('<td contenteditable="plaintext-only" data-ci="' + ci + '"' + (c.num ? ' class="num"' : "") + ">" + v + "</td>");
+        var raw = getVal(r, c), v = esc(raw);
+        // 담당자·날짜처럼 윗줄과 같은 값은 흐리게 — 바뀌는 곳만 눈에 들어오게
+        var same = c.dim && ri > 0 && String(getVal(rows[ri - 1], c) || "") === String(raw || "") && String(raw || "") !== "";
+        var extra = [c.num ? "num" : "", c.pin ? "pin" : "", c.big ? "big" : "", same ? "same" : "",
+                     c.cls ? c.cls(raw || "") : ""].filter(Boolean).join(" ");
+        if (!editable) h.push('<td class="ro' + (extra ? " " + extra : "") + '">' + v + "</td>");
+        else h.push('<td contenteditable="plaintext-only" data-ci="' + ci + '"' + (extra ? ' class="' + extra + '"' : "") + ">" + v + "</td>");
       });
       h.push(editable ? '<td class="ro row-del" title="줄 삭제" style="cursor:pointer;text-align:center">&times;</td>' : '<td class="ro"></td>');
       h.push("</tr>");
     });
     h.push("</tbody></table></div>");
     root.innerHTML = h.join("");
+    // 고정 열은 실제 놓인 자리에 붙인다 — 선언한 폭과 실제 폭이 다르면 겹친다
+    root.querySelectorAll("th.pin").forEach(function (th) {
+      var left = th.offsetLeft + "px", ci = th.cellIndex;
+      th.style.left = left;
+      root.querySelectorAll("tbody tr").forEach(function (tr) { var td = tr.cells[ci]; if (td) td.style.left = left; });
+    });
   }
 
   // ── 고르는 칸 ──
@@ -147,8 +163,9 @@ function makeGrid(root, opts) {
     var r = rows[ri], key = cols[ci].key;
     var v = td.innerText.replace(/\n/g, " ").trim();
     if (cols[ci].date) { v = normDate(v); td.innerText = v; }   // 눈앞에서 바로 고쳐 보여준다
-    if (String(r[key] == null ? "" : r[key]) === v) return;
-    r[key] = v;
+    var cur = getVal(r, cols[ci]);
+    if (String(cur == null ? "" : cur) === v) return;
+    setVal(r, cols[ci], v);
     if (cols[ci].sticky) writeMem(key, v);
     if (r._id != null) dirty.add(r._id); else added.add(r);
     td.parentNode.classList.add("dirty");
@@ -269,7 +286,7 @@ function makeGrid(root, opts) {
       line.split("\t").forEach(function (val, vi) {
         var c = cols[startCi + vi];
         if (!c) return;
-        r[c.key] = c.date ? normDate(val) : val.trim();
+        setVal(r, c, c.date ? normDate(val) : val.trim());
       });
       if (r._id != null) dirty.add(r._id); else added.add(r);
     });

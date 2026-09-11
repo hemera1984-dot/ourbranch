@@ -3771,20 +3771,35 @@
   // ── TA 일지 ──
   // opts가 있는 칸은 치지 않고 고른다. sticky는 마지막 값을 기억해 새 줄에 미리 채운다.
   // (2026-08-02 원칙: 입력을 「치는 것」에서 「고르는 것·기억하는 것」으로)
+  // 열 순서·모양 (2026-09-11 사용자 확정)
+  // - 통화내용은 이름 바로 옆 — 정작 중요한 칸이 오른쪽 끝에 있었다
+  // - 거절 문자·CIS 약속문자는 「문자」 한 칸에 칩 둘 — 대부분 빈칸이던 열 하나가 줄어든다
+  //   (저장은 여전히 reject_sms·cis_sms 두 칸으로 간다. 서버·옛 기록은 그대로)
+  // - 담당자·날짜는 윗줄과 같으면 흐리게, 단계는 색으로, 이름 열은 고정
+  // - 안심번호·실제번호 합치기는 보류
+  var TA_STAGE_CLS = { "면접": "st-meet", "위촉": "st-hire", "거절": "st-drop" };
   var TA_COLS = [
     { key: "flag", label: "주의", width: 52, opts: ["주의"] },
-    { key: "stage", label: "단계", width: 56, opts: ["통화", "면접", "위촉", "거절"] },
-    { key: "author", label: "담당자", width: 70 },
-    { key: "date", label: "날짜", width: 90, date: true },
-    { key: "cand_name", label: "이름", width: 70 },
+    { key: "stage", label: "단계", width: 56, opts: ["통화", "면접", "위촉", "거절"],
+      cls: function (v) { return TA_STAGE_CLS[v] || ""; } },
+    { key: "author", label: "담당자", width: 70, dim: true },
+    { key: "date", label: "날짜", width: 90, date: true, dim: true },
+    { key: "cand_name", label: "이름", width: 70, pin: true, big: true },
+    { key: "result", label: "통화내용", width: 220, big: true },
     { key: "gender", label: "성별", width: 40, opts: ["남", "여"] },
     { key: "age", label: "나이", width: 40 },
     { key: "region", label: "거주지", width: 130, sticky: true },
     { key: "safe_phone", label: "안심번호", width: 110 },
     { key: "real_phone", label: "실제번호", width: 110 },
-    { key: "result", label: "통화내용", width: 200 },
-    { key: "reject_sms", label: "거절 문자", width: 90, opts: ["O", "X"] },
-    { key: "cis_sms", label: "CIS 약속문자", width: 120, opts: ["O", "X"] },
+    { key: "sms", label: "문자", width: 96, multi: true, opts: ["거절", "CIS"],
+      get: function (r) {
+        return [r.reject_sms === "O" ? "거절" : "", r.cis_sms === "O" ? "CIS" : ""].filter(Boolean).join(", ");
+      },
+      set: function (r, v) {
+        var on = String(v || "").split(",").map(function (x) { return x.trim(); });
+        r.reject_sms = on.indexOf("거절") >= 0 ? "O" : "";
+        r.cis_sms = on.indexOf("CIS") >= 0 ? "O" : "";
+      } },
     { key: "note", label: "특이사항", width: 140 }
   ];
 

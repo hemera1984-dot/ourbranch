@@ -116,6 +116,25 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .grid tr.dirty td:first-child { box-shadow: inset 3px 0 0 var(--cyan); }
 .grid .num { text-align: right; font-variant-numeric: tabular-nums; }
 .grid tfoot td { padding: 7px 8px; font-weight: 800; background: var(--canvas); }
+/* ── 표 가독성 (2026-09-11) — 다크모드는 토큰이 알아서 따라간다 ── */
+:root { --zebra: rgba(0, 0, 0, .025); }
+:root[data-theme="dark"] { --zebra: rgba(255, 255, 255, .035); }
+/* 줄 얼룩 — 넓은 줄을 따라갈 때 옆줄로 새지 않게. :where로 낮춰서 주의·포커스 색이 이긴다 */
+.grid tbody :where(tr:nth-child(even):not(.warn)) :where(td:not(.ro)) { background-color: var(--zebra); }
+/* 윗줄과 같은 값은 흐리게 — 바뀌는 곳만 눈에 들어온다 */
+.grid td.same { color: var(--ter); }
+/* 중요한 칸은 한 단계 크게 */
+.grid td.big { font-size: 14px; }
+/* 단계 — 색은 신호다. 초록 위촉, 파랑 면접, 회색 거절 (두 테마 모두 토큰 있음) */
+.grid td.st-hire { color: var(--green); font-weight: 700; }
+.grid td.st-meet { color: var(--k-lec-fg); font-weight: 700; }
+.grid td.st-drop { color: var(--ter); }
+/* 고정 열(이름) — 옆으로 넘겨도 누구 줄인지 잃지 않게. 폰은 앞 열이 화면을 다 먹어 빼둔다 */
+@media (min-width: 901px) {
+  .grid :where(td.pin) { background: var(--surface); }
+  .grid td.pin { position: sticky; z-index: 1; box-shadow: 1px 0 0 var(--line); }
+  .grid th.pin { position: sticky; z-index: 3; box-shadow: 1px 0 0 var(--line); }
+}
 
 /* ── 배지·집계 타일 ── */
 .stat-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
