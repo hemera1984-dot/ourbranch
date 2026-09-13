@@ -345,7 +345,10 @@ function makeGrid(root, opts) {
       if (id != null && r._id == null) r._id = id;
       added.delete(r);
       if (r._id != null) dirty.delete(r._id);
-      render();
+      // 표를 다시 그리지 않는다 — 저장 응답이 오는 사이 다음 칸에 치던 글자가 날아간다.
+      // 줄의 표시만 바꾼다.
+      var tr = root.querySelector('tr[data-ri="' + rows.indexOf(r) + '"]');
+      if (tr) tr.classList.remove("dirty"); else render();
     }
   };
 }

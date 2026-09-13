@@ -507,7 +507,7 @@
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
-      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 본인 칸에 계약을 넣으면 합계는 자동입니다. 목표 입력은 부지점장 몫입니다.</p>
+      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 칸을 벗어나면 바로 저장되고 합계도 그때 바뀝니다. 목표 입력은 부지점장 몫입니다.</p>
       <div id="perf-body"></div>
     </section>
   </main>
@@ -4161,7 +4161,7 @@
         });
         html += "</div>";
       });
-      body.innerHTML = html + '<div class="toolbar" style="margin-top:14px"><button class="btn primary" id="perf-save">저장</button></div>';
+      body.innerHTML = html;
 
       sections.forEach(function (s, i) {
         var mine = s.rows.map(function (r) { r._id = r.id; return r; });
@@ -4171,7 +4171,8 @@
           rows: mine,
           fixed: { member: s.member },
           canEditRow: function () { return s.canEdit; },
-          onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(done); }
+          onRowCommit: function (r) { perfCommitRow(perfGrids[i], r); },
+          onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(function () { done(); updateSum(perfGrids[i]); }); }
         });
         perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, grid: g, sumEl: $("perf-sum-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
@@ -4181,45 +4182,50 @@
   $("perf-body").addEventListener("click", function (e) {
     var b = e.target.closest(".add-row");
     if (b) perfGrids[Number(b.dataset.i)].grid.addRow();
-    if (e.target.id === "perf-save") savePerf();
   });
-  function updateSum(pg) {
-    var rs = pg.grid.rows().filter(function (r) { return r.contract_date || r.premium || r.canp; });
+  // 목표는 칸을 벗어나면 그 사람 것만 보낸다 — 손대지 않은 남의 목표는 건드리지 않는다
+  $("perf-body").addEventListener("change", function (e) {
+    var el = e.target;
+    if (el.dataset && el.dataset.i != null && /goal-input|cases-input|intro-input/.test(el.className)) perfSaveGoal(Number(el.dataset.i));
+  });
+  function perfReady(r) { return r.contract_date || r.premium || r.canp; }
+  function updateSum(pg, state) {
+    var rs = pg.grid.rows().filter(perfReady);
     var prem = 0, canp = 0;
     rs.forEach(function (r) { prem += Number(r.premium) || 0; canp += Number(r.canp) || 0; });
-    pg.sumEl.textContent = "합계 " + rs.length + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp);
+    pg.sumEl.textContent = "합계 " + rs.length + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp) + (state ? " · " + state : "");
+    pg.sumEl.style.color = state && state.indexOf("실패") === 0 ? "var(--red)" : "";
   }
-  function savePerf() {
-    var jobs = [];
-    var goalsByTeam = {};
-    perfGrids.forEach(function (pg) { pg.grid.commitActive(); });
-    perfGrids.forEach(function (pg, i) {
-      var news = pg.grid.newRows().filter(function (r) { return r.contract_date || r.premium || r.canp; })
-        .map(function (r) { return Object.assign({}, r, { member: pg.member, memberEmail: pg.email }); });
-      if (news.length) jobs.push(api("/perf", { method: "POST", body: { teamId: pg.teamId, month: month, rows: news } }));
-      pg.grid.dirtyRows().forEach(function (r) { jobs.push(api("/perf/" + r._id, { method: "POST", body: r })); });
-      if (BOOT.me.canSetGoal) {
-        var gi = document.querySelector('.goal-input[data-i="' + i + '"]');
-        var ci = document.querySelector('.cases-input[data-i="' + i + '"]');
-        var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
-        // 바뀐 칸만 보낸다 — 손대지 않은 목표를 빈 값으로 덮어쓰지 않게
-        if (gi) {
-          var payload = { member: pg.member, memberEmail: pg.email };
-          var changed = false;
-          if (gi.value.trim() !== (gi.dataset.init || "")) { payload.goal = gi.value.trim(); changed = true; }
-          if (ci && String(ci.value || "") !== (ci.dataset.init || "")) { payload.cases = Number(ci.value) || 0; changed = true; }
-          if (ii && String(ii.value || "") !== (ii.dataset.init || "")) { payload.intro = Number(ii.value) || 0; changed = true; }
-          if (changed) (goalsByTeam[pg.teamId] = goalsByTeam[pg.teamId] || []).push(payload);
-        }
-      }
-    });
-    Object.keys(goalsByTeam).forEach(function (tid) {
-      jobs.push(api("/perf/goals", { method: "POST", body: { teamId: Number(tid), month: month, goals: goalsByTeam[tid] } }));
-    });
-    if (!jobs.length) return;
-    Promise.all(jobs).then(loadPerf).catch(function (err) {
-      alert("저장하지 못했습니다. 입력은 그대로 있습니다.\n\n" + ((err && err.message) || "잠시 후 다시 눌러 주세요."));
-    });
+  // TA 일지와 같은 길 — 칸을 벗어난 순간 저장. 저장 버튼을 찾아 맨 밑까지 내려가지 않는다
+  // (2026-09-14 최연: 「입력하고 딴 데 갔다 오면 없어져 있어요」).
+  function perfCommitRow(pg, r) {
+    if (!pg) return;
+    if (r._id == null && !perfReady(r)) { updateSum(pg); return; }
+    updateSum(pg, "저장 중…");
+    var req = r._id == null
+      ? api("/perf", { method: "POST", body: { teamId: pg.teamId, month: month, rows: [Object.assign({}, r, { member: pg.member, memberEmail: pg.email })] } })
+          .then(function (out) { pg.grid.markRowSaved(r, out.ids && out.ids[0]); })
+      : api("/perf/" + r._id, { method: "POST", body: r }).then(function () { pg.grid.markRowSaved(r, r._id); });
+    req.then(function () { updateSum(pg, "저장됨"); })
+      .catch(function (e) { updateSum(pg, "실패 — " + ((e && e.message) || "다시 시도해 주세요")); });
+  }
+  function perfSaveGoal(i) {
+    var pg = perfGrids[i];
+    var gi = document.querySelector('.goal-input[data-i="' + i + '"]');
+    var ci = document.querySelector('.cases-input[data-i="' + i + '"]');
+    var ii = document.querySelector('.intro-input[data-i="' + i + '"]');
+    if (!pg || !gi) return;
+    var payload = { member: pg.member, memberEmail: pg.email }, changed = false;
+    if (gi.value.trim() !== (gi.dataset.init || "")) { payload.goal = gi.value.trim(); changed = true; }
+    if (ci && String(ci.value || "") !== (ci.dataset.init || "")) { payload.cases = Number(ci.value) || 0; changed = true; }
+    if (ii && String(ii.value || "") !== (ii.dataset.init || "")) { payload.intro = Number(ii.value) || 0; changed = true; }
+    if (!changed) return;
+    api("/perf/goals", { method: "POST", body: { teamId: pg.teamId, month: month, goals: [payload] } }).then(function () {
+      gi.dataset.init = gi.value.trim();
+      if (ci) ci.dataset.init = String(ci.value || "");
+      if (ii) ii.dataset.init = String(ii.value || "");
+      updateSum(pg, "목표 저장됨");
+    }).catch(function (e) { updateSum(pg, "실패 — " + ((e && e.message) || "목표를 저장하지 못했습니다")); });
   }
 
   // ── 시작 ──

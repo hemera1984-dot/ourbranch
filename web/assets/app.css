@@ -339,19 +339,20 @@ a.slot-title:hover { text-decoration: underline; }
    (앞 7칸은 요일 머리라 8번째부터가 월요일이다) */
 .cal-grid > .cal-cell.open:nth-child(7n + 6),
 .cal-grid > .cal-cell.open:nth-child(7n) { margin-left: -110%; }
-/* 고른 날은 그 자리에서 펴진다 — 줄임표 없이 전부, 줄바꿈 허용.
+/* 펴진 날(.open)만 줄임표 없이 전부, 줄바꿈 허용. 한 번 고른 칸(.sel)은 폭이 그대로라
+   여기서 줄바꿈을 풀면 한 글자씩 세로로 깨진다 (2026-09-14 최연 피드백).
    칸이 커지면 그 주 줄만 함께 커진다(모달이 화면을 덮지 않는다). */
-.cal-cell.sel .cal-ev {
-  white-space: normal; align-items: flex-start; overflow: visible;
+.cal-cell.open .cal-ev {
+  white-space: normal; word-break: keep-all; align-items: flex-start; overflow: visible;
   /* 글자는 키우지 않는다 — 상자가 커지는 것으로 충분하고,
      글자를 키우면 그만큼 일정이 덜 들어간다 */
   padding: 2px 0; line-height: 1.5;
 }
 /* 시간은 왼쪽 붙박이, 제목만 접힌다 — 시간이 아래로 떨어지면 훑기가 어렵다 */
-.cal-cell.sel .cal-ev .slot-time { flex: none; }
-.cal-cell.sel .cal-ev > span:last-child { overflow: visible; text-overflow: clip; }
-.cal-cell.sel .cal-ev .dot { margin-top: 6px; }
-.cal-cell.sel .cal-half { min-height: 0; }
+.cal-cell.open .cal-ev .slot-time { flex: none; }
+.cal-cell.open .cal-ev > span:last-child { overflow: visible; text-overflow: clip; }
+.cal-cell.open .cal-ev .dot { margin-top: 6px; }
+.cal-cell.open .cal-half { min-height: 0; }
 .cal-daynum {
   display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center;
   border-radius: 3px; font-size: 12px; font-weight: 700; margin-bottom: 3px;
