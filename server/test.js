@@ -529,13 +529,15 @@ async function main() {
     { date: "2027-05-05", cand_name: "나", stage: "면접" },
     { date: "2027-05-06", cand_name: "다", stage: "위촉" },
     { date: "2027-05-07", cand_name: "라", stage: "거절" },
-    { date: "2027-05-08", cand_name: "마" }                    // 빈 값은 통화로 본다
+    { date: "2027-05-08", cand_name: "마" },                   // 빈 값은 통화로 본다
+    { date: "2027-05-09", cand_name: "바", stage: "부재" }      // 안 받은 것은 통화가 아니다
   ] });
   const rc = await (await api("t-fc2", "GET", "/recruit?month=2027-05")).json();
   assert.equal(rc.total["통화"], 2);
   assert.equal(rc.total["면접"], 1);
   assert.equal(rc.total["위촉"], 1);
   assert.equal(rc.total["거절"], 1);
+  assert.equal(rc.total["부재"], 1);
   assert.equal(rc.byMember.length, 1);
   assert.equal(rc.byMember[0].email, "fc1@x.com");
   // 후보자 이름·연락처가 새어나가지 않는다

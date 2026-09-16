@@ -437,6 +437,7 @@
           <div class="ta-chips" id="ta-stage">
             <button type="button" class="chip-f on" data-stage="">전체</button>
             <button type="button" class="chip-f" data-stage="통화">통화</button>
+            <button type="button" class="chip-f" data-stage="부재">부재</button>
             <button type="button" class="chip-f" data-stage="면접">면접</button>
             <button type="button" class="chip-f" data-stage="위촉">위촉</button>
             <button type="button" class="chip-f" data-stage="거절">거절</button>
@@ -1368,7 +1369,7 @@
     $("month-label").textContent = monthLabel();
     api("/recruit?month=" + month).then(function (r) {
       var t = r.total;
-      var call = t["통화"] + t["면접"] + t["위촉"] + t["거절"];   // 일지를 쓴 것 자체가 통화다
+      var call = t["통화"] + t["면접"] + t["위촉"] + t["거절"];   // 일지를 쓴 것 자체가 통화다 — 부재는 안 받은 것이라 뺀다
       var meet = t["면접"] + t["위촉"];
       var join = t["위촉"];
       var pct = function (a, b) { return b ? Math.round(a / b * 100) : 0; };
@@ -1383,8 +1384,8 @@
             }).join("") + "</div>"
           + '<p class="note" style="margin-top:10px">통화 → 면접 전환 ' + pct(meet, call)
           + "% · 면접 → 위촉 전환 " + pct(join, meet) + "%"
-          + (t["거절"] ? " · 거절 " + t["거절"] + "건" : "") + "</p>"
-        : '<p class="empty">이번 달 기록이 없습니다. TA 일지에 「단계」를 채우면 여기에 모입니다.</p>';
+          + (t["거절"] ? " · 거절 " + t["거절"] + "건" : "") + (t["부재"] ? " · 부재 " + t["부재"] + "건" : "") + "</p>"
+        : '<p class="empty">' + (t["부재"] ? "이번 달은 부재 " + t["부재"] + "건뿐입니다." : "이번 달 기록이 없습니다. TA 일지에 「단계」를 채우면 여기에 모입니다.") + '</p>';
 
       var stageRow = function (label, v) {
         return '<div class="rep-row"><span class="slot-title">' + esc(label) + "</span>"
@@ -3777,10 +3778,10 @@
   //   (저장은 여전히 reject_sms·cis_sms 두 칸으로 간다. 서버·옛 기록은 그대로)
   // - 담당자·날짜는 윗줄과 같으면 흐리게, 단계는 색으로, 이름 열은 고정
   // - 안심번호·실제번호 합치기는 보류
-  var TA_STAGE_CLS = { "면접": "st-meet", "위촉": "st-hire", "거절": "st-drop" };
+  var TA_STAGE_CLS = { "면접": "st-meet", "위촉": "st-hire", "거절": "st-drop", "부재": "st-away" };
   var TA_COLS = [
     { key: "flag", label: "주의", width: 52, opts: ["주의"] },
-    { key: "stage", label: "단계", width: 56, opts: ["통화", "면접", "위촉", "거절"],
+    { key: "stage", label: "단계", width: 56, opts: ["통화", "부재", "면접", "위촉", "거절"],
       cls: function (v) { return TA_STAGE_CLS[v] || ""; } },
     { key: "author", label: "담당자", width: 70, dim: true },
     { key: "date", label: "날짜", width: 90, date: true, dim: true },

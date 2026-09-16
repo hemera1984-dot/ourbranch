@@ -129,6 +129,7 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .grid td.st-hire { color: var(--green); font-weight: 700; }
 .grid td.st-meet { color: var(--k-lec-fg); font-weight: 700; }
 .grid td.st-drop { color: var(--ter); }
+.grid td.st-away { color: var(--sub); font-style: italic; }
 /* 고정 열(이름) — 옆으로 넘겨도 누구 줄인지 잃지 않게. 폰은 앞 열이 화면을 다 먹어 빼둔다 */
 @media (min-width: 901px) {
   .grid :where(td.pin) { background: var(--surface); }
