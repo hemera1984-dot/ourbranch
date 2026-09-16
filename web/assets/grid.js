@@ -54,6 +54,11 @@ function makeGrid(root, opts) {
 
   // 열이 실제 칸 두 개를 한 칸으로 보여줄 수 있다(문자: 거절·CIS). 읽고 쓰는 길을 한 곳에 둔다.
   function getVal(r, c) { return c.get ? c.get(r) : r[c.key]; }
+  // 월납·CANP처럼 금액 칸은 쉼표를 찍어 보여준다 (2026-09-16 사용자). 숫자가 아니면 그대로.
+  function fmtNum(v) {
+    var t = String(v == null ? "" : v).replace(/,/g, "").trim();
+    return t !== "" && isFinite(Number(t)) ? Number(t).toLocaleString("ko-KR") : (v == null ? "" : v);
+  }
   function setVal(r, c, v) { if (c.set) c.set(r, v); else r[c.key] = v; }
 
   function render() {
@@ -78,7 +83,7 @@ function makeGrid(root, opts) {
         .filter(Boolean).join(" ");
       h.push('<tr data-ri="' + ri + '"' + (cls ? ' class="' + cls + '"' : "") + ">");
       cols.forEach(function (c, ci) {
-        var raw = getVal(r, c), v = esc(raw);
+        var raw = getVal(r, c), v = esc(c.num ? fmtNum(raw) : raw);
         // 담당자·날짜처럼 윗줄과 같은 값은 흐리게 — 바뀌는 곳만 눈에 들어오게
         var same = c.dim && ri > 0 && String(getVal(rows[ri - 1], c) || "") === String(raw || "") && String(raw || "") !== "";
         var extra = [c.num ? "num" : "", c.pin ? "pin" : "", c.big ? "big" : "", same ? "same" : "",
@@ -92,8 +97,11 @@ function makeGrid(root, opts) {
     h.push("</tbody></table></div>");
     root.innerHTML = h.join("");
     // 고정 열은 실제 놓인 자리에 붙인다 — 선언한 폭과 실제 폭이 다르면 겹친다
+    // offsetLeft는 기준(offsetParent)이 표 밖의 요소일 수 있어 사이드바 폭까지 더해진다 —
+    // 그러면 고정 열이 오른쪽으로 밀려 옆 칸 위에 겹친다 (2026-09-16 사용자 화면). 표 기준으로 잰다.
+    var tableLeft = root.querySelector("table").getBoundingClientRect().left;
     root.querySelectorAll("th.pin").forEach(function (th) {
-      var left = th.offsetLeft + "px", ci = th.cellIndex;
+      var left = (th.getBoundingClientRect().left - tableLeft) + "px", ci = th.cellIndex;
       th.style.left = left;
       root.querySelectorAll("tbody tr").forEach(function (tr) { var td = tr.cells[ci]; if (td) td.style.left = left; });
     });
@@ -175,6 +183,7 @@ function makeGrid(root, opts) {
     var r = rows[ri], key = cols[ci].key;
     var v = td.innerText.replace(/\n/g, " ").trim();
     if (cols[ci].date) { v = normDate(v); td.innerText = v; }   // 눈앞에서 바로 고쳐 보여준다
+    if (cols[ci].num) { v = v.replace(/,/g, ""); td.innerText = fmtNum(v); }   // 금액은 저장은 숫자, 표시는 쉼표
     var cur = getVal(r, cols[ci]);
     if (String(cur == null ? "" : cur) === v) return;
     setVal(r, cols[ci], v);
@@ -308,7 +317,7 @@ function makeGrid(root, opts) {
       line.split("\t").forEach(function (val, vi) {
         var c = cols[startCi + vi];
         if (!c) return;
-        setVal(r, c, c.date ? normDate(val) : val.trim());
+        setVal(r, c, c.date ? normDate(val) : c.num ? val.replace(/,/g, "").trim() : val.trim());
       });
       if (r._id != null) dirty.add(r._id); else added.add(r);
     });
