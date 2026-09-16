@@ -120,7 +120,10 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 :root { --zebra: rgba(0, 0, 0, .025); }
 :root[data-theme="dark"] { --zebra: rgba(255, 255, 255, .035); }
 /* 줄 얼룩 — 넓은 줄을 따라갈 때 옆줄로 새지 않게. :where로 낮춰서 주의·포커스 색이 이긴다 */
-.grid tbody :where(tr:nth-child(even):not(.warn)) :where(td:not(.ro)) { background-color: var(--zebra); }
+.grid tbody :where(tr:nth-child(even):not(.warn):not(.group)) :where(td:not(.ro)) { background-color: var(--zebra); }
+/* 날짜 묶음 머리줄 — 탭이 아니라 한 표 안에서 날짜마다 칸이 갈린다 (2026-09-16 사용자) */
+.grid tr.group td { background: var(--canvas); color: var(--ink); font-size: 13px; font-weight: 700; padding: 12px 10px 6px; border-top: 2px solid var(--line-input); }
+.grid tr.group:first-child td { border-top: 0; }
 /* 윗줄과 같은 값은 흐리게 — 바뀌는 곳만 눈에 들어온다 */
 .grid td.same { color: var(--ter); }
 /* 중요한 칸은 한 단계 크게 */
@@ -571,14 +574,6 @@ a.slot-title:hover { text-decoration: underline; }
 }
 .oc-add:hover { background: var(--blue-bg); }
 /* 표 아래 「+ 줄 추가」 — 표가 길어져도 손이 있는 자리에서 넣는다 */
-.row-add {
-  display: block; width: 100%; margin-top: -1px;
-  padding: 10px; border: 1px dashed var(--line-input); border-radius: 0 0 6px 6px;
-  background: var(--surface); color: var(--blue);
-  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
-  transition: background .14s;
-}
-.row-add:hover { background: var(--blue-bg); }
 /* TA 일지 — 표를 화면 높이 안에 가둔다. 줄이 많아도 가로 스크롤바가 늘 화면 안에 있고
    머리줄이 위에 붙어 따라온다 (2026-09-11 사용자: 옆으로 넘기려면 맨 아래까지 가야 했다) */
 #ta-grid .grid-wrap { max-height: max(320px, calc(100vh - 240px)); overflow: auto; }

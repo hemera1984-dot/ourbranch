@@ -11,7 +11,9 @@ function makeGrid(root, opts) {
   //         sticky: 마지막에 넣은 값을 기억해 새 줄에 미리 채운다.
   //         memoryKey: sticky 값을 저장할 이름 (화면마다 따로 기억한다),
   //         rowClass(row) -> string — 줄 전체에 붙일 클래스 (TA 일지 주의 표시 등),
-  //         fixed: {key: value} — 새 줄에 자동으로 박는 값, onDeleteRow(row) }
+  //         fixed: {key: value} — 새 줄에 자동으로 박는 값, onDeleteRow(row),
+  //         groupBy(row) -> key, groupLabel(key, n) — 값이 바뀌는 자리마다 묶음 머리줄을 넣는다
+  //         (줄은 호출부가 이미 그 순서로 정렬해 둔다), insertAt(rows, row) -> index — 새 줄이 들어갈 자리 }
   //
   // 같은 root에 다시 만들 때 옛 리스너가 남으면 삭제·저장이 여러 번 실행된다.
   // 노드를 새로 갈아끼워 이전 그리드의 리스너를 통째로 버린다.
@@ -60,7 +62,17 @@ function makeGrid(root, opts) {
       h.push("<th" + (c.pin ? ' class="pin"' : "") + (c.width ? ' style="min-width:' + c.width + 'px"' : "") + ">" + esc(c.label) + "</th>");
     });
     h.push("<th></th></tr></thead><tbody>");
+    var prevKey;
     rows.forEach(function (r, ri) {
+      if (opts.groupBy) {
+        var key = opts.groupBy(r);
+        if (ri === 0 || key !== prevKey) {
+          var n = 0;
+          for (var k = ri; k < rows.length && opts.groupBy(rows[k]) === key; k++) n++;
+          h.push('<tr class="group"><td colspan="' + (cols.length + 1) + '">' + esc(opts.groupLabel ? opts.groupLabel(key, n) : key) + "</td></tr>");
+        }
+        prevKey = key;
+      }
       var editable = opts.canEditRow ? opts.canEditRow(r) : true;
       var cls = [dirty.has(r._id) || added.has(r) ? "dirty" : "", opts.rowClass ? opts.rowClass(r) : ""]
         .filter(Boolean).join(" ");
@@ -174,15 +186,25 @@ function makeGrid(root, opts) {
     if (opts.onRowCommit) opts.onRowCommit(r);
   }
 
-  function addRow(preset) {
+  function newRow(preset) {
     var mem = readMem();
     var r = Object.assign({}, opts.fixed || {}, preset || {});
     cols.forEach(function (c) { if (r[c.key] == null && c.sticky && mem[c.key]) r[c.key] = mem[c.key]; });
     cols.forEach(function (c) { if (r[c.key] == null) r[c.key] = ""; });
-    rows.push(r);
+    return r;
+  }
+  // 새 줄이 들어갈 자리 — 날짜별로 묶인 표는 오늘 묶음 끝에 넣는다(insertAt). 아니면 맨 끝.
+  function insertRow(r) {
+    var at = opts.insertAt ? opts.insertAt(rows, r) : rows.length;
+    rows.splice(at, 0, r);
     added.add(r);
+    return at;
+  }
+  function addRow(preset) {
+    var r = newRow(preset);
+    var at = insertRow(r);
     render();
-    var td = cellAt(rows.length - 1, 0);
+    var td = cellAt(at, 0);
     if (td) td.focus();
     return r;
   }
@@ -280,7 +302,7 @@ function makeGrid(root, opts) {
     var lines = text.replace(/\r/g, "").split("\n").filter(function (l, i, a) { return !(i === a.length - 1 && l === ""); });
     lines.forEach(function (line, li) {
       var ri = startRi + li;
-      if (ri >= rows.length) addRow();
+      if (ri >= rows.length) { var nr = newRow(); rows.push(nr); added.add(nr); }
       var r = rows[ri];
       if (opts.canEditRow && !opts.canEditRow(r)) return;   // 남의 행은 건드리지 않는다
       line.split("\t").forEach(function (val, vi) {
@@ -336,7 +358,7 @@ function makeGrid(root, opts) {
       rows.forEach(function (r) { if (r._id != null && dirty.has(r._id)) mine[r._id] = r; });
       rows.length = 0;
       incoming.forEach(function (r) { rows.push(mine[r._id] || r); });
-      keepNew.forEach(function (r) { rows.push(r); });
+      keepNew.forEach(function (r) { rows.splice(opts.insertAt ? opts.insertAt(rows, r) : rows.length, 0, r); });
       render();
     },
     // 한 줄만 저장됐다고 표시한다. 여러 건을 따로 보낼 때 일부만 성공하면

@@ -444,10 +444,10 @@
           </div>
           <label class="ta-toggle"><input type="checkbox" id="ta-mine"> 내 기록만</label>
           <span class="note" id="ta-count"></span>
+          <button type="button" class="btn primary" id="ta-add">+ 오늘 줄 추가</button>
         </div>
         <div id="ta-flag-box" class="card card-pad" hidden style="margin-bottom:12px"></div>
         <div id="ta-grid" class="card"></div>
-        <button type="button" class="row-add" id="ta-add">+ 줄 추가</button>
       </div>
       <div class="toolbar" id="ta-admin" hidden style="margin-top:12px">
         <button class="btn" id="ta-pw-set">공용 비밀번호 변경</button>
@@ -3121,7 +3121,7 @@
       data.rows.filter(function (r) { return r.member === BOOT.me.name; })
         .forEach(function (r) { canp += Number(r.canp) || 0; });
       repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp };
-      $("report-goal").textContent = "이번 달 목표 " + (g.goal || "미설정")
+      $("report-goal").textContent = "이번 달 목표 " + (g.goal || "미설정(업적현황에서 부지점장이 넣습니다)")
         + (g.cases ? " · " + g.cases + "건" : "")
         + " · 도입 " + (g.intro || 0) + " · 현재 CANP " + canp.toLocaleString("ko-KR");
     });
@@ -3878,7 +3878,24 @@
       if (taStageF && (r.stage || "통화") !== taStageF) return false;   // 빈 단계는 통화다
       if (taMineF && !taIsMine(r)) return false;
       return true;
+    }).sort(function (a, b) {
+      // 오늘이 맨 위, 어제가 그 아래 (2026-09-16 사용자). 같은 날 안에서는 적은 순.
+      var da = taDayKey(a), db = taDayKey(b);
+      return da === db ? (a._id || 0) - (b._id || 0) : (da < db ? 1 : -1);
     });
+  }
+  function taDayKey(r) { return r.date || "9"; }          // 날짜 없는 줄은 맨 위에
+  function taDayLabel(key, n) {
+    if (key === "9") return "날짜 없음 · " + n + "건";
+    var d = new Date(key + "T00:00:00");
+    var tag = key === fmtDate(new Date()) ? " · 오늘" : key === fmtDate(new Date(Date.now() - 864e5)) ? " · 어제" : "";
+    return (d.getMonth() + 1) + "월 " + d.getDate() + "일 (" + "일월화수목금토"[d.getDay()] + ")" + tag + " · " + n + "건";
+  }
+  // 새 줄은 같은 날 묶음 끝에 — 오늘 줄은 오늘 묶음 밑에 붙고, 오늘 묶음이 없으면 맨 위에 생긴다
+  function taInsertAt(rows, r) {
+    var d = taDayKey(r);
+    for (var i = 0; i < rows.length; i++) if (taDayKey(rows[i]) < d) return i;
+    return rows.length;
   }
   function taShowCount() {
     var n = taVisible().length, total = (taFound || taAll).length;
@@ -3923,6 +3940,7 @@
           return r.author_email ? r.author_email === BOOT.me.email : r.author === BOOT.me.name;
         },
         rowClass: function (r) { return r.flag ? "warn" : ""; },
+        groupBy: taDayKey, groupLabel: taDayLabel, insertAt: taInsertAt,
         onRowCommit: taCommitRow,
         onDeleteRow: function (r, done) {
           api("/ta/" + r._id, { method: "DELETE" }).then(done).then(function () {
