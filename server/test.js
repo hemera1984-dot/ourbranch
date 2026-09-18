@@ -1155,6 +1155,24 @@ async function main() {
   const rsMark = await (await api("t-esl1", "POST", "/events", { date: "2027-06-12", kind: "마감", title: "월마감" })).json();
   assert.equal((await api("t-fc1", "POST", "/events/" + rsMark.id + "/reply", { reply: "참석" })).status, 404, "마감은 응답을 받지 않는다");
 
+  // 63) 한 줄 메모 — 볼 수 있는 일정에 누구나, 지우는 건 쓴 사람이나 일정 관리자, 바뀐 일정에도 남는다
+  const ntEv = await (await api("t-esl1", "POST", "/events", { date: "2027-06-20", kind: "교육", title: "보수 교육", place: "2층" })).json();
+  const nt1 = await (await api("t-fc1", "POST", "/events/" + ntEv.id + "/notes", { text: "  장소  3층으로 바뀜 " })).json();
+  assert.ok(nt1.id > 0);
+  assert.equal((await api("t-fc1", "POST", "/events/" + ntEv.id + "/notes", { text: "   " })).status, 400, "빈 메모는 안 받는다");
+  assert.equal((await api("t-fc2", "POST", "/events/" + ntEv.id + "/notes", { text: "침범" })).status, 404, "못 보는 일정엔 못 붙인다");
+  let ntList = await (await api("t-esl1", "GET", "/events?from=2027-06-20&to=2027-06-20")).json();
+  let ntOne = ntList.filter(e => e.id === ntEv.id)[0];
+  assert.deepEqual(ntOne.notes.map(n => [n.email, n.text]), [["fc1@x.com", "장소 3층으로 바뀜"]], "공백은 한 칸으로");
+  const ntLog = await (await api("t-esl1", "GET", "/events/changes?since=" + encodeURIComponent(sinceLog))).json();
+  assert.ok(ntLog.some(l => l.action === "메모" && l.title.includes("3층")), "메모도 바뀐 일정에 뜬다");
+  const nt2 = await (await api("t-esl1", "POST", "/events/" + ntEv.id + "/notes", { text: "확인" })).json();
+  assert.equal((await api("t-fc1", "DELETE", "/events/" + ntEv.id + "/notes/" + nt2.id)).status, 403, "남의 메모는 못 지운다 (팀원)");
+  assert.equal((await api("t-esl1", "DELETE", "/events/" + ntEv.id + "/notes/" + nt1.id)).status, 200, "일정 관리자는 지운다");
+  assert.equal((await api("t-fc1", "DELETE", "/events/" + ntEv.id + "/notes/" + nt1.id)).status, 404);
+  ntList = await (await api("t-fc1", "GET", "/events?from=2027-06-20&to=2027-06-20")).json();
+  assert.equal(ntList.filter(e => e.id === ntEv.id)[0].notes.length, 1);
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

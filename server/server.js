@@ -661,11 +661,37 @@ route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
   const att = db.prepare("SELECT email, name, reply FROM event_attendees WHERE event_id = ? ORDER BY created");
+  const notes = db.prepare("SELECT id, email, name, text, created FROM event_notes WHERE event_id = ? ORDER BY id");
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
     .filter(e => canSeeEvent(user, e))
     .map(e => e.kind === "강의" ? { ...e, attendees: att.all(e.id) }
-            : REPLY_KINDS.has(e.kind) ? { ...e, replies: att.all(e.id) } : e);
+            : REPLY_KINDS.has(e.kind) ? { ...e, replies: att.all(e.id) } : e)
+    .map(e => e.source === "myguardian" ? e : { ...e, notes: notes.all(e.id) });
   send(res, 200, list);
+});
+
+// 한 줄 메모 — 볼 수 있는 일정이면 누구나 붙인다. 바뀐 일정 목록에도 「메모」로 남는다.
+route("POST", /^\/events\/(\d+)\/notes$/, false, async (req, res, user, m) => {
+  const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
+  if (!e || !canSeeEvent(user, e)) return send(res, 404, { error: "없음" });
+  if (e.source === "myguardian") return send(res, 400, { error: "연동 일정에는 메모를 붙이지 않습니다" });
+  const b = await readJson(req);
+  const text = String(b.text || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!text) return send(res, 400, { error: "메모가 비어 있습니다" });
+  const r = db.prepare("INSERT INTO event_notes (event_id, email, name, text, created) VALUES (?, ?, ?, ?, ?)")
+    .run(e.id, user.email, user.name, text, now());
+  logEvent(user, "메모", { team_id: e.team_id, member_email: e.member_email, kind: e.kind, title: (e.title || e.kind) + " — " + text, date: e.date });
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+
+// 메모 지우기 — 쓴 사람, 또는 그 일정을 고칠 수 있는 사람
+route("DELETE", /^\/events\/(\d+)\/notes\/(\d+)$/, false, (req, res, user, m) => {
+  const n = db.prepare("SELECT * FROM event_notes WHERE id = ? AND event_id = ?").get(Number(m[2]), Number(m[1]));
+  if (!n) return send(res, 404, { error: "없음" });
+  const e = db.prepare("SELECT * FROM events WHERE id = ?").get(n.event_id);
+  if (n.email !== user.email && !(e && canEditEvent(user, e))) return send(res, 403, { error: "권한 없음" });
+  db.prepare("DELETE FROM event_notes WHERE id = ?").run(n.id);
+  send(res, 200, { ok: true });
 });
 
 // 바뀐 일정 — 남이 넣고·고치고·지운 것만(내 것은 내가 안다), 열람 범위 안에서, 최근 것부터

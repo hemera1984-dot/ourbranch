@@ -135,6 +135,18 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_event_log_created ON event_log(created);
 
+    -- 일정 한 줄 메모 — 「장소 2층으로 바뀜」처럼 그 일정에 붙는 짧은 말 (2026-09-18 사용자, 타임트리 댓글의 축소판).
+    -- 채팅이 아니다: 한 줄씩 쌓이고, 지우는 것 말고는 손대지 않는다.
+    CREATE TABLE IF NOT EXISTS event_notes (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      email    TEXT NOT NULL,
+      name     TEXT NOT NULL DEFAULT '',
+      text     TEXT NOT NULL,
+      created  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_notes_event ON event_notes(event_id);
+
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
     -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항
