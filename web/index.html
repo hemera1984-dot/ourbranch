@@ -272,6 +272,7 @@
         <span class="seg">
           <button class="btn seg-btn active" id="view-cal">달력</button>
           <button class="btn seg-btn" id="view-week">주간 확인표</button>
+          <button class="btn seg-btn" id="view-day">하루</button>
         </span>
         <span id="cal-controls">
           <span class="seg" id="scope-seg">
@@ -291,12 +292,20 @@
           <button class="btn" id="week-next">다음 주</button>
           <strong id="week-label" style="font-variant-numeric:tabular-nums"></strong>
         </span>
+        <span id="dc-controls" hidden>
+          <button class="btn" id="dc-prev">이전 날</button>
+          <button class="btn" id="dc-today">오늘</button>
+          <button class="btn" id="dc-next">다음 날</button>
+          <strong id="dc-label" style="font-variant-numeric:tabular-nums"></strong>
+          <span class="note">사람이 열, 시간이 세로 — 빈 칸이 그 사람이 비는 시간입니다. 빈 칸을 누르면 그 시간에 일정을 넣습니다.</span>
+        </span>
       </div>
       <div id="cal-wrap" class="cal-layout">
         <div class="card"><div id="cal-view"></div></div>
         <div class="card" id="cal-day"></div>
         <button type="button" id="day-fold" class="edge-handle desktop-only" title="오른쪽 칸 접기">▶</button>
       </div>
+      <div id="dcol-wrap" hidden><div class="card" style="overflow-x:auto"><div id="dcol-view"></div></div></div>
       <div id="week-wrap" hidden>
       <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
       <div class="section">
@@ -3028,12 +3037,106 @@
     try { localStorage.setItem("ob_sched_view", v); } catch (e) {}
     $("view-cal").classList.toggle("active", v === "cal");
     $("view-week").classList.toggle("active", v === "week");
+    $("view-day").classList.toggle("active", v === "day");
     $("cal-controls").hidden = v !== "cal";
     $("week-controls").hidden = v !== "week";
+    $("dc-controls").hidden = v !== "day";
     $("cal-wrap").style.display = v === "cal" ? "" : "none";
     $("week-wrap").hidden = v !== "week";
-    if (v === "cal") loadCal(); else loadWeek();
+    $("dcol-wrap").hidden = v !== "day";
+    if (v === "cal") loadCal(); else if (v === "day") loadDayCols(); else loadWeek();
   }
+
+  // ── 하루 보기 — 사람이 열, 시간이 세로 (2026-09-18 사용자, Teamup 스케줄러) ──
+  // 누가 언제 비는지 한눈에 — 면접관 배정, 동행 잡기. 팀원도 본다(부지점장만의 화면이 아니다).
+  var DC_FROM = 7, DC_TO = 21, DC_H = 44;            // 07시~21시, 한 시간 44px
+  var dcDate = null;
+  function loadDayCols() {
+    if (!dcDate) dcDate = fmtDate(new Date());
+    var d = new Date(dcDate + "T00:00:00"), todayStr = fmtDate(new Date());
+    $("dc-label").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()] + (dcDate === todayStr ? " (오늘)" : "");
+    var teamId = myTeamId();
+    api("/events?from=" + dcDate + "&to=" + dcDate).then(function (evs) {
+      evs = evs.filter(function (e) {
+        var visible = e.team_id === teamId || e.team_id == null || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
+        return visible && e.status !== "취소";
+      });
+      evsById = {};
+      evs.forEach(function (e) { evsById[e.id] = e; });
+      var cols = [{ em: "", name: "팀 공유", sub: "" }];
+      rosterOf(teamId).forEach(function (m) { cols.push({ em: m.email, name: memberLabel(m), sub: roleTag(m.role) }); });
+      evs.forEach(function (e) {
+        if (e.member_email && !cols.some(function (c) { return c.em === e.member_email; }))
+          cols.push({ em: e.member_email, name: nameOf(e.member_email) || e.member_email, sub: "명단 외" });
+      });
+      var mins = function (t) { return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)); };
+      var h = ['<div class="dcol-grid" style="grid-template-columns:52px repeat(' + cols.length + ',minmax(150px,1fr))">'];
+      h.push('<div class="dcol-head"></div>');
+      cols.forEach(function (c) {
+        h.push('<div class="dcol-head">' + pdot(c.em) + esc(c.name) + (c.sub ? '<span class="sub">' + esc(c.sub) + "</span>" : "") + "</div>");
+      });
+      // 시간 없는 일정은 맨 위 한 줄에
+      h.push('<div class="dcol-time">종일</div>');
+      cols.forEach(function (c) {
+        var list = evs.filter(function (e) { return (e.member_email || "") === c.em && !e.start; });
+        h.push('<div class="dcol-allday' + (canWriteCell(c.em) ? " can-add" : "") + '" data-em="' + esc(c.em) + '">'
+          + list.map(function (e) { return dcolEvHtml(e, null); }).join("") + "</div>");
+      });
+      // 시간표 — 열마다 한 상자, 일정은 시각에 따라 절대 위치
+      h.push('<div class="dcol-times">' );
+      for (var hr = DC_FROM; hr < DC_TO; hr++) h.push('<div class="dcol-time" style="height:' + DC_H + 'px">' + String(hr).padStart(2, "0") + ":00</div>");
+      h.push("</div>");
+      cols.forEach(function (c) {
+        var list = evs.filter(function (e) { return (e.member_email || "") === c.em && e.start; });
+        h.push('<div class="dcol-col' + (canWriteCell(c.em) ? " can-add" : "") + '" data-em="' + esc(c.em) + '" style="height:' + (DC_TO - DC_FROM) * DC_H + 'px">');
+        for (var k = DC_FROM; k < DC_TO; k++) h.push('<div class="dcol-line" style="top:' + (k - DC_FROM) * DC_H + 'px"></div>');
+        if (dcDate === todayStr) {
+          var nowM = new Date().getHours() * 60 + new Date().getMinutes();
+          if (nowM >= DC_FROM * 60 && nowM <= DC_TO * 60)
+            h.push('<div class="dcol-now" style="top:' + ((nowM - DC_FROM * 60) / 60 * DC_H) + 'px"></div>');
+        }
+        // ponytail: 겹치는 일정은 조금씩 오른쪽으로 밀 뿐 폭을 나누지 않는다 — 한 사람 한 시간에 둘 이상은 드물다
+        list.sort(function (a, b) { return a.start < b.start ? -1 : 1; }).forEach(function (e, i) {
+          var s = mins(e.start), en = e.end ? mins(e.end) : s + 60;
+          if (en <= s) en = s + 30;
+          var top = Math.max(0, (s - DC_FROM * 60) / 60 * DC_H), bottom = Math.min((DC_TO - DC_FROM) * DC_H, (en - DC_FROM * 60) / 60 * DC_H);
+          var prev = list[i - 1];
+          var shove = prev && (prev.end ? mins(prev.end) : mins(prev.start) + 60) > s ? 14 : 0;
+          h.push(dcolEvHtml(e, { top: top, height: Math.max(22, bottom - top), left: shove }));
+        });
+        h.push("</div>");
+      });
+      h.push("</div>");
+      $("dcol-view").innerHTML = h.join("");
+    });
+  }
+  function dcolEvHtml(e, pos) {
+    var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
+    var style = pos ? ' style="top:' + pos.top + "px;height:" + pos.height + "px;left:" + (4 + pos.left) + 'px"' : "";
+    return '<div class="slot dcol-ev ' + kindCls + '" data-eid="' + e.id + '" tabindex="0"' + style
+      + ' title="' + esc((e.start ? e.start + (e.end ? "–" + e.end : "") + " " : "") + e.kind + " " + evLabel(e) + (e.place ? " · " + e.place : "")) + '">'
+      + (e.start ? '<span class="dcol-t">' + esc(e.start) + "</span>" : "")
+      + "<span>" + esc(evLabel(e)) + "</span></div>";
+  }
+  $("view-day").addEventListener("click", function () { setSchedView("day"); });
+  $("dc-prev").addEventListener("click", function () { var d = new Date(dcDate + "T00:00:00"); d.setDate(d.getDate() - 1); dcDate = fmtDate(d); loadDayCols(); });
+  $("dc-next").addEventListener("click", function () { var d = new Date(dcDate + "T00:00:00"); d.setDate(d.getDate() + 1); dcDate = fmtDate(d); loadDayCols(); });
+  $("dc-today").addEventListener("click", function () { dcDate = fmtDate(new Date()); loadDayCols(); });
+  $("dcol-view").addEventListener("click", function (e) {
+    var slot = e.target.closest(".dcol-ev");
+    if (slot) { dayListClick(e, loadDayCols); return; }   // 한 번 누르면 고르고, 한 번 더 누르면 수정 창
+    // 빈 자리를 누르면 그 사람·그 시각으로 새 일정 — 시간 칸을 채우는 손이 한 번 준다
+    var col = e.target.closest(".dcol-col.can-add, .dcol-allday.can-add");
+    if (!col) return;
+    var o = { em: col.dataset.em, date: dcDate, onDone: loadDayCols };
+    if (col.classList.contains("dcol-col")) {
+      var y = e.clientY - col.getBoundingClientRect().top;
+      var m = DC_FROM * 60 + Math.floor(y / DC_H * 2) * 30;      // 30분 단위로 끊는다
+      o.start = String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+      o.end = String(Math.floor((m + 60) / 60)).padStart(2, "0") + ":" + String((m + 60) % 60).padStart(2, "0");
+    }
+    openPop(col, o);
+  });
   function scopePass(e) {
     // 「내 일정」에도 공적 일정은 함께 보인다 (2026-08-03 사용자) —
     // 부지점장이 팀원 몫으로 넣은 면접·교육·마감은 각자 자기 달력에서 봐야 한다.
