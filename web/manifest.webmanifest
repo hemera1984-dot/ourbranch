@@ -25,5 +25,44 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "일정 적기",
+      "short_name": "일정 적기",
+      "description": "열자마자 오늘 일정 입력창",
+      "url": "./?quick=add#sched",
+      "icons": [
+        {
+          "src": "assets/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "오늘 일정",
+      "short_name": "오늘 일정",
+      "url": "./#sched",
+      "icons": [
+        {
+          "src": "assets/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "일일보고",
+      "short_name": "일일보고",
+      "url": "./#att",
+      "icons": [
+        {
+          "src": "assets/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

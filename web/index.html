@@ -104,6 +104,7 @@
           <p class="hero-date" id="home-date"></p>
           <h1 class="hero-greet" id="home-greet"></h1>
           <p class="hero-sub">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
+          <button type="button" class="btn primary mobile-only" id="home-add" style="margin-top:10px;padding:11px 18px;font-size:15px">+ 일정 적기</button>
         </div>
         <div class="hero-metrics" id="home-metrics"></div>
       </section>
@@ -228,6 +229,19 @@
               <li>오른쪽 위 <b>점 세 개</b>를 누릅니다.</li>
               <li><b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 누릅니다.</li>
               <li><b>설치</b>를 누르면 끝입니다.</li>
+            </ol>
+          </div>
+          <div class="card card-pad">
+            <strong>「일정 적기」 아이콘 따로 놓기</strong>
+            <p class="tile-sub" style="margin:6px 0 8px">누르면 열자마자 오늘 일정 입력창이 뜹니다. 안드로이드는 앱 아이콘을 길게 눌러도 「일정 적기」가 나옵니다.</p>
+            <div class="toolbar">
+              <input class="input" id="ins-quick-url" readonly style="flex:1;min-width:160px">
+              <button class="btn" id="ins-quick-copy">주소 복사</button>
+            </div>
+            <ol class="ins-steps" style="margin-top:8px">
+              <li>이 주소를 휴대폰에서 엽니다.</li>
+              <li>위와 같은 방법으로 <b>홈 화면에 추가</b>합니다.</li>
+              <li>이름을 「일정 적기」로 두면 아이콘이 하나 더 생깁니다.</li>
             </ol>
           </div>
           <div class="card card-pad">
@@ -859,6 +873,8 @@
     renderGoogle();
   }
   var inviteCode = new URLSearchParams(location.search).get("invite") || "";
+  // 「일정 적기」 바로가기(?quick=add) — 앱을 여는 목적이 입력 하나뿐이니 환영 화면·스플래시 없이 입력창부터
+  var quickAction = new URLSearchParams(location.search).get("quick") || "";
 
   function enterApp() {
     $("gate").hidden = true; $("app").hidden = false;
@@ -888,7 +904,7 @@
       BOOT = b; bootAt = Date.now();
       localStorage.setItem("ob_token", t);
       try { localStorage.setItem("ob_branch", b.branchName || ""); } catch (e) { /* 사파리 비공개 */ }
-      if (landing) { showWelcome(); return; }
+      if (landing && !quickAction) { showWelcome(); return; }
       enterApp();
     }).catch(function (err) {
       var msg = (err && err.message) || "";
@@ -1071,6 +1087,10 @@
     refreshBadges();
     checkSoon();
     loadScreen(name);
+    if (quickAction === "add" && name === "sched") {
+      quickAction = "";
+      setTimeout(function () { openQuickAdd(isMobile() ? loadDay : loadCal); }, 250);
+    }
     // 명단(BOOT)은 앱을 켤 때 받는다. 조직도에서 누가 팀원을 넣으면 다른 사람 화면의 주간 확인표·
     // 하루 보기 열에는 다음 접속 때야 보였다 — 5분 넘게 묵은 명단이면 화면을 옮길 때 새로 받아
     // 한 번 더 그린다 (2026-09-18 사용자). 조직도는 스스로 새로 받으니 뺀다.
@@ -1176,6 +1196,15 @@
   }
   function remember(key, val) {
     try { if (val) localStorage.setItem("ob_last_" + key, val); } catch (e) { /* 사파리 비공개 */ }
+  }
+  // 최근 값 여러 개 — 맨 앞이 가장 최근, 5개까지
+  function recentList(key) {
+    try { return JSON.parse(localStorage.getItem("ob_recent_" + key) || "[]"); } catch (e) { return []; }
+  }
+  function pushRecent(key, val) {
+    var list = recentList(key).filter(function (x) { return x !== val; });
+    list.unshift(val);
+    try { localStorage.setItem("ob_recent_" + key, JSON.stringify(list.slice(0, 5))); } catch (e) { /* 무시 */ }
   }
 
   // 조직도 순서 — 손으로 정한 순서(sort_order)가 있으면 그게 먼저다.
@@ -1284,6 +1313,11 @@
       .sort(function (a, b) { return a.days - b.days; });
   }
 
+  // 오늘·내 몫으로 입력창을 바로 연다 — 홈의 「+ 일정 적기」, 아이콘 바로가기, ?quick=add 가 다 여기로
+  function openQuickAdd(onDone) {
+    openPop(null, { em: BOOT.me.email, date: fmtDate(new Date()), pickMember: true, onDone: onDone || loadHome });
+  }
+  $("home-add").addEventListener("click", function () { openQuickAdd(loadHome); });
   function loadHome() {
     var teamId = myTeamId();
     var todayStr = fmtDate(new Date());
@@ -1587,6 +1621,7 @@
   }
   function renderInstall() {
     $("ins-url").value = appUrl();
+    $("ins-quick-url").value = appUrl() + "?quick=add#sched";
     var box = $("ins-state");
     if (isStandalone()) {
       box.innerHTML = '<strong style="color:var(--green)">이미 설치된 앱으로 열고 있습니다.</strong>'
@@ -1619,10 +1654,14 @@
       "· 아이폰(사파리): 아래 공유 단추 → 홈 화면에 추가",
       "· 안드로이드(크롬): 오른쪽 위 점 세 개 → 홈 화면에 추가",
       "",
+      "일정을 바로 적는 아이콘도 따로 둘 수 있습니다.",
+      appUrl() + "?quick=add#sched",
+      "",
       "일정·일일보고·미션·공지·업적을 한 곳에서 봅니다."
     ].join("\n");
   }
   $("ins-copy").addEventListener("click", function () { copyText(appUrl(), "ins-msg"); });
+  $("ins-quick-copy").addEventListener("click", function () { copyText(appUrl() + "?quick=add#sched", "ins-msg"); });
   $("ins-copy-guide").addEventListener("click", function () { copyText(installGuideText(), "ins-msg"); });
 
   // 합치면 자리 쪽 팀·직급·도입자와 그동안의 기록이 계정으로 넘어가고 빈 자리는 사라진다.
@@ -2718,7 +2757,7 @@
           }).join("") + "</select></div>"
         : "")
       + '<div class="pop-row"><button class="btn primary" id="pop-save">저장</button>'
-      + (isNew ? "" : '<button class="btn" id="pop-del">삭제</button>')
+      + (isNew ? '<button class="btn" id="pop-more">저장하고 하나 더</button>' : '<button class="btn" id="pop-del">삭제</button>')
       + '<button class="btn" id="pop-close">닫기</button></div>';
     document.body.appendChild(p);
     if (anchor && !isMobile()) {
@@ -2774,6 +2813,7 @@
       if (!f) {
         box.innerHTML = '<div class="pop-row"><input type="text" class="input" id="pop-title" placeholder="내용1 (윗줄)" value="'
           + esc(o.title || "") + '"></div>' + line2Row;
+        recentChips(box, kind);
         return;
       }
 
@@ -2823,6 +2863,7 @@
           function (it) { return picked.indexOf(it.em) >= 0; },
           function (it) { return 'data-em="' + esc(it.em) + '"'; });
       box.innerHTML = html + line2Row;
+      recentChips(box, kind);
 
       // 하나만 고르는 칩(차수·차월·반·종류)
       box.querySelectorAll("[data-pick]").forEach(function (btn) {
@@ -2854,6 +2895,25 @@
       renderKindForm();
     });
     p.querySelector("#pop-close").addEventListener("click", closePop);
+    // 지난번에 친 내용은 다시 치지 않는다 — 구분마다 최근 5개를 칩으로 (입력 원칙: 치는 것 → 고르는 것)
+    function recentChips(box, k) {
+      var inp = box.querySelector("#pop-title, #pop-text");
+      if (!inp || !isNew) return;
+      var list = recentList("내용:" + k);
+      if (!list.length) return;
+      var row = document.createElement("div");
+      row.className = "whopick recent-titles";
+      row.innerHTML = list.map(function (t) { return '<button type="button" class="gchip">' + esc(t) + "</button>"; }).join("");
+      row.addEventListener("click", function (e) {
+        var b = e.target.closest(".gchip"); if (!b) return;
+        inp.value = b.textContent; inp.focus();
+      });
+      inp.parentNode.insertAdjacentElement("afterend", row);
+    }
+    var moreAfter = false;
+    if (isNew) p.querySelector("#pop-more").addEventListener("click", function () {
+      moreAfter = true; p.querySelector("#pop-save").click();
+    });
     p.querySelector("#pop-save").addEventListener("click", function () {
       var em = o.pickMember ? p.querySelector("#pop-member").value : o.em;
       var det = null, ttl = "";
@@ -2886,6 +2946,8 @@
       if (det) body.detail = det;
       if (isNew) {
         remember("일정구분", kind);
+        var typed = p.querySelector("#pop-title, #pop-text");
+        if (typed && typed.value.trim()) pushRecent("내용:" + kind, typed.value.trim());
         remember("일정시작", body.start || "");
         remember("일정끝", body.end || "");
         var every = p.querySelector("#pop-rep").value;
@@ -2894,7 +2956,11 @@
       var req = isNew
         ? api("/events", { method: "POST", body: Object.assign({ teamId: myTeamId() }, body) })
         : api("/events/" + o.id, { method: "POST", body: body });
-      req.then(function () { closePop(); refresh(); });
+      req.then(function () {
+        closePop(); refresh();
+        // 「저장하고 하나 더」 — 같은 날·같은 사람·같은 구분으로 새 창. 수첩을 옮겨 적을 때 창을 매번 안 연다
+        if (moreAfter) openPop(null, { em: em, date: o.date, kind: kind, pickMember: o.pickMember, onDone: o.onDone });
+      });
     });
     if (!isNew) p.querySelector("#pop-del").addEventListener("click", function () {
       // 삭제는 한 길로만 — 되돌리기 띠가 안 뜨는 지우기가 남아 있으면 안 된다
@@ -4583,7 +4649,7 @@
   // ── 시작 ──
   // 스플래시 — 세션당 1회, 1.35초. 지점명은 코드에 박지 않고 지난 접속 값을 쓴다.
   (function () {
-    if (/[?&]nosplash/.test(location.search)) return;
+    if (/[?&](nosplash|quick=)/.test(location.search)) return;
     try {
       if (sessionStorage.getItem("ob_splash")) return;
       sessionStorage.setItem("ob_splash", "1");
