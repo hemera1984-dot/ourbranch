@@ -45,7 +45,8 @@ function cors(req, res) {
 }
 
 function send(res, status, body) {
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  // 자료 응답은 캐시하지 않는다 — 달력이 옛 응답을 다시 쓰면 지운 일정이 남아 보인다 (2026-09-18 재현)
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store" });
   res.end(JSON.stringify(body));
 }
 
@@ -644,15 +645,53 @@ route("POST", /^\/notices\/(\d+)\/comments$/, false, async (req, res, user, m) =
 });
 
 // ---- 일정 ----
+// 참석·미정·불참을 받는 구분 — 팀원이 「봤다·간다」를 남겨야 하는 공적 일정 (2026-09-18 사용자).
+// 마감은 응답할 것이 없고, 강의는 종전 「신청」 그대로다.
+const REPLY_KINDS = new Set(["TS1", "TS2", "GROW", "차월교육", "입과교육", "입과전교육생일정", "시험", "교육", "지점일정", "본부일정", "회의"]);
+const REPLIES = ["참석", "미정", "불참"];
+
+// 변경 기록 — 배지·목록은 이 표만 읽는다. 마이가디언 연동(upsert)은 남기지 않는다(본인 것뿐이다).
+const insLog = db.prepare("INSERT INTO event_log (action, by_email, by_name, team_id, member_email, kind, title, date, count, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+function logEvent(user, action, e, count) {
+  insLog.run(action, user.email, user.name, e.team_id ?? null, e.member_email ?? null,
+             e.kind || "", String(e.title || "").slice(0, 120), e.date || "", count || 1, now());
+}
+
 route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
+  const att = db.prepare("SELECT email, name, reply FROM event_attendees WHERE event_id = ? ORDER BY created");
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
     .filter(e => canSeeEvent(user, e))
-    .map(e => e.kind === "강의"
-      ? { ...e, attendees: db.prepare("SELECT email, name FROM event_attendees WHERE event_id = ? ORDER BY created").all(e.id) }
-      : e);
+    .map(e => e.kind === "강의" ? { ...e, attendees: att.all(e.id) }
+            : REPLY_KINDS.has(e.kind) ? { ...e, replies: att.all(e.id) } : e);
   send(res, 200, list);
+});
+
+// 바뀐 일정 — 남이 넣고·고치고·지운 것만(내 것은 내가 안다), 열람 범위 안에서, 최근 것부터
+route("GET", /^\/events\/changes$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const since = String(q.get("since") || "");
+  const rows = db.prepare("SELECT * FROM event_log WHERE created > ? AND by_email <> ? ORDER BY id DESC LIMIT 300")
+    .all(since, user.email)
+    .filter(l => canSeeEvent(user, l))
+    .slice(0, 100);
+  send(res, 200, rows);
+});
+
+// 참석 응답 — 팀 공유 일정은 팀원 누구나, 특정인 몫이면 그 사람만. 빈 값이면 응답을 거둔다.
+route("POST", /^\/events\/(\d+)\/reply$/, false, async (req, res, user, m) => {
+  const e = db.prepare("SELECT * FROM events WHERE id = ?").get(Number(m[1]));
+  if (!e || !REPLY_KINDS.has(e.kind)) return send(res, 404, { error: "응답을 받는 일정이 아닙니다" });
+  if (!canSeeTeam(user, e.team_id)) return send(res, 403, { error: "권한 없음" });
+  if (e.member_email && e.member_email !== user.email) return send(res, 403, { error: "그 사람 몫의 일정입니다" });
+  const b = await readJson(req);
+  const reply = String(b.reply || "");
+  if (reply && !REPLIES.includes(reply)) return send(res, 400, { error: "참석·미정·불참 중 하나" });
+  if (!reply) db.prepare("DELETE FROM event_attendees WHERE event_id = ? AND email = ?").run(e.id, user.email);
+  else db.prepare("INSERT INTO event_attendees (event_id, email, name, created, reply) VALUES (?, ?, ?, ?, ?) ON CONFLICT(event_id, email) DO UPDATE SET reply = excluded.reply, name = excluded.name")
+    .run(e.id, user.email, user.name, now(), reply);
+  send(res, 200, { reply });
 });
 
 // 강의 신청 — 팀이 달라도 지점 전체 강의에 신청할 수 있다. 다시 누르면 취소.
@@ -714,6 +753,7 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
       b.kind || "기타", b.title || "", b.place || "", detail).lastInsertRowid));
   }
   });
+  logEvent(user, "추가", { team_id: teamId, member_email: memberEmail, kind: b.kind || "기타", title: b.title, date: b.date }, ids.length);
   send(res, 200, { id: ids[0], ids, count: ids.length });
 });
 
@@ -777,6 +817,7 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ?, detail = ? WHERE id = ?")
     .run(nextEmail, b.date ?? e.date, b.start ?? e.start, b.end ?? e.end,
          b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, nextDetail, e.id);
+  logEvent(user, "수정", { team_id: e.team_id, member_email: nextEmail, kind: b.kind ?? e.kind, title: b.title ?? e.title, date: b.date ?? e.date });
   send(res, 200, { ok: true });
 });
 
@@ -788,6 +829,7 @@ route("DELETE", /^\/events\/(\d+)$/, false, (req, res, user, m) => {
   if (!e) return send(res, 404, { error: "없음" });
   if (!canEditEvent(user, e)) return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM events WHERE id = ?").run(e.id);
+  logEvent(user, "삭제", e);
   send(res, 200, { ok: true });
 });
 
@@ -1298,6 +1340,7 @@ route("POST", /^\/events\/copy-month$/, false, async (req, res, user) => {
     ins.run(teamId, e.member_email, nd, e.start, e.end, e.kind, e.title, e.place);
     copied++;
   }
+  if (copied) logEvent(user, "추가", { team_id: teamId, member_email: null, kind: "", title: "지난달 일정 가져오기", date: to + "-01" }, copied);
   send(res, 200, { copied, skipped, total: src.length });
 });
 

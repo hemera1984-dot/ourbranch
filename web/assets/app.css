@@ -198,6 +198,39 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .k-면접 { background: var(--k-int-bg); color: var(--k-int-fg); }
 .k-강의 { background: var(--k-lec-bg); color: var(--k-lec-fg); }
 
+/* 사람별 색 — 명단 순서로 12색 (2026-09-18 사용자, Cozi·타임트리). 색 점 + 이름이 한 묶음이다.
+   다크는 같은 색상을 밝게 — 어두운 바탕에서 진한 원색은 검게 보인다. */
+.pdot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin-right: 3px; background: var(--pc, var(--ter)); }
+.cal-ev .pdot { width: 8px; height: 8px; margin-right: 0; }
+.pc-0 { --pc: #c8102e; } .pc-1 { --pc: #e07b00; } .pc-2 { --pc: #a08c00; } .pc-3 { --pc: #1f9d55; }
+.pc-4 { --pc: #0e9aa7; } .pc-5 { --pc: #1f6fd1; } .pc-6 { --pc: #6c4ad1; } .pc-7 { --pc: #c23d9c; }
+.pc-8 { --pc: #8b5a2b; } .pc-9 { --pc: #4b6f92; } .pc-10 { --pc: #d64f2c; } .pc-11 { --pc: #4c8a1b; }
+:root[data-theme="dark"] .pc-0 { --pc: #ff6b8a; } :root[data-theme="dark"] .pc-1 { --pc: #ffab4d; }
+:root[data-theme="dark"] .pc-2 { --pc: #d6c34a; } :root[data-theme="dark"] .pc-3 { --pc: #5fd68a; }
+:root[data-theme="dark"] .pc-4 { --pc: #4fd1dc; } :root[data-theme="dark"] .pc-5 { --pc: #6ea8ff; }
+:root[data-theme="dark"] .pc-6 { --pc: #a894ff; } :root[data-theme="dark"] .pc-7 { --pc: #ea7fcf; }
+:root[data-theme="dark"] .pc-8 { --pc: #d3a26f; } :root[data-theme="dark"] .pc-9 { --pc: #8fb3d4; }
+:root[data-theme="dark"] .pc-10 { --pc: #ff8a66; } :root[data-theme="dark"] .pc-11 { --pc: #9ad65f; }
+
+/* 참석 응답 — 일정 줄 안의 세 버튼. 고른 것만 채운다 */
+.rsvp { display: inline-flex; gap: 4px; margin-left: auto; }
+.rsvp .btn { padding: 1px 8px; font-size: 12px; min-height: 0; }
+.rsvp .btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.rsvp-sum { font-size: 12px; color: var(--sub); }
+
+/* 바뀐 일정 띠 — 지난 확인 뒤 남이 넣고·고치고·지운 것 */
+.ev-changes { margin-bottom: 10px; }
+.ev-changes .ev-strip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--blue-bg); border: 1px solid var(--line); border-radius: 6px; font-weight: 600; }
+.ev-changes .ev-strip .note { margin-left: auto; }
+.ev-changes .ev-list { padding: 6px 12px; }
+.ev-item { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 5px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+.ev-item:first-child { border-top: 0; }
+.ev-item .when { color: var(--ter); font-variant-numeric: tabular-nums; }
+.ev-item .who { font-weight: 700; }
+.ev-item .act { font-weight: 700; }
+.ev-item .act.삭제 { color: var(--red); }
+.ev-item .act.추가 { color: var(--green); }
+
 /* 월간 달력 점 색 — 구분별 원색 */
 .dot.k-상담, .dot.k-고객미팅 { background: var(--blue); }
 .dot.k-외근 { background: var(--green); }

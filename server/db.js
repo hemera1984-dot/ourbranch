@@ -118,6 +118,23 @@ export function openDb(file) {
       PRIMARY KEY (event_id, email)
     );
 
+    -- 일정 변경 기록 — 누가 무엇을 넣고·고치고·지웠는지. 「바뀐 일정」 배지의 재료다
+    -- (2026-09-18 사용자, 타임트리의 활동 피드). 지운 일정은 행이 없어지므로 따로 남긴다.
+    CREATE TABLE IF NOT EXISTS event_log (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      action       TEXT NOT NULL,             -- 추가·수정·삭제
+      by_email     TEXT NOT NULL,
+      by_name      TEXT NOT NULL DEFAULT '',
+      team_id      INTEGER,
+      member_email TEXT,
+      kind         TEXT NOT NULL DEFAULT '',
+      title        TEXT NOT NULL DEFAULT '',
+      date         TEXT NOT NULL DEFAULT '',
+      count        INTEGER NOT NULL DEFAULT 1,
+      created      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_log_created ON event_log(created);
+
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
     -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항
@@ -256,6 +273,8 @@ export function openDb(file) {
   // 이미 만들어진 DB에 컬럼 추가 (있으면 실패하므로 삼킨다 — 마이가디언 방식)
   for (const sql of [
     "ALTER TABLE members ADD COLUMN recruiter_email TEXT",
+    // 참석 응답 — 강의 신청 표를 넓혀 시험·교육·행사에 참석·미정·불참을 남긴다 (2026-09-18)
+    "ALTER TABLE event_attendees ADD COLUMN reply TEXT NOT NULL DEFAULT '참석'",
     "ALTER TABLE events ADD COLUMN place TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE perf_goals ADD COLUMN intro INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE attendance ADD COLUMN work TEXT NOT NULL DEFAULT ''",

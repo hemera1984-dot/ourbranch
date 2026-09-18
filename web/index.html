@@ -245,6 +245,7 @@
       <p class="eyebrow">일정</p>
       <h1 class="desktop-only">주간 확인표</h1>
       <h1 class="mobile-only">오늘 일정</h1>
+      <div id="ev-changes" class="ev-changes" hidden></div>
 
       <div class="mobile-only">
         <div class="toolbar" style="margin-bottom:10px">
@@ -590,6 +591,9 @@
     "시험", "교육", "지점일정", "본부일정", "마감"
   ];
   function isOfficial(e) { return OFFICIAL_KINDS.indexOf(e.kind) >= 0; }
+  // 참석·미정·불참을 받는 구분 — 서버 REPLY_KINDS와 같은 목록 (마감은 빼고 회의는 넣는다)
+  var REPLY_KINDS = OFFICIAL_KINDS.filter(function (k) { return k !== "마감"; }).concat(["회의"]);
+  function takesReply(e) { return REPLY_KINDS.indexOf(e.kind) >= 0; }
 
   // 예전에 저장된 구분(상담·강의·면접·GROW)도 색·형식은 그대로 읽는다.
   // 목록에서만 뺐다 — 지난 기록을 깨뜨리지 않기 위해서다.
@@ -907,20 +911,70 @@
       var undone = r[1].filter(function (t) {
         return t.team_id === teamId && isMyTask(t) && !myDone(t);
       }).length;
-      var link = document.querySelector('#nav a[data-screen="board"]');
-      if (!link) return;
       var n = unread + undone;
       $("tab-dot").hidden = !(n > 0);
-      link.textContent = "미션·공지";
-      if (n > 0) {
-        var b = document.createElement("span");
-        b.className = "nav-badge";
-        b.textContent = n > 9 ? "9+" : String(n);
-        b.title = "안 읽은 공지 " + unread + "건 · 미달성 미션 " + undone + "건";
-        link.appendChild(b);
-      }
+      navBadge("board", "미션·공지", n, "안 읽은 공지 " + unread + "건 · 미달성 미션 " + undone + "건");
     });
+    // 바뀐 일정 — 남이 넣고·고치고·지운 것 (앱 내 알림, 타임트리의 활동 피드)
+    api("/events/changes?since=" + encodeURIComponent(evSeen())).catch(function () { return []; })
+      .then(function (list) {
+        evChanges = list;
+        navBadge("sched", "일정", list.length, "지난 확인 뒤 바뀐 일정 " + list.length + "건");
+        renderEvChanges();
+      });
   }
+  function navBadge(screenName, label, n, title) {
+    var link = document.querySelector('#nav a[data-screen="' + screenName + '"]');
+    if (!link) return;
+    link.textContent = label;
+    if (n > 0) {
+      var b = document.createElement("span");
+      b.className = "nav-badge";
+      b.textContent = n > 9 ? "9+" : String(n);
+      b.title = title;
+      link.appendChild(b);
+    }
+  }
+  // 「지난 확인」 시각은 기기마다 — 처음 켠 기기는 지금부터 센다 (옛 기록이 한꺼번에 쏟아지지 않게)
+  var evChanges = [];
+  // 서버의 created와 같은 꼴(+09:00)로 만든다 — 글자 비교라서 Z(UTC)와 섞이면 9시간 어긋난다
+  function kstNow() { return new Date(Date.now() + 9 * 3600e3).toISOString().replace("Z", "+09:00"); }
+  function evSeen() {
+    var v = "";
+    try { v = localStorage.getItem("ob_ev_seen") || ""; } catch (e) { /* 무시 */ }
+    if (!v) { v = kstNow(); try { localStorage.setItem("ob_ev_seen", v); } catch (e) { /* 무시 */ } }
+    return v;
+  }
+  function renderEvChanges() {
+    var box = $("ev-changes");
+    if (!box) return;
+    if (!evChanges.length) { box.hidden = true; box.innerHTML = ""; return; }
+    var open = box.dataset.open === "1";
+    box.hidden = false;
+    box.innerHTML = '<div class="card"><div class="ev-strip"><span>바뀐 일정 ' + evChanges.length + "건</span>"
+      + '<button type="button" class="btn" id="ev-toggle">' + (open ? "접기" : "보기") + "</button>"
+      + '<button type="button" class="btn primary" id="ev-ack">확인</button></div>'
+      + (open ? '<div class="ev-list">' + evChanges.map(function (l) {
+          var d = l.date ? new Date(l.date + "T00:00:00") : null;
+          var when = l.created.slice(5, 10).replace("-", "/") + " " + l.created.slice(11, 16);
+          var what = (d ? (d.getMonth() + 1) + "/" + d.getDate() + " " : "")
+            + (l.member_email ? nameOf(l.member_email) + " · " : "")
+            + (l.kind ? l.kind + " " : "") + (l.title && l.title !== l.kind ? l.title : "")
+            + (l.count > 1 ? " ×" + l.count : "");
+          return '<div class="ev-item"><span class="when">' + esc(when) + '</span><span class="who">' + esc(l.by_name || l.by_email)
+            + '</span><span class="act ' + esc(l.action) + '">' + esc(l.action) + "</span><span>" + esc(what) + "</span></div>";
+        }).join("") + "</div>" : "")
+      + "</div>";
+  }
+  $("ev-changes").addEventListener("click", function (e) {
+    var box = $("ev-changes");
+    if (e.target.id === "ev-toggle") { box.dataset.open = box.dataset.open === "1" ? "0" : "1"; renderEvChanges(); }
+    if (e.target.id === "ev-ack") {
+      try { localStorage.setItem("ob_ev_seen", kstNow()); } catch (err) { /* 무시 */ }
+      evChanges = []; box.dataset.open = "0";
+      renderEvChanges(); navBadge("sched", "일정", 0, "");
+    }
+  });
 
   // ── 저장 안 한 입력 지키기 ──
   // 그리드에 쓴 내용은 「저장」을 눌러야 서버로 간다. 그 전에 화면을 옮기거나
@@ -1067,6 +1121,20 @@
         return (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9) || a.name.localeCompare(b.name);
       });
   }
+  // 사람별 색 — 명단(조직도) 순서로 12색을 돌린다. 같은 팀 12명까지는 안 겹친다.
+  // ponytail: 13명째부터 겹친다. 순서를 바꾸면 색도 바뀐다 — 팀 순서는 자주 안 바뀐다.
+  var PCOLORS = 12;
+  function colorOf(email) {
+    if (!email) return -1;
+    var m = BOOT.members.filter(function (x) { return x.email === email; })[0];
+    var i = m ? rosterOf(m.team_id).map(function (x) { return x.email; }).indexOf(email) : -1;
+    if (i < 0) { i = 0; for (var k = 0; k < email.length; k++) i = (i * 31 + email.charCodeAt(k)) % PCOLORS; }
+    return i % PCOLORS;
+  }
+  function pdot(email) {
+    var c = colorOf(email);
+    return c < 0 ? "" : '<span class="pdot pc-' + c + '"></span>';
+  }
   function emailOf(name) {
     var m = BOOT.members.filter(function (x) { return x.name === name; })[0];
     if (m) return m.email;
@@ -1186,6 +1254,7 @@
         return '<div class="tile-row">'
           + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
           + '<span class="chip k-' + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타") + '">' + esc(e.kind) + "</span>"
+          + (e.member_email && e.member_email !== BOOT.me.email ? pdot(e.member_email) : "")
           + '<span class="slot-title">' + esc((e.member_email && e.member_email !== BOOT.me.email ? nameOf(e.member_email) + " · " : "") + (e.title || "")) + "</span>"
           + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "") + "</div>";
       }
@@ -2337,6 +2406,22 @@
         + (isOwner && att.length ? " (" + esc(att.map(function (a) { return a.name; }).join(", ")) + ")" : "") + "</span>"
         + (!isOwner ? '<button class="btn att-btn' + (meIn ? "" : " primary") + '" data-eid="' + e.id + '" style="padding:1px 8px;font-size:12px">' + (meIn ? "신청 취소" : "신청") + "</button>" : "");
     }
+    // 참석 응답 — 팀 공유 일정은 누구나, 특정인 몫이면 그 사람만 누른다.
+    // 부지점장에겐 누가 뭐라 했는지 이름까지 (2026-09-18 사용자, 톡캘린더).
+    var rsvp = "";
+    if (takesReply(e) && !fromMg) {
+      var reps = e.replies || [];
+      var mineRep = (reps.filter(function (r) { return r.email === BOOT.me.email; })[0] || {}).reply || "";
+      var canReply = !e.member_email || e.member_email === BOOT.me.email;
+      var cnt = { "참석": [], "미정": [], "불참": [] };
+      reps.forEach(function (r) { if (cnt[r.reply]) cnt[r.reply].push(r.name || nameOf(r.email) || r.email); });
+      var sum = ["참석", "미정", "불참"].filter(function (k) { return cnt[k].length; })
+        .map(function (k) { return k + " " + cnt[k].length + (BOOT.me.canSetGoal ? " (" + cnt[k].join(", ") + ")" : ""); }).join(" · ");
+      rsvp = (sum ? '<span class="rsvp-sum">' + esc(sum) + "</span>" : "")
+        + (canReply ? '<span class="rsvp">' + ["참석", "미정", "불참"].map(function (k) {
+            return '<button type="button" class="btn rsvp-btn' + (mineRep === k ? " on" : "") + '" data-eid="' + e.id + '" data-r="' + k + '">' + k + "</button>";
+          }).join("") + "</span>" : "");
+    }
     return '<div class="slot' + (editable ? " editable" : "") + '" data-eid="' + e.id + '"'
       + (editable ? ' tabindex="0"' : "") + ">"
       + (e.start ? '<span class="slot-time">' + esc(e.start + (e.end ? "–" + e.end : "")) + "</span>" : "")
@@ -2345,6 +2430,7 @@
       + line2
       + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "")
       + lecture
+      + rsvp
       + (editable ? '<button type="button" class="slot-del" data-eid="' + e.id + '" title="지우기">×</button>' : "")
       + "</div>";
   }
@@ -2360,7 +2446,7 @@
     return groups.map(function (g) {
       var items = evs.filter(function (e) { return (e.member_email || "") === g.em; });
       if (!items.length && (onlyWithItems || (g.em !== BOOT.me.email && g.em !== ""))) return "";
-      return '<div class="day-group"><div class="day-name">' + esc(g.name)
+      return '<div class="day-group"><div class="day-name">' + pdot(g.em) + esc(g.name)
         + (g.sub ? '<span class="sub">' + esc(g.sub) + "</span>" : "") + "</div>"
         + (items.length ? items.map(slotHtml).join("") : '<span class="cell-empty">일정 없음</span>')
         + "</div>";
@@ -2390,6 +2476,14 @@
     }
     var att = e.target.closest(".att-btn");
     if (att) { api("/events/" + att.dataset.eid + "/attend", { method: "POST" }).then(refresh); return; }
+    var rb = e.target.closest(".rsvp-btn");
+    if (rb) {
+      e.stopPropagation();
+      // 이미 고른 것을 다시 누르면 거둔다
+      var next = rb.classList.contains("on") ? "" : rb.dataset.r;
+      api("/events/" + rb.dataset.eid + "/reply", { method: "POST", body: { reply: next } }).then(refresh);
+      return;
+    }
     var slot = e.target.closest(".slot");
     var anchor = slot;
     if (!slot || !slot.dataset.eid) return;
@@ -2427,7 +2521,7 @@
     rowCells(function (e) { return !e.member_email; }, "");
     var roster = rosterOf(myTeamId());
     roster.forEach(function (m) {
-      h.push('<div class="week-name">' + esc(memberLabel(m)) + '<span class="sub">' + esc(roleTag(m.role)) + "</span></div>");
+      h.push('<div class="week-name">' + pdot(m.email) + esc(memberLabel(m)) + '<span class="sub">' + esc(roleTag(m.role)) + "</span></div>");
       rowCells(function (e) { return e.member_email === m.email; }, m.email);
     });
     // 명단 밖 인원(총관리자 등)의 개인 일정도 놓치지 않는다
@@ -2438,7 +2532,7 @@
     });
     Object.keys(extras).forEach(function (em) {
       var sub = BOOT.me.recruits.indexOf(em) >= 0 ? "내 도입" : "명단 외";
-      h.push('<div class="week-name">' + esc(nameOf(em) || em) + '<span class="sub">' + sub + "</span></div>");
+      h.push('<div class="week-name">' + pdot(em) + esc(nameOf(em) || em) + '<span class="sub">' + sub + "</span></div>");
       rowCells(function (e) { return e.member_email === em; }, em);
     });
     h.push("</div>");
@@ -2912,9 +3006,11 @@
         function evLines(list) {
           var show = open ? list : list.slice(0, 3);
           return show.map(function (e) {
-            return '<div class="cal-ev"><span class="dot ' + kindClsOf(e) + '"></span>'
+            // 남의 일정은 사람 색 점 + 이름 (2026-09-18 사용자). 내 일정·팀 공유는 구분 색 그대로
+            var person = calScope !== "mine" && e.member_email && e.member_email !== BOOT.me.email;
+            return '<div class="cal-ev">' + (person ? pdot(e.member_email) : '<span class="dot ' + kindClsOf(e) + '"></span>')
               + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
-              + "<span>" + esc(evLabel(e)) + "</span></div>";
+              + "<span>" + (person ? esc(nameOf(e.member_email)) + " " : "") + esc(evLabel(e)) + "</span></div>";
           }).join("")
           + (!open && list.length > 3 ? '<div class="cal-more">+' + (list.length - 3) + "건</div>" : "");
         }

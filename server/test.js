@@ -1119,6 +1119,42 @@ async function main() {
   assert.equal((await api("t-fc2", "GET", "/ta?q=a")).status, 400, "한 글자는 받지 않는다");
   await api("t-super", "POST", "/ta/password", { password: "" });
 
+  // 61) 바뀐 일정 — 남이 넣고·고치고·지운 것만, 내 팀 것만, 내 것은 빠진다 (2026-09-18 타임트리 활동 피드)
+  const sinceLog = new Date(Date.now() + 9 * 3600e3 - 60e3).toISOString().replace("Z", "+09:00");
+  const chEv = await (await api("t-esl1", "POST", "/events", { date: "2027-06-01", kind: "시험", title: "생보 시험", repeat: { every: "week", count: 3 } })).json();
+  await api("t-esl1", "POST", "/events/" + chEv.id, { title: "생보 시험(장소 변경)" });
+  const chSeen = await (await api("t-fc1", "GET", "/events/changes?since=" + encodeURIComponent(sinceLog))).json();
+  assert.ok(chSeen.some(l => l.action === "추가" && l.count === 3 && l.kind === "시험"), "반복 3건은 한 줄 ×3");
+  assert.ok(chSeen.some(l => l.action === "수정" && l.title === "생보 시험(장소 변경)"), "수정도 남는다");
+  assert.ok(!chSeen.some(l => l.by_email === "fc1@x.com"), "내 것은 없다");
+  const chSelf = await (await api("t-esl1", "GET", "/events/changes?since=" + encodeURIComponent(sinceLog))).json();
+  assert.ok(!chSelf.some(l => l.title === "생보 시험(장소 변경)"), "내가 고친 것은 나에게 안 뜬다");
+  const chOther = await (await api("t-fc2", "GET", "/events/changes?since=" + encodeURIComponent(sinceLog))).json();
+  assert.ok(!chOther.some(l => l.kind === "시험" && l.team_id === 1), "다른 팀 일정은 안 보인다");
+  await api("t-esl1", "DELETE", "/events/" + chEv.id);
+  const chDel = await (await api("t-fc1", "GET", "/events/changes?since=" + encodeURIComponent(sinceLog))).json();
+  assert.ok(chDel.some(l => l.action === "삭제" && l.kind === "시험"), "지운 것도 남는다");
+
+  // 62) 참석 응답 — 팀 공유 일정은 팀원 누구나, 특정인 몫은 그 사람만, 다시 누르면 거둔다 (톡캘린더)
+  const rsEv = await (await api("t-esl1", "POST", "/events", { date: "2027-06-10", kind: "교육", title: "신인 교육" })).json();
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsEv.id + "/reply", { reply: "참석" })).status, 200);
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsEv.id + "/reply", { reply: "출석" })).status, 400, "세 값만");
+  assert.equal((await api("t-fc2", "POST", "/events/" + rsEv.id + "/reply", { reply: "참석" })).status, 403, "다른 팀은 못 누른다");
+  let rsList = await (await api("t-esl1", "GET", "/events?from=2027-06-10&to=2027-06-10")).json();
+  let rsOne = rsList.filter(e => e.id === rsEv.id)[0];
+  assert.deepEqual(rsOne.replies.map(r => [r.email, r.reply]), [["fc1@x.com", "참석"]]);
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsEv.id + "/reply", { reply: "불참" })).status, 200);
+  rsList = await (await api("t-fc1", "GET", "/events?from=2027-06-10&to=2027-06-10")).json();
+  assert.equal(rsList.filter(e => e.id === rsEv.id)[0].replies[0].reply, "불참", "바꾸면 덮어쓴다");
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsEv.id + "/reply", { reply: "" })).status, 200);
+  rsList = await (await api("t-fc1", "GET", "/events?from=2027-06-10&to=2027-06-10")).json();
+  assert.equal(rsList.filter(e => e.id === rsEv.id)[0].replies.length, 0, "빈 값이면 거둔다");
+  const rsMine = await (await api("t-esl1", "POST", "/events", { date: "2027-06-11", kind: "시험", title: "손보 시험", memberEmail: "fc1@x.com" })).json();
+  assert.equal((await api("t-esl1", "POST", "/events/" + rsMine.id + "/reply", { reply: "참석" })).status, 403, "남의 몫 일정은 그 사람만");
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsMine.id + "/reply", { reply: "미정" })).status, 200);
+  const rsMark = await (await api("t-esl1", "POST", "/events", { date: "2027-06-12", kind: "마감", title: "월마감" })).json();
+  assert.equal((await api("t-fc1", "POST", "/events/" + rsMark.id + "/reply", { reply: "참석" })).status, 404, "마감은 응답을 받지 않는다");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {
