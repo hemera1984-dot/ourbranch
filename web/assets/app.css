@@ -173,8 +173,17 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .dcol-grid { display: grid; background: var(--surface); }
 .dcol-head { position: sticky; top: 0; z-index: 2; padding: 8px 10px; background: var(--canvas); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dcol-head .sub { margin-left: 6px; font-weight: 400; font-size: 12px; color: var(--ter); }
-.dcol-time { padding: 2px 6px 0 0; text-align: right; font-size: 11px; color: var(--ter); border-right: 1px solid var(--line); font-variant-numeric: tabular-nums; box-sizing: border-box; }
+.dcol-time { padding: 2px 6px 0 0; text-align: right; font-size: 11px; color: var(--ter); border-right: 1px solid var(--line); font-variant-numeric: tabular-nums; box-sizing: border-box; background: var(--surface); }
 .dcol-times { border-right: 1px solid var(--line); }
+/* 시간 열은 옆으로 넘겨도 남는다 — 폰에서 열이 열다섯이면 스크롤이 길다 */
+.dcol-times, .dcol-grid > .dcol-time { position: sticky; left: 0; z-index: 2; background: var(--surface); }
+.dcol-head:first-child { left: 0; z-index: 3; }
+@media (max-width: 900px) {
+  .dcol-grid { --dcol-t: 40px; --dcol-w: minmax(116px, 1fr); }
+  .dcol-head { font-size: 12px; padding: 7px 6px; }
+  .dcol-head .sub { display: none; }
+  #m-cols.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+}
 .dcol-allday { min-height: 30px; padding: 3px 4px; border-right: 1px solid var(--line); border-bottom: 2px solid var(--line-input); display: flex; flex-wrap: wrap; gap: 3px; }
 .dcol-col { position: relative; border-right: 1px solid var(--line); overflow: hidden; }
 .dcol-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line); }

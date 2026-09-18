@@ -255,6 +255,7 @@
           <button class="btn" id="m-cal-next">다음 달</button>
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="m-cal-copy">지난달 가져오기</button>
+          <button class="btn" id="m-cols">사람별</button>
         </div>
         <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
           <button class="btn seg-btn" data-scope="esl" hidden>부지점장</button>
@@ -266,6 +267,8 @@
         <div class="card" id="day-view"></div>
         <button class="btn primary fab" id="day-add" type="button">일정 추가</button>
       </div>
+
+      <div id="dcol-wrap" hidden><div class="card" style="overflow-x:auto"><div id="dcol-view"></div></div></div>
 
       <div class="desktop-only">
       <div class="toolbar" style="margin-bottom:10px">
@@ -305,7 +308,6 @@
         <div class="card" id="cal-day"></div>
         <button type="button" id="day-fold" class="edge-handle desktop-only" title="오른쪽 칸 접기">▶</button>
       </div>
-      <div id="dcol-wrap" hidden><div class="card" style="overflow-x:auto"><div id="dcol-view"></div></div></div>
       <div id="week-wrap" hidden>
       <div class="card" style="overflow-x:auto"><div id="week-view"></div></div>
       <div class="section">
@@ -532,7 +534,7 @@
   var API = window.OB_API || (/insurguard\.life$/.test(location.hostname)
     ? "https://api.insurguard.life/branch" : "");
 
-  var token = null, BOOT = null, month = new Date().toISOString().slice(0, 7);
+  var token = null, BOOT = null, bootAt = 0, month = new Date().toISOString().slice(0, 7);
   var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
@@ -883,7 +885,7 @@
   function tryEnter(t, landing) {
     token = t;
     api("/bootstrap").then(function (b) {
-      BOOT = b;
+      BOOT = b; bootAt = Date.now();
       localStorage.setItem("ob_token", t);
       try { localStorage.setItem("ob_branch", b.branchName || ""); } catch (e) { /* 사파리 비공개 */ }
       if (landing) { showWelcome(); return; }
@@ -952,7 +954,7 @@
     }
   }
   function refreshBoot() {
-    return api("/bootstrap").then(function (b) { BOOT = b; renderShell(); }).then(loadInterviewers);
+    return api("/bootstrap").then(function (b) { BOOT = b; bootAt = Date.now(); renderShell(); }).then(loadInterviewers);
   }
 
   // 미확인 공지·미달성 미션을 탭에 점으로 — 홈을 건너뛰어도 놓치지 않게 (앱 내 알림)
@@ -1068,6 +1070,14 @@
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
     checkSoon();
+    loadScreen(name);
+    // 명단(BOOT)은 앱을 켤 때 받는다. 조직도에서 누가 팀원을 넣으면 다른 사람 화면의 주간 확인표·
+    // 하루 보기 열에는 다음 접속 때야 보였다 — 5분 넘게 묵은 명단이면 화면을 옮길 때 새로 받아
+    // 한 번 더 그린다 (2026-09-18 사용자). 조직도는 스스로 새로 받으니 뺀다.
+    if (name !== "org" && Date.now() - bootAt > 5 * 60e3)
+      refreshBoot().then(function () { if (screen === name) loadScreen(name); });
+  }
+  function loadScreen(name) {
     if (name === "home") loadHome();
     // 조직도는 여러 사람이 함께 고친다. 열어둔 채 놔둔 화면으로 저장하면
     // 이미 없는 자리에 붙이려 들게 된다 — 들어올 때마다 지금 명단으로 맞춘다.
@@ -2946,11 +2956,22 @@
     return calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
       .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
   }
+  // 폰에서도 사람별 열 보기 (2026-09-18 사용자). 목록 자리에 열 표가 대신 선다 — 옆으로 넘겨 본다.
+  var mColsOn = (function () { try { return localStorage.getItem("ob_m_cols") === "1"; } catch (e) { return false; } })();
   function renderMobileDay() {
     $("day-label").textContent = dayLabelOf(selDate);
+    $("m-cols").classList.toggle("active", mColsOn);
+    $("dcol-wrap").hidden = !mColsOn;
+    $("day-view").hidden = mColsOn;
+    if (mColsOn) { dcDate = selDate; loadDayCols(); return; }
     var h = dayGroupsHtml(dayItemsOf(selDate), myTeamId());
     $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
   }
+  $("m-cols").addEventListener("click", function () {
+    mColsOn = !mColsOn;
+    try { localStorage.setItem("ob_m_cols", mColsOn ? "1" : "0"); } catch (e) { /* 무시 */ }
+    renderMobileDay();
+  });
 
   // 날짜 탭 → 하루 상세 시트 (크게 읽는 화면)
   function closeSheet() {
@@ -2984,7 +3005,7 @@
     selDate = cell.dataset.date;
     renderCalGrid("m-cal-view", true);
     renderMobileDay();
-    openDaySheet(selDate);
+    if (!mColsOn) openDaySheet(selDate);
   });
   $("m-cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadDay(); });
   $("m-cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadDay(); });
@@ -3070,7 +3091,7 @@
           cols.push({ em: e.member_email, name: nameOf(e.member_email) || e.member_email, sub: "명단 외" });
       });
       var mins = function (t) { return Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)); };
-      var h = ['<div class="dcol-grid" style="grid-template-columns:52px repeat(' + cols.length + ',minmax(150px,1fr))">'];
+      var h = ['<div class="dcol-grid" style="grid-template-columns:var(--dcol-t, 52px) repeat(' + cols.length + ',var(--dcol-w, minmax(150px,1fr)))">'];
       h.push('<div class="dcol-head"></div>');
       cols.forEach(function (c) {
         h.push('<div class="dcol-head">' + pdot(c.em) + esc(c.name) + (c.sub ? '<span class="sub">' + esc(c.sub) + "</span>" : "") + "</div>");
