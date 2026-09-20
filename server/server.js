@@ -605,11 +605,36 @@ route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
 // 누구나 쓰고 누구나 본다. 상태와 답변은 총관리자만 — 고치는 사람이 한 명이라서다.
 const REQ_KINDS = ["프로그램 수정", "기능 제안", "오류 신고", "기타"];
 const REQ_STATUS = ["접수", "진행 중", "완료", "보류"];
+// 마이가디언의 「수정 요청」도 이 게시판을 쓴다(2026-09-20 사용자: 「두 메뉴가 동일했으면 —
+// 우리 시스템에서 돌아가는 거니」). 계정이 하나라 세션도 같다. 어느 프로그램 이야기인지만 적는다.
+const REQ_PROGRAMS = ["하랑지점", "마이가디언"];
+// 화면 캡처 — 글로는 설명이 안 되는 오류가 많다. 서류함과 다른 폴더에 둔다(서류 청소가 지운다).
+const REQ_DIR = process.env.REQ_FILE_DIR || (String(FILE_DIR).replace(/[\\/]+$/, "") + "-requests");
+const SHOT_EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp" };
+const MAX_SHOT = 5 * 1024 * 1024;
+const MAX_SHOTS = 4;
+function dropShots(requestId) {
+  for (const f of db.prepare("SELECT path FROM request_shots WHERE request_id = ?").all(requestId)) {
+    try { unlinkSync(join(REQ_DIR, f.path)); } catch (e) { /* 이미 없으면 그만 */ }
+  }
+  db.prepare("DELETE FROM request_shots WHERE request_id = ?").run(requestId);
+}
+// 올려만 놓고 요청에 안 붙인 캡처 — 하루 지나면 지운다
+function purgeLooseShots() {
+  for (const f of db.prepare("SELECT id, path, created FROM request_shots WHERE request_id IS NULL").all()) {
+    if (Date.now() - new Date(f.created).getTime() < 24 * 3600e3) continue;   // created는 +09:00이 붙은 ISO라 그대로 읽힌다
+    try { unlinkSync(join(REQ_DIR, f.path)); } catch (e) { /* 없음 */ }
+    db.prepare("DELETE FROM request_shots WHERE id = ?").run(f.id);
+  }
+}
 route("GET", /^\/requests$/, false, (req, res, user) => {
   const votes = db.prepare("SELECT email FROM request_votes WHERE request_id = ?");
+  const shots = db.prepare("SELECT id FROM request_shots WHERE request_id = ? ORDER BY id");
   send(res, 200, db.prepare("SELECT * FROM requests ORDER BY id DESC LIMIT 300").all().map(r => {
     const v = votes.all(r.id).map(x => x.email);
-    return { ...r, votes: v.length, voted: v.includes(user.email) };
+    // mine·admin — 마이가디언 화면은 이 서버의 「나」를 따로 받지 않는다. 항목마다 알려 준다.
+    return { ...r, votes: v.length, voted: v.includes(user.email), shots: shots.all(r.id).map(x => x.id),
+             mine: r.author_email === user.email, admin: !!user.isSuper };
   }));
 });
 route("POST", /^\/requests$/, false, async (req, res, user) => {
@@ -617,9 +642,15 @@ route("POST", /^\/requests$/, false, async (req, res, user) => {
   const title = String(b.title || "").trim().slice(0, 100);
   if (!title) return send(res, 400, { error: "제목을 적어 주세요" });
   const kind = REQ_KINDS.includes(b.kind) ? b.kind : "프로그램 수정";
-  const r = db.prepare("INSERT INTO requests (kind, title, body, context, author_email, author_name, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(kind, title, String(b.body || "").trim().slice(0, 2000), String(b.context || "").slice(0, 200), user.email, user.name, now(), now());
-  send(res, 200, { id: Number(r.lastInsertRowid) });
+  const program = REQ_PROGRAMS.includes(b.program) ? b.program : "하랑지점";
+  const r = db.prepare("INSERT INTO requests (kind, title, body, context, author_email, author_name, created, updated, program) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(kind, title, String(b.body || "").trim().slice(0, 2000), String(b.context || "").slice(0, 200), user.email, user.name, now(), now(), program);
+  const id = Number(r.lastInsertRowid);
+  // 캡처는 내가 올린 것, 아직 어디에도 안 붙은 것만 붙인다
+  const ids = (Array.isArray(b.shots) ? b.shots : []).map(Number).filter(Number.isInteger).slice(0, MAX_SHOTS);
+  for (const sid of ids)
+    db.prepare("UPDATE request_shots SET request_id = ? WHERE id = ? AND uploader = ? AND request_id IS NULL").run(id, sid, user.email);
+  send(res, 200, { id });
 });
 route("POST", /^\/requests\/(\d+)$/, false, async (req, res, user, m) => {
   const r = db.prepare("SELECT * FROM requests WHERE id = ?").get(Number(m[1]));
@@ -645,6 +676,7 @@ route("DELETE", /^\/requests\/(\d+)$/, false, (req, res, user, m) => {
   const r = db.prepare("SELECT * FROM requests WHERE id = ?").get(Number(m[1]));
   if (!r) return send(res, 404, { error: "없는 요청입니다" });
   if (r.author_email !== user.email && !user.isSuper) return send(res, 403, { error: "본인 요청만" });
+  dropShots(r.id);
   db.prepare("DELETE FROM requests WHERE id = ?").run(r.id);
   send(res, 200, { ok: true });
 });
@@ -657,6 +689,39 @@ route("POST", /^\/requests\/(\d+)\/vote$/, false, (req, res, user, m) => {
   if (has) db.prepare("DELETE FROM request_votes WHERE request_id = ? AND email = ?").run(r.id, user.email);
   else db.prepare("INSERT INTO request_votes (request_id, email) VALUES (?, ?)").run(r.id, user.email);
   send(res, 200, { voted: !has });
+});
+
+// 화면 캡처 올리기 — 본문이 곧 파일이다(서류함과 같은 방식). 돌려준 id를 요청에 실어 보낸다.
+route("POST", /^\/requests\/shots$/, false, async (req, res, user) => {
+  const mime = String(req.headers["content-type"] || "").split(";")[0].trim();
+  const ext = SHOT_EXT[mime];
+  if (!ext) return send(res, 400, { error: "사진(PNG·JPG·WEBP)만 붙일 수 있습니다" });
+  const loose = db.prepare("SELECT COUNT(*) n FROM request_shots WHERE uploader = ? AND request_id IS NULL").get(user.email).n;
+  if (loose >= MAX_SHOTS * 3) return send(res, 429, { error: "붙이지 않은 캡처가 너무 많습니다. 잠시 뒤 다시 해 주세요" });
+  let buf;
+  try { buf = await readBody(req, MAX_SHOT); }
+  catch { return send(res, 413, { error: "캡처 한 장은 5MB까지입니다" }); }
+  if (!buf.length) return send(res, 400, { error: "빈 파일입니다" });
+  if (!looksLike(mime, buf)) return send(res, 400, { error: "내용이 그 형식이 아닙니다" });
+  const rel = randomBytes(12).toString("hex") + ext;
+  mkdirSync(REQ_DIR, { recursive: true });
+  writeFileSync(join(REQ_DIR, rel), buf);
+  const r = db.prepare("INSERT INTO request_shots (request_id, path, mime, size, uploader, created) VALUES (NULL, ?, ?, ?, ?, ?)")
+    .run(rel, mime, buf.length, user.email, now());
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+// 캡처 보기 — 요청 목록을 보는 사람이면 누구나(요청이 전원 열람이라 캡처도 같다).
+// 아직 안 붙은 캡처는 올린 사람만 본다.
+route("GET", /^\/requests\/shots\/(\d+)$/, false, (req, res, user, m) => {
+  const f = db.prepare("SELECT * FROM request_shots WHERE id = ?").get(Number(m[1]));
+  if (!f || (f.request_id == null && f.uploader !== user.email)) return send(res, 404, { error: "없는 캡처입니다" });
+  const file = normalize(join(REQ_DIR, f.path));
+  if (!file.startsWith(normalize(REQ_DIR)) || !existsSync(file)) return send(res, 404, { error: "파일이 없습니다" });
+  res.writeHead(200, {
+    "Content-Type": f.mime, "Content-Length": statSync(file).size,
+    "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600"
+  });
+  res.end(readFileSync(file));
 });
 
 // ---- 공지 ----
@@ -1955,3 +2020,7 @@ setInterval(purgeOldTa, 24 * 3600e3).unref();
 // 주인 없는 서류 파일 청소 — 같은 주기
 purgeOrphanFiles();
 setInterval(purgeOrphanFiles, 24 * 3600e3).unref();
+
+// 요청에 안 붙은 캡처 청소 — 같은 주기
+purgeLooseShots();
+setInterval(purgeLooseShots, 24 * 3600e3).unref();

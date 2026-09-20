@@ -168,6 +168,18 @@ export function openDb(file) {
       email      TEXT NOT NULL,
       PRIMARY KEY (request_id, email)
     );
+    -- 요청에 붙이는 화면 캡처. 먼저 올리고(request_id NULL) 요청을 보낼 때 붙인다.
+    -- 끝내 안 붙은 것은 하루 뒤 청소한다. 파일은 서류함과 다른 폴더에 둔다 — 서류 청소가
+    -- 「docs 표에 없는 파일」을 지우기 때문이다.
+    CREATE TABLE IF NOT EXISTS request_shots (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER REFERENCES requests(id) ON DELETE CASCADE,
+      path       TEXT NOT NULL,
+      mime       TEXT NOT NULL,
+      size       INTEGER NOT NULL,
+      uploader   TEXT NOT NULL,
+      created    TEXT NOT NULL
+    );
 
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
@@ -341,7 +353,9 @@ export function openDb(file) {
     "ALTER TABLE members ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE members ADD COLUMN left_at TEXT NOT NULL DEFAULT ''",
     // 일정 세부 — 구분마다 필요한 항목이 다르다 (면접관·대상자·차월). JSON으로 담는다.
-    "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''",
+    // 수정 요청은 마이가디언과 한 게시판을 쓴다(2026-09-20) — 어느 프로그램 이야기인지 적는다
+    "ALTER TABLE requests ADD COLUMN program TEXT NOT NULL DEFAULT '하랑지점'"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 목표의 주인을 이름에서 이메일로 옮긴다 (동명이인 원칙).

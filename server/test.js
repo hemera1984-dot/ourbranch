@@ -1208,6 +1208,26 @@ async function main() {
   assert.equal((await api("t-fc2", "DELETE", "/requests/" + rq.id)).status, 403);
   assert.equal((await api("t-fc1", "DELETE", "/requests/" + rq.id)).status, 200);
 
+  // 64-2) 수정 요청의 화면 캡처·프로그램 — 올린 사람만 붙이고, 붙은 뒤엔 전원이 보고, 요청을 지우면 같이 사라진다
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]);
+  const shotUp = (token, body, type) => fetch(BASE + "/requests/shots", {
+    method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": type }, body });
+  assert.equal((await shotUp("t-fc1", Buffer.from("not an image at all"), "image/png")).status, 400, "내용이 PNG가 아니면 거절");
+  assert.equal((await shotUp("t-fc1", png, "application/pdf")).status, 400, "사진만");
+  const shot = await (await shotUp("t-fc1", png, "image/png")).json();
+  assert.equal((await api("t-fc2", "GET", "/requests/shots/" + shot.id)).status, 404, "안 붙은 캡처는 올린 사람만");
+  const rq2 = await (await api("t-fc2", "POST", "/requests", { title: "남의 캡처 붙이기", shots: [shot.id] })).json();
+  assert.equal((await (await api("t-fc2", "GET", "/requests")).json()).filter(r => r.id === rq2.id)[0].shots.length, 0, "남이 올린 캡처는 못 붙인다");
+  const rq3 = await (await api("t-fc1", "POST", "/requests", { title: "캡처 있는 요청", program: "마이가디언", shots: [shot.id] })).json();
+  const rq3Seen = (await (await api("t-fc2", "GET", "/requests")).json()).filter(r => r.id === rq3.id)[0];
+  assert.deepEqual(rq3Seen.shots, [shot.id]); assert.equal(rq3Seen.program, "마이가디언");
+  assert.equal(rq3Seen.mine, false); assert.equal(rq3Seen.admin, false);
+  assert.equal((await api("t-fc2", "GET", "/requests/shots/" + shot.id)).status, 200, "붙은 캡처는 전원이 본다");
+  assert.equal((await (await api("t-fc1", "POST", "/requests", { title: "프로그램 기본값" })).json()).id > 0, true);
+  assert.equal((await api("t-fc1", "DELETE", "/requests/" + rq3.id)).status, 200);
+  assert.equal((await api("t-fc1", "GET", "/requests/shots/" + shot.id)).status, 404, "요청을 지우면 캡처도 사라진다");
+  assert.equal((await api("t-fc2", "DELETE", "/requests/" + rq2.id)).status, 200);
+
   // 65) 수첩 스캔 — 사진을 보내면 표가 온다. 번호는 지워지고, 못 읽은 날짜는 비고 unsure, 빈 줄은 빠진다
   const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
   const scanReq = (tok, body, type) => fetch(BASE + "/events/scan", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": type || "image/jpeg" }, body });

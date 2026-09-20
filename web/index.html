@@ -270,10 +270,14 @@
           <input class="input" id="req-title" placeholder="한 줄 제목 — 예: 일정에서 다음 달 버튼이 안 눌려요" maxlength="100" style="flex:1;min-width:220px">
         </div>
         <textarea class="input" id="req-body" rows="4" placeholder="어느 화면에서 무엇을 했더니 어떻게 됐는지 적어 주시면 빨리 고칩니다. (어느 화면·어떤 기기인지는 자동으로 붙습니다)" style="width:100%;resize:vertical;font-family:inherit" maxlength="2000"></textarea>
+        <div class="req-shots" id="req-shots"></div>
         <div class="toolbar" style="margin-top:8px">
           <button class="btn primary" id="req-send">보내기</button>
+          <button class="btn" id="req-shot-add" type="button">화면 캡처 붙이기</button>
+          <input type="file" id="req-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <span class="note" id="req-msg"></span>
         </div>
+        <p class="note" style="margin:6px 0 0">캡처는 4장까지. 복사한 화면은 내용 칸에서 Ctrl+V로도 붙습니다. 고객 이름·연락처가 보이면 가리고 올려 주세요 — 요청은 전원이 봅니다.</p>
       </div>
       <div id="req-list"></div>
     </section>
@@ -1039,6 +1043,50 @@
     return "화면: " + (link ? link.textContent.replace(/[0-9+]+$/, "") : lastScreen) + " · " + dev
       + (isStandalone() ? " 앱" : " 브라우저") + " · " + window.innerWidth + "×" + window.innerHeight;
   }
+  // 화면 캡처 — 먼저 올려 번호를 받고, 보낼 때 그 번호를 싣는다. 본문이 곧 파일이라 api()를 안 쓴다.
+  var reqShots = [];                                  // [{ id, url }]
+  function reqShotUrl(id) {
+    return fetch(API + "/requests/shots/" + id, { headers: { Authorization: "Bearer " + token } })
+      .then(function (r) { if (!r.ok) throw new Error("캡처 " + r.status); return r.blob(); })
+      .then(function (b) { return URL.createObjectURL(b); });
+  }
+  function drawReqShots() {
+    $("req-shots").innerHTML = reqShots.map(function (s, i) {
+      return '<span class="req-shot"><img src="' + s.url + '" alt="붙인 캡처 ' + (i + 1) + '"><button type="button" class="btn req-shot-x" data-i="' + i + '">빼기</button></span>';
+    }).join("");
+  }
+  function addReqShots(files) {
+    var list = Array.prototype.slice.call(files || []).filter(function (f) { return /^image\/(png|jpeg|webp)$/.test(f.type); });
+    if (!list.length) return;
+    var room = 4 - reqShots.length;
+    if (room <= 0) { $("req-msg").textContent = "캡처는 4장까지 붙일 수 있습니다."; return; }
+    $("req-msg").textContent = "캡처를 올리는 중…";
+    list.slice(0, room).reduce(function (p, f) {
+      return p.then(function () {
+        return fetch(API + "/requests/shots", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": f.type }, body: f })
+          .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+          .then(function (j) { reqShots.push({ id: j.id, url: URL.createObjectURL(f) }); drawReqShots(); });
+      });
+    }, Promise.resolve()).then(function () { $("req-msg").textContent = ""; })
+      .catch(function (e) { $("req-msg").textContent = "캡처를 못 올렸습니다 — " + (e && e.message ? e.message : ""); });
+  }
+  $("req-shot-add").addEventListener("click", function () { $("req-file").click(); });
+  $("req-file").addEventListener("change", function () { addReqShots(this.files); this.value = ""; });
+  $("req-body").addEventListener("paste", function (e) {
+    var fs = e.clipboardData && e.clipboardData.files;
+    if (fs && fs.length) { e.preventDefault(); addReqShots(fs); }
+  });
+  $("req-shots").addEventListener("click", function (e) {
+    var b = e.target.closest(".req-shot-x"); if (!b) return;
+    reqShots.splice(Number(b.dataset.i), 1); drawReqShots();      // 서버의 안 붙은 캡처는 하루 뒤 청소된다
+  });
+  // 목록의 캡처 — 인증이 필요해 img src로 바로 못 건다. 받아서 붙인다.
+  function fillReqShots() {
+    Array.prototype.forEach.call(document.querySelectorAll("#req-list img[data-shot]"), function (img) {
+      reqShotUrl(img.dataset.shot).then(function (u) { img.src = u; img.parentNode.href = u; }).catch(function () { img.alt = "캡처를 못 불러왔습니다"; });
+    });
+  }
+
   function loadReq() {
     api("/requests").then(function (list) {
       var open = list.filter(function (r) { return r.status === "접수" || r.status === "진행 중"; })
@@ -1048,8 +1096,12 @@
         var mine = r.author_email === BOOT.me.email;
         return '<div class="card card-pad req-item" data-id="' + r.id + '">'
           + '<div class="req-head"><span class="badge ' + REQ_BADGE[r.status] + '">' + esc(r.status) + "</span>"
-          + '<span class="badge gray">' + esc(r.kind) + "</span><strong>" + esc(r.title) + "</strong></div>"
+          + '<span class="badge gray">' + esc(r.kind) + "</span>"
+          + '<span class="badge gray">' + esc(r.program || "하랑지점") + "</span><strong>" + esc(r.title) + "</strong></div>"
           + (r.body ? '<p class="req-body">' + esc(r.body) + "</p>" : "")
+          + ((r.shots || []).length ? '<div class="req-shots">' + r.shots.map(function (id) {
+              return '<a class="req-shot" target="_blank" rel="noopener"><img data-shot="' + id + '" alt="붙인 캡처"></a>';
+            }).join("") + "</div>" : "")
           + '<p class="req-meta">' + esc(r.author_name || r.author_email) + " · " + esc(r.created.slice(0, 10)) + (r.context ? " · " + esc(r.context) : "") + "</p>"
           + (r.answer ? '<div class="req-answer"><b>' + esc(r.answered_by || "답변") + "</b> " + esc(r.answer) + "</div>" : "")
           + '<div class="toolbar" style="margin-top:8px">'
@@ -1067,15 +1119,17 @@
       }
       $("req-list").innerHTML = (open.length ? open.map(item).join("") : '<div class="card"><div class="empty">열려 있는 요청이 없습니다.</div></div>')
         + (done.length ? '<details class="req-done"><summary>끝난 요청 ' + done.length + "건</summary>" + done.map(item).join("") + "</details>" : "");
+      fillReqShots();
     });
   }
   $("req-send").addEventListener("click", function () {
     var title = $("req-title").value.trim();
     if (!title) { $("req-msg").textContent = "제목을 적어 주세요."; $("req-title").focus(); return; }
     var btn = this; btn.disabled = true;
-    api("/requests", { method: "POST", body: { kind: $("req-kind").value, title: title, body: $("req-body").value, context: reqContext() } })
+    api("/requests", { method: "POST", body: { kind: $("req-kind").value, title: title, body: $("req-body").value, context: reqContext(),
+        program: "하랑지점", shots: reqShots.map(function (s) { return s.id; }) } })
       .then(function () {
-        $("req-title").value = ""; $("req-body").value = "";
+        $("req-title").value = ""; $("req-body").value = ""; reqShots = []; drawReqShots();
         $("req-msg").textContent = "보냈습니다. 처리되면 여기 상태가 바뀝니다.";
         loadReq(); refreshBadges();
       }).catch(function () { /* api가 알림을 띄웠다 */ })

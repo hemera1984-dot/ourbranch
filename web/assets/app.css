@@ -265,6 +265,11 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .req-meta { margin: 6px 0 0; font-size: 12px; color: var(--ter); }
 .req-answer { margin-top: 8px; padding: 8px 10px; background: var(--green-bg); border-radius: 4px; font-size: 13.5px; }
 .req-admin { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.req-shots { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.req-shots:empty { display: none; }
+.req-shot { position: relative; display: inline-flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.req-shot img { width: 132px; height: 88px; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; background: var(--bg, #f3f3f3); }
+.req-shot-x { padding: 2px 8px; font-size: 12px; }
 .req-done { margin-top: 16px; }
 .req-done > summary { cursor: pointer; font-weight: 700; color: var(--sub); padding: 6px 2px; margin-bottom: 8px; }
 
