@@ -1097,7 +1097,7 @@
         return '<div class="card card-pad req-item" data-id="' + r.id + '">'
           + '<div class="req-head"><span class="badge ' + REQ_BADGE[r.status] + '">' + esc(r.status) + "</span>"
           + '<span class="badge gray">' + esc(r.kind) + "</span>"
-          + '<span class="badge gray">' + esc(r.program || "하랑지점") + "</span><strong>" + esc(r.title) + "</strong></div>"
+          + "<strong>" + esc(r.title) + "</strong></div>"
           + (r.body ? '<p class="req-body">' + esc(r.body) + "</p>" : "")
           + ((r.shots || []).length ? '<div class="req-shots">' + r.shots.map(function (id) {
               return '<a class="req-shot" target="_blank" rel="noopener"><img data-shot="' + id + '" alt="붙인 캡처"></a>';
@@ -1127,7 +1127,7 @@
     if (!title) { $("req-msg").textContent = "제목을 적어 주세요."; $("req-title").focus(); return; }
     var btn = this; btn.disabled = true;
     api("/requests", { method: "POST", body: { kind: $("req-kind").value, title: title, body: $("req-body").value, context: reqContext(),
-        program: "하랑지점", shots: reqShots.map(function (s) { return s.id; }) } })
+        shots: reqShots.map(function (s) { return s.id; }) } })
       .then(function () {
         $("req-title").value = ""; $("req-body").value = ""; reqShots = []; drawReqShots();
         $("req-msg").textContent = "보냈습니다. 처리되면 여기 상태가 바뀝니다.";

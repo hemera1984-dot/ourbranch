@@ -605,9 +605,7 @@ route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
 // 누구나 쓰고 누구나 본다. 상태와 답변은 총관리자만 — 고치는 사람이 한 명이라서다.
 const REQ_KINDS = ["프로그램 수정", "기능 제안", "오류 신고", "기타"];
 const REQ_STATUS = ["접수", "진행 중", "완료", "보류"];
-// 마이가디언의 「수정 요청」도 이 게시판을 쓴다(2026-09-20 사용자: 「두 메뉴가 동일했으면 —
-// 우리 시스템에서 돌아가는 거니」). 계정이 하나라 세션도 같다. 어느 프로그램 이야기인지만 적는다.
-const REQ_PROGRAMS = ["하랑지점", "마이가디언"];
+// 마이가디언의 「수정 요청」과 모양·기능을 맞춘다. 게시판은 따로다 — 그쪽 요청은 그쪽 서버에 쌓인다.
 // 화면 캡처 — 글로는 설명이 안 되는 오류가 많다. 서류함과 다른 폴더에 둔다(서류 청소가 지운다).
 const REQ_DIR = process.env.REQ_FILE_DIR || (String(FILE_DIR).replace(/[\\/]+$/, "") + "-requests");
 const SHOT_EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp" };
@@ -632,9 +630,7 @@ route("GET", /^\/requests$/, false, (req, res, user) => {
   const shots = db.prepare("SELECT id FROM request_shots WHERE request_id = ? ORDER BY id");
   send(res, 200, db.prepare("SELECT * FROM requests ORDER BY id DESC LIMIT 300").all().map(r => {
     const v = votes.all(r.id).map(x => x.email);
-    // mine·admin — 마이가디언 화면은 이 서버의 「나」를 따로 받지 않는다. 항목마다 알려 준다.
-    return { ...r, votes: v.length, voted: v.includes(user.email), shots: shots.all(r.id).map(x => x.id),
-             mine: r.author_email === user.email, admin: !!user.isSuper };
+    return { ...r, votes: v.length, voted: v.includes(user.email), shots: shots.all(r.id).map(x => x.id) };
   }));
 });
 route("POST", /^\/requests$/, false, async (req, res, user) => {
@@ -642,9 +638,8 @@ route("POST", /^\/requests$/, false, async (req, res, user) => {
   const title = String(b.title || "").trim().slice(0, 100);
   if (!title) return send(res, 400, { error: "제목을 적어 주세요" });
   const kind = REQ_KINDS.includes(b.kind) ? b.kind : "프로그램 수정";
-  const program = REQ_PROGRAMS.includes(b.program) ? b.program : "하랑지점";
-  const r = db.prepare("INSERT INTO requests (kind, title, body, context, author_email, author_name, created, updated, program) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(kind, title, String(b.body || "").trim().slice(0, 2000), String(b.context || "").slice(0, 200), user.email, user.name, now(), now(), program);
+  const r = db.prepare("INSERT INTO requests (kind, title, body, context, author_email, author_name, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(kind, title, String(b.body || "").trim().slice(0, 2000), String(b.context || "").slice(0, 200), user.email, user.name, now(), now());
   const id = Number(r.lastInsertRowid);
   // 캡처는 내가 올린 것, 아직 어디에도 안 붙은 것만 붙인다
   const ids = (Array.isArray(b.shots) ? b.shots : []).map(Number).filter(Number.isInteger).slice(0, MAX_SHOTS);

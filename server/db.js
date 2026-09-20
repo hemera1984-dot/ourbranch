@@ -353,9 +353,7 @@ export function openDb(file) {
     "ALTER TABLE members ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE members ADD COLUMN left_at TEXT NOT NULL DEFAULT ''",
     // 일정 세부 — 구분마다 필요한 항목이 다르다 (면접관·대상자·차월). JSON으로 담는다.
-    "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''",
-    // 수정 요청은 마이가디언과 한 게시판을 쓴다(2026-09-20) — 어느 프로그램 이야기인지 적는다
-    "ALTER TABLE requests ADD COLUMN program TEXT NOT NULL DEFAULT '하랑지점'"
+    "ALTER TABLE events ADD COLUMN detail TEXT NOT NULL DEFAULT ''"
   ]) { try { db.exec(sql); } catch { /* 이미 있음 */ } }
 
   // 목표의 주인을 이름에서 이메일로 옮긴다 (동명이인 원칙).

@@ -1218,10 +1218,9 @@ async function main() {
   assert.equal((await api("t-fc2", "GET", "/requests/shots/" + shot.id)).status, 404, "안 붙은 캡처는 올린 사람만");
   const rq2 = await (await api("t-fc2", "POST", "/requests", { title: "남의 캡처 붙이기", shots: [shot.id] })).json();
   assert.equal((await (await api("t-fc2", "GET", "/requests")).json()).filter(r => r.id === rq2.id)[0].shots.length, 0, "남이 올린 캡처는 못 붙인다");
-  const rq3 = await (await api("t-fc1", "POST", "/requests", { title: "캡처 있는 요청", program: "마이가디언", shots: [shot.id] })).json();
+  const rq3 = await (await api("t-fc1", "POST", "/requests", { title: "캡처 있는 요청", shots: [shot.id] })).json();
   const rq3Seen = (await (await api("t-fc2", "GET", "/requests")).json()).filter(r => r.id === rq3.id)[0];
-  assert.deepEqual(rq3Seen.shots, [shot.id]); assert.equal(rq3Seen.program, "마이가디언");
-  assert.equal(rq3Seen.mine, false); assert.equal(rq3Seen.admin, false);
+  assert.deepEqual(rq3Seen.shots, [shot.id]);
   assert.equal((await api("t-fc2", "GET", "/requests/shots/" + shot.id)).status, 200, "붙은 캡처는 전원이 본다");
   assert.equal((await (await api("t-fc1", "POST", "/requests", { title: "프로그램 기본값" })).json()).id > 0, true);
   assert.equal((await api("t-fc1", "DELETE", "/requests/" + rq3.id)).status, 200);
