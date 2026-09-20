@@ -106,6 +106,7 @@
           <h1 class="hero-greet" id="home-greet"></h1>
           <p class="hero-sub">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
           <button type="button" class="btn primary mobile-only" id="home-add" style="margin-top:10px;padding:11px 18px;font-size:15px">+ 일정 적기</button>
+          <button type="button" class="btn mobile-only scan-btn" style="margin-top:10px;padding:11px 18px;font-size:15px">수첩 스캔</button>
         </div>
         <div class="hero-metrics" id="home-metrics"></div>
       </section>
@@ -291,6 +292,7 @@
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="m-cal-copy">지난달 가져오기</button>
           <button class="btn" id="m-cols">사람별</button>
+          <button class="btn scan-btn">수첩 스캔</button>
         </div>
         <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
           <button class="btn seg-btn" data-scope="esl" hidden>부지점장</button>
@@ -323,6 +325,7 @@
           <button class="btn" id="cal-next">다음 달</button>
           <strong id="cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
+          <button class="btn scan-btn">수첩 스캔</button>
         </span>
         <span id="week-controls" hidden>
           <button class="btn" id="week-prev">이전 주</button>
@@ -550,6 +553,7 @@
           <p>수료증 파일이 아직 없어도 언제 무엇을 이수했는지 남겨 둡니다.</p></div>
         <div class="card" id="doc-train"></div>
       </div>
+      <input type="file" id="scan-file" accept="image/*" capture="environment" hidden>
       <input type="file" id="doc-file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,image/*,application/pdf" hidden>
     </section>
 
@@ -1405,6 +1409,97 @@
       })
       .filter(function (b) { return b.days <= within; })
       .sort(function (a, b) { return a.days - b.days; });
+  }
+
+  // ── 수첩 스캔 (2026-09-20 사용자) ──
+  // 버튼 → 폰 카메라 → 서버가 표로 읽음 → 훑어보고 저장. 사진은 서버에도 남지 않는다.
+  document.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest(".scan-btn")) { $("scan-file").value = ""; $("scan-file").click(); }
+  });
+  // 폰 사진은 4~12MB다 — 긴 변 1800px JPEG로 줄여 보낸다(글씨는 충분히 읽힌다)
+  function shrinkImage(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 1800 / Math.max(img.width, img.height));
+        var c = document.createElement("canvas");
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { resolve(b || file); }, "image/jpeg", 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };   // 못 그리면 원본 그대로
+      img.src = url;
+    });
+  }
+  function scanSheet(inner) {
+    closeSheet();
+    var back = document.createElement("div"); back.className = "sheet-back";
+    var s = document.createElement("div"); s.className = "sheet scan-sheet";
+    s.innerHTML = inner;
+    back.addEventListener("click", closeSheet);
+    document.body.appendChild(back); document.body.appendChild(s);
+    return s;
+  }
+  $("scan-file").addEventListener("change", function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
+    scanSheet('<div class="sheet-head"><strong>수첩 읽는 중</strong></div><p class="scan-wait">사진에서 일정을 찾고 있습니다. 10~30초 걸립니다.</p>');
+    shrinkImage(file).then(function (blob) {
+      return fetch(API + "/events/scan", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": blob.type || "image/jpeg" }, body: blob });
+    }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || "읽지 못했습니다"); return j; }); })
+      .then(function (out) { renderScan(out.rows || []); })
+      .catch(function (err) {
+        scanSheet('<div class="sheet-head"><strong>읽지 못했습니다</strong><button class="btn" id="scan-close">닫기</button></div><p class="scan-wait">'
+          + esc((err && err.message) || "다시 찍어 주세요.") + "</p>").querySelector("#scan-close").addEventListener("click", closeSheet);
+      });
+  });
+  function renderScan(rows) {
+    var todayStr = fmtDate(new Date());
+    var s = scanSheet('<div class="sheet-head"><strong>읽은 일정 ' + rows.length + "건</strong>"
+      + '<button class="btn primary" id="scan-save">고른 것 저장</button><button class="btn" id="scan-close">닫기</button></div>'
+      + '<p class="scan-wait">한 번 훑어보고 틀린 곳을 고친 뒤 저장해 주세요. 노란 줄은 추측이 섞인 줄입니다.</p>'
+      + (rows.length ? rows.map(function (r, i) {
+          return '<div class="scan-row' + (r.unsure ? " unsure" : "") + '" data-i="' + i + '">'
+            + '<label class="scan-on"><input type="checkbox" class="sc-on"' + (r.date ? " checked" : "") + "></label>"
+            + '<div class="scan-fields">'
+            + '<div class="pop-row"><input type="date" class="input sc-date" value="' + esc(r.date) + '">'
+            + '<input type="time" class="input sc-start" value="' + esc(r.start) + '"><input type="time" class="input sc-end" value="' + esc(r.end) + '"></div>'
+            + '<div class="pop-row"><select class="input sc-kind" style="flex:0 0 120px">' + KINDS.map(function (k) {
+                return "<option" + (k === r.kind ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select>"
+            + '<input type="text" class="input sc-title" placeholder="내용" value="' + esc(r.title) + '"></div>'
+            + '<div class="pop-row"><input type="text" class="input sc-place" placeholder="장소" value="' + esc(r.place) + '"></div>'
+            + (r.note ? '<p class="scan-note">' + esc(r.note) + "</p>" : "")
+            + "</div></div>";
+        }).join("") : '<div class="empty">사진에서 일정을 찾지 못했습니다. 일정이 적힌 면이 또렷하게 나오게 다시 찍어 주세요.</div>'));
+    s.querySelector("#scan-close").addEventListener("click", closeSheet);
+    s.querySelector("#scan-save").addEventListener("click", function () {
+      var btn = this;
+      var picked = [].filter.call(s.querySelectorAll(".scan-row"), function (row) { return row.querySelector(".sc-on").checked; });
+      var bad = picked.filter(function (row) { return !row.querySelector(".sc-date").value; });
+      if (bad.length) { alert("날짜가 빈 줄이 " + bad.length + "건 있습니다. 날짜를 넣거나 체크를 풀어 주세요."); bad[0].querySelector(".sc-date").focus(); return; }
+      if (!picked.length) { alert("저장할 줄을 골라 주세요."); return; }
+      btn.disabled = true;
+      // 한 줄씩 차례로 — 중간에 실패하면 어디까지 들어갔는지 알 수 있다
+      var done = 0;
+      picked.reduce(function (p, row) {
+        return p.then(function () {
+          var kind = row.querySelector(".sc-kind").value, title = row.querySelector(".sc-title").value.trim();
+          return api("/events", { method: "POST", body: {
+            teamId: myTeamId(), memberEmail: BOOT.me.email, date: row.querySelector(".sc-date").value, kind: kind,
+            start: row.querySelector(".sc-start").value || null, end: row.querySelector(".sc-end").value || null,
+            title: title, place: row.querySelector(".sc-place").value.trim(),
+            detail: KIND_FORM[kind] ? { line2: title } : undefined
+          } }).then(function () { done++; row.remove(); });
+        });
+      }, Promise.resolve()).then(function () {
+        closeSheet(); toast(done + "건을 일정에 넣었습니다");
+        loadScreen(screen);
+      }).catch(function () {
+        btn.disabled = false;
+        toast(done + "건 저장, 나머지는 남아 있습니다");
+      });
+    });
   }
 
   // 오늘·내 몫으로 입력창을 바로 연다 — 홈의 「+ 일정 적기」, 아이콘 바로가기, ?quick=add 가 다 여기로

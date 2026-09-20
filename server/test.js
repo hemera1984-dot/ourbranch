@@ -37,8 +37,23 @@ auth.close();
 
 const FILES = "./test-files";
 rmSync(FILES, { force: true, recursive: true });
+// 가짜 AI — 스캔 경로가 무엇을 보내는지 보고, 정해진 표를 돌려준다 (진짜 호출은 돈이 든다)
+const { createServer: mkServer } = await import("node:http");
+let aiSeen = null;
+const aiStub = mkServer((rq, rs) => {
+  let d = ""; rq.on("data", c => d += c);
+  rq.on("end", () => {
+    aiSeen = { key: rq.headers["x-api-key"], beta: rq.headers["anthropic-beta"], body: JSON.parse(d) };
+    rs.writeHead(200, { "Content-Type": "application/json" });
+    rs.end(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ rows: [
+      { date: "2027-07-01", start: "14:00", end: "", kind: "외근", title: "김OO 상담 010-1234-5678", place: "강남", unsure: false, note: "" },
+      { date: "7/2", start: "3시", end: "", kind: "없는구분", title: "날짜 못 읽음", place: "", unsure: false, note: "" },
+      { date: "2027-07-03", start: "", end: "", kind: "기타", title: "", place: "", unsure: false, note: "" }
+    ] }) }] }));
+  });
+}).listen(18799);
 const srv = spawn(process.execPath, ["server.js"], {
-  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES },
+  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES, AI_API: "http://127.0.0.1:18799", ANTHROPIC_API_KEY: "test-key" },
   stdio: "inherit"
 });
 
@@ -1193,6 +1208,21 @@ async function main() {
   assert.equal((await api("t-fc2", "DELETE", "/requests/" + rq.id)).status, 403);
   assert.equal((await api("t-fc1", "DELETE", "/requests/" + rq.id)).status, 200);
 
+  // 65) 수첩 스캔 — 사진을 보내면 표가 온다. 번호는 지워지고, 못 읽은 날짜는 비고 unsure, 빈 줄은 빠진다
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
+  const scanReq = (tok, body, type) => fetch(BASE + "/events/scan", { method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": type || "image/jpeg" }, body });
+  assert.equal((await scanReq("t-fc1", Buffer.from("그림 아님 그림 아님 그림 아님"))).status, 400, "사진이 아니면 안 받는다");
+  const scanRes = await scanReq("t-fc1", jpg);
+  assert.equal(scanRes.status, 200);
+  const scanned = await scanRes.json();
+  assert.equal(scanned.rows.length, 2, "내용 없는 줄은 빠진다");
+  assert.equal(scanned.rows[0].title, "김OO 상담", "전화번호는 지운다");
+  assert.deepEqual([scanned.rows[1].date, scanned.rows[1].start, scanned.rows[1].kind, scanned.rows[1].unsure], ["", "", "기타", true]);
+  assert.equal(aiSeen.key, "test-key"); assert.equal(aiSeen.beta, "server-side-fallback-2026-07-01");
+  assert.equal(aiSeen.body.model, "claude-opus-5");
+  assert.equal(aiSeen.body.messages[0].content[0].source.media_type, "image/jpeg");
+  assert.ok(!(await (await api("t-fc1", "GET", "/events?from=2027-07-01&to=2027-07-03")).json()).some(e => e.title.includes("상담")), "스캔은 저장하지 않는다");
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {
@@ -1206,7 +1236,7 @@ async function main() {
     utimesSync(FILES + "/묵은고아.pdf", old, old);
     // 서버가 켜질 때 청소가 돈다 — 재시작해서 확인한다
     const kill = new Promise(r => srv.on("exit", r));
-    srv.kill();
+    aiStub.close(); srv.kill();
     await kill;
     const srv2 = spawn(process.execPath, ["server.js"], {
       env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES },
@@ -1232,7 +1262,7 @@ main().catch(e => { console.error(e); process.exitCode = 1; })
   .finally(async () => {
     // 윈도우는 프로세스가 살아 있는 동안 DB 파일을 지울 수 없다 — 종료를 기다린다
     const exited = new Promise(r => srv.on("exit", r));
-    srv.kill();
+    aiStub.close(); srv.kill();
     await exited;
     for (const f of [AUTH, DATA, DATA + "-wal", DATA + "-shm"])
       try { rmSync(f, { force: true }); } catch { /* WAL 잔재는 다음 실행이 지운다 */ }

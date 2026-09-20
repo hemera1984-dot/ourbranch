@@ -12,6 +12,7 @@ import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken, listAccounts } from "./auth.js";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { scanImage } from "./scan.js";
 
 const PORT = Number(process.env.PORT || 8788);
 const DB_FILE = process.env.DB_FILE || "./ourbranch.db";
@@ -726,6 +727,29 @@ route("GET", /^\/events$/, false, (req, res, user) => {
             : REPLY_KINDS.has(e.kind) ? { ...e, replies: att.all(e.id) } : e)
     .map(e => e.source === "myguardian" ? e : { ...e, notes: notes.all(e.id) });
   send(res, 200, list);
+});
+
+// 수첩 스캔 — 사진을 받아 일정 표를 돌려줄 뿐 저장하지 않는다. 사진도 남기지 않는다.
+// 저장은 사용자가 표를 확인하고 POST /events로 한다.
+const AI_KEY = process.env.ANTHROPIC_API_KEY || "";
+const AI_API = (process.env.AI_API || "https://api.anthropic.com").replace(/[/]$/, "");   // 시험에서는 가짜 서버
+const SCAN_PER_DAY = 20;
+const scanCount = new Map();   // ponytail: 메모리 계수 — 재시작하면 0. 남용이 보이면 표로 옮긴다
+route("POST", /^\/events\/scan$/, false, async (req, res, user) => {
+  if (!AI_KEY) return send(res, 503, { error: "스캔이 아직 켜져 있지 않습니다" });
+  const k = user.email + "|" + today();
+  if ((scanCount.get(k) || 0) >= SCAN_PER_DAY) return send(res, 429, { error: "오늘 스캔 횟수(" + SCAN_PER_DAY + "장)를 다 썼습니다" });
+  let buf;
+  try { buf = await readBody(req, 6 * 1024 * 1024); } catch { return send(res, 413, { error: "사진이 너무 큽니다" }); }
+  const mime = ["image/jpeg", "image/png", "image/webp"].find(m => looksLike(m, buf));
+  if (!mime) return send(res, 400, { error: "JPG·PNG 사진만 읽습니다" });
+  scanCount.set(k, (scanCount.get(k) || 0) + 1);
+  try {
+    const rows = await scanImage(AI_API, AI_KEY, buf.toString("base64"), mime, today());
+    send(res, 200, { rows, left: SCAN_PER_DAY - scanCount.get(k) });
+  } catch (e) {
+    send(res, 502, { error: e.message || "사진을 읽지 못했습니다" });
+  }
 });
 
 // 한 줄 메모 — 볼 수 있는 일정이면 누구나 붙인다. 바뀐 일정 목록에도 「메모」로 남는다.

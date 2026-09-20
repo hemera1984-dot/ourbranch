@@ -245,6 +245,19 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .rsvp .btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .rsvp-sum { font-size: 12px; color: var(--sub); }
 
+/* 수첩 스캔 — 읽은 표를 훑어보는 시트 */
+.scan-sheet { max-height: 88vh; overflow-y: auto; }
+.scan-wait { margin: 10px 14px; color: var(--sub); font-size: 13.5px; }
+.scan-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.scan-row.unsure { background: var(--amber-bg); }
+.scan-on { display: flex; align-items: flex-start; padding-top: 10px; }
+.scan-on input { width: 22px; height: 22px; }
+.scan-fields { flex: 1; min-width: 0; }
+.scan-fields .pop-row:first-child { margin-top: 0; }
+.scan-fields .pop-row input[type="date"] { width: 46%; }
+.scan-fields .pop-row input[type="time"] { width: 27%; }
+.scan-note { margin: 6px 0 0; font-size: 12px; color: var(--amber); font-weight: 600; }
+
 /* 수정 요청 */
 .req-item { margin-bottom: 10px; }
 .req-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 15px; }
