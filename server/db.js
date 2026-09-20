@@ -147,6 +147,28 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_event_notes_event ON event_notes(event_id);
 
+    -- 수정 요청 — 지점원이 프로그램에 바라는 것을 적는 자리 (2026-09-20 사용자). 전원이 본다 —
+    -- 같은 요청이 두 번 올라오지 않고, 「나도 필요」로 무엇이 급한지 드러난다.
+    CREATE TABLE IF NOT EXISTS requests (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind         TEXT NOT NULL DEFAULT '프로그램 수정',
+      title        TEXT NOT NULL,
+      body         TEXT NOT NULL DEFAULT '',
+      context      TEXT NOT NULL DEFAULT '',     -- 어느 화면·어떤 기기에서 썼나 (자동)
+      author_email TEXT NOT NULL,
+      author_name  TEXT NOT NULL DEFAULT '',
+      status       TEXT NOT NULL DEFAULT '접수',
+      answer       TEXT NOT NULL DEFAULT '',
+      answered_by  TEXT NOT NULL DEFAULT '',
+      created      TEXT NOT NULL,
+      updated      TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS request_votes (
+      request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+      email      TEXT NOT NULL,
+      PRIMARY KEY (request_id, email)
+    );
+
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
     -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항

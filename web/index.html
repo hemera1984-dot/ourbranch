@@ -64,6 +64,7 @@
       <a href="#docs" data-screen="docs">서류함</a>
       <p class="nav-group-label">내 계정</p>
       <a href="#me" data-screen="me">내 정보</a>
+      <a href="#req" data-screen="req">수정 요청</a>
       <p class="nav-group-label">관리</p>
       <a href="#invite" data-screen="invite">초대·승인</a>
       <a href="#install" data-screen="install">앱 설치</a>
@@ -254,6 +255,26 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <section id="screen-req" hidden>
+      <p class="eyebrow">요청</p>
+      <h1>수정 요청</h1>
+      <p class="page-desc">프로그램에서 불편한 것, 있었으면 하는 것, 안 되는 것을 적어 주세요. 모두가 같이 봅니다 — 같은 생각이면 「나도 필요」를 눌러 주세요.</p>
+      <div class="card card-pad" style="margin-bottom:14px">
+        <div class="toolbar" style="margin-bottom:8px">
+          <select class="input" id="req-kind" style="width:150px">
+            <option>프로그램 수정</option><option>기능 제안</option><option>오류 신고</option><option>기타</option>
+          </select>
+          <input class="input" id="req-title" placeholder="한 줄 제목 — 예: 일정에서 다음 달 버튼이 안 눌려요" maxlength="100" style="flex:1;min-width:220px">
+        </div>
+        <textarea class="input" id="req-body" rows="4" placeholder="어느 화면에서 무엇을 했더니 어떻게 됐는지 적어 주시면 빨리 고칩니다. (어느 화면·어떤 기기인지는 자동으로 붙습니다)" style="width:100%;resize:vertical;font-family:inherit" maxlength="2000"></textarea>
+        <div class="toolbar" style="margin-top:8px">
+          <button class="btn primary" id="req-send">보내기</button>
+          <span class="note" id="req-msg"></span>
+        </div>
+      </div>
+      <div id="req-list"></div>
     </section>
 
     <section id="screen-sched" hidden>
@@ -549,7 +570,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, bootAt = 0, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs"];
+  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs", "req"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -991,6 +1012,11 @@
       $("tab-dot").hidden = !(n > 0);
       navBadge("board", "미션·공지", n, "안 읽은 공지 " + unread + "건 · 미달성 미션 " + undone + "건");
     });
+    // 수정 요청 — 총관리자에게는 아직 안 본(접수) 건수, 나머지에겐 배지 없음
+    if (BOOT.me.isSuper) api("/requests").catch(function () { return []; }).then(function (list) {
+      var n = list.filter(function (r) { return r.status === "접수"; }).length;
+      navBadge("req", "수정 요청", n, "접수된 요청 " + n + "건");
+    });
     // 바뀐 일정 — 남이 넣고·고치고·지운 것 (앱 내 알림, 타임트리의 활동 피드)
     api("/events/changes?since=" + encodeURIComponent(evSeen())).catch(function () { return []; })
       .then(function (list) {
@@ -999,6 +1025,73 @@
         renderEvChanges();
       });
   }
+  // ── 수정 요청 (2026-09-20 사용자: 상증 lab의 「수정 요청」 메뉴를 그대로) ──
+  var lastScreen = "home";
+  var REQ_BADGE = { "접수": "gray", "진행 중": "blue", "완료": "green", "보류": "gray" };
+  function reqContext() {
+    var ua = navigator.userAgent;
+    var dev = /iPhone|iPad/.test(ua) ? "아이폰" : /Android/.test(ua) ? "안드로이드" : /Windows/.test(ua) ? "윈도우" : /Mac/.test(ua) ? "맥" : "기타";
+    var link = document.querySelector('#nav a[data-screen="' + lastScreen + '"]');
+    return "화면: " + (link ? link.textContent.replace(/[0-9+]+$/, "") : lastScreen) + " · " + dev
+      + (isStandalone() ? " 앱" : " 브라우저") + " · " + window.innerWidth + "×" + window.innerHeight;
+  }
+  function loadReq() {
+    api("/requests").then(function (list) {
+      var open = list.filter(function (r) { return r.status === "접수" || r.status === "진행 중"; })
+        .sort(function (a, b) { return b.votes - a.votes || b.id - a.id; });        // 많이 바라는 것이 위로
+      var done = list.filter(function (r) { return r.status === "완료" || r.status === "보류"; });
+      function item(r) {
+        var mine = r.author_email === BOOT.me.email;
+        return '<div class="card card-pad req-item" data-id="' + r.id + '">'
+          + '<div class="req-head"><span class="badge ' + REQ_BADGE[r.status] + '">' + esc(r.status) + "</span>"
+          + '<span class="badge gray">' + esc(r.kind) + "</span><strong>" + esc(r.title) + "</strong></div>"
+          + (r.body ? '<p class="req-body">' + esc(r.body) + "</p>" : "")
+          + '<p class="req-meta">' + esc(r.author_name || r.author_email) + " · " + esc(r.created.slice(0, 10)) + (r.context ? " · " + esc(r.context) : "") + "</p>"
+          + (r.answer ? '<div class="req-answer"><b>' + esc(r.answered_by || "답변") + "</b> " + esc(r.answer) + "</div>" : "")
+          + '<div class="toolbar" style="margin-top:8px">'
+          + (mine ? '<span class="note">내 요청' + (r.votes ? " · 나도 필요 " + r.votes : "") + "</span>"
+                  : '<button type="button" class="btn req-vote' + (r.voted ? " primary" : "") + '">나도 필요' + (r.votes ? " " + r.votes : "") + "</button>")
+          + (mine && r.status === "접수" || BOOT.me.isSuper ? '<button type="button" class="btn req-del">지우기</button>' : "")
+          + "</div>"
+          + (BOOT.me.isSuper
+            ? '<div class="req-admin"><select class="input req-status" style="width:110px">'
+              + ["접수", "진행 중", "완료", "보류"].map(function (s) { return "<option" + (s === r.status ? " selected" : "") + ">" + s + "</option>"; }).join("")
+              + '</select><input class="input req-ans" placeholder="답변 한 줄" value="' + esc(r.answer) + '" style="flex:1;min-width:160px">'
+              + '<button type="button" class="btn primary req-save">저장</button></div>'
+            : "")
+          + "</div>";
+      }
+      $("req-list").innerHTML = (open.length ? open.map(item).join("") : '<div class="card"><div class="empty">열려 있는 요청이 없습니다.</div></div>')
+        + (done.length ? '<details class="req-done"><summary>끝난 요청 ' + done.length + "건</summary>" + done.map(item).join("") + "</details>" : "");
+    });
+  }
+  $("req-send").addEventListener("click", function () {
+    var title = $("req-title").value.trim();
+    if (!title) { $("req-msg").textContent = "제목을 적어 주세요."; $("req-title").focus(); return; }
+    var btn = this; btn.disabled = true;
+    api("/requests", { method: "POST", body: { kind: $("req-kind").value, title: title, body: $("req-body").value, context: reqContext() } })
+      .then(function () {
+        $("req-title").value = ""; $("req-body").value = "";
+        $("req-msg").textContent = "보냈습니다. 처리되면 여기 상태가 바뀝니다.";
+        loadReq(); refreshBadges();
+      }).catch(function () { /* api가 알림을 띄웠다 */ })
+      .then(function () { btn.disabled = false; });
+  });
+  $("req-list").addEventListener("click", function (e) {
+    var card = e.target.closest(".req-item"); if (!card) return;
+    var id = card.dataset.id;
+    if (e.target.closest(".req-vote")) { api("/requests/" + id + "/vote", { method: "POST" }).then(loadReq); return; }
+    if (e.target.closest(".req-del")) {
+      if (!confirm("이 요청을 지울까요?")) return;
+      api("/requests/" + id, { method: "DELETE" }).then(function () { loadReq(); refreshBadges(); });
+      return;
+    }
+    if (e.target.closest(".req-save")) {
+      api("/requests/" + id, { method: "POST", body: { status: card.querySelector(".req-status").value, answer: card.querySelector(".req-ans").value } })
+        .then(function () { toast("저장했습니다"); loadReq(); refreshBadges(); });
+    }
+  });
+
   function navBadge(screenName, label, n, title) {
     var link = document.querySelector('#nav a[data-screen="' + screenName + '"]');
     if (!link) return;
@@ -1098,6 +1191,7 @@
       refreshBoot().then(function () { if (screen === name) loadScreen(name); });
   }
   function loadScreen(name) {
+    if (name === "req") loadReq(); else lastScreen = name;       // 요청에 「어느 화면에서 왔나」를 붙인다
     if (name === "home") loadHome();
     // 조직도는 여러 사람이 함께 고친다. 열어둔 채 놔둔 화면으로 저장하면
     // 이미 없는 자리에 붙이려 들게 된다 — 들어올 때마다 지금 명단으로 맞춘다.

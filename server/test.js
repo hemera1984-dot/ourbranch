@@ -1173,6 +1173,26 @@ async function main() {
   ntList = await (await api("t-fc1", "GET", "/events?from=2027-06-20&to=2027-06-20")).json();
   assert.equal(ntList.filter(e => e.id === ntEv.id)[0].notes.length, 1);
 
+  // 64) 수정 요청 — 누구나 쓰고 보고, 상태·답변은 총관리자만, 글은 접수일 때 본인만 고친다
+  assert.equal((await api("t-fc1", "POST", "/requests", { title: "  " })).status, 400);
+  const rq = await (await api("t-fc1", "POST", "/requests", { kind: "오류 신고", title: "달력이 안 넘어가요", body: "다음 달 버튼", context: "일정 · 폰" })).json();
+  const rqSeen = await (await api("t-fc2", "GET", "/requests")).json();
+  assert.ok(rqSeen.some(r => r.id === rq.id && r.kind === "오류 신고" && r.votes === 0), "다른 팀도 본다");
+  assert.deepEqual(await (await api("t-fc2", "POST", "/requests/" + rq.id + "/vote")).json(), { voted: true });
+  assert.equal((await api("t-fc1", "POST", "/requests/" + rq.id + "/vote")).status, 400, "자기 글엔 못 누른다");
+  assert.equal((await (await api("t-fc2", "GET", "/requests")).json()).filter(r => r.id === rq.id)[0].voted, true);
+  assert.equal((await api("t-fc1", "POST", "/requests/" + rq.id, { status: "완료" })).status, 403, "상태는 총관리자만");
+  assert.equal((await api("t-esl1", "POST", "/requests/" + rq.id, { answer: "제가 답함" })).status, 403);
+  assert.equal((await api("t-fc2", "POST", "/requests/" + rq.id, { title: "남의 글" })).status, 403);
+  assert.equal((await api("t-fc1", "POST", "/requests/" + rq.id, { title: "달력 다음 달 버튼이 안 눌려요" })).status, 200);
+  assert.equal((await api("t-super", "POST", "/requests/" + rq.id, { status: "없는값" })).status, 400);
+  assert.equal((await api("t-super", "POST", "/requests/" + rq.id, { status: "진행 중", answer: "확인했습니다" })).status, 200);
+  assert.equal((await api("t-fc1", "POST", "/requests/" + rq.id, { title: "뒤늦게 바꾸기" })).status, 403, "진행 중엔 못 고친다");
+  const rqNow = (await (await api("t-fc1", "GET", "/requests")).json()).filter(r => r.id === rq.id)[0];
+  assert.equal(rqNow.status, "진행 중"); assert.equal(rqNow.answer, "확인했습니다"); assert.equal(rqNow.title, "달력 다음 달 버튼이 안 눌려요");
+  assert.equal((await api("t-fc2", "DELETE", "/requests/" + rq.id)).status, 403);
+  assert.equal((await api("t-fc1", "DELETE", "/requests/" + rq.id)).status, 200);
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

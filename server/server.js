@@ -600,6 +600,64 @@ route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
   send(res, 200, { ok: true });
 });
 
+// ---- 수정 요청 ----
+// 누구나 쓰고 누구나 본다. 상태와 답변은 총관리자만 — 고치는 사람이 한 명이라서다.
+const REQ_KINDS = ["프로그램 수정", "기능 제안", "오류 신고", "기타"];
+const REQ_STATUS = ["접수", "진행 중", "완료", "보류"];
+route("GET", /^\/requests$/, false, (req, res, user) => {
+  const votes = db.prepare("SELECT email FROM request_votes WHERE request_id = ?");
+  send(res, 200, db.prepare("SELECT * FROM requests ORDER BY id DESC LIMIT 300").all().map(r => {
+    const v = votes.all(r.id).map(x => x.email);
+    return { ...r, votes: v.length, voted: v.includes(user.email) };
+  }));
+});
+route("POST", /^\/requests$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  const title = String(b.title || "").trim().slice(0, 100);
+  if (!title) return send(res, 400, { error: "제목을 적어 주세요" });
+  const kind = REQ_KINDS.includes(b.kind) ? b.kind : "프로그램 수정";
+  const r = db.prepare("INSERT INTO requests (kind, title, body, context, author_email, author_name, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(kind, title, String(b.body || "").trim().slice(0, 2000), String(b.context || "").slice(0, 200), user.email, user.name, now(), now());
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+route("POST", /^\/requests\/(\d+)$/, false, async (req, res, user, m) => {
+  const r = db.prepare("SELECT * FROM requests WHERE id = ?").get(Number(m[1]));
+  if (!r) return send(res, 404, { error: "없는 요청입니다" });
+  const b = await readJson(req);
+  if (b.status !== undefined || b.answer !== undefined) {
+    if (!user.isSuper) return send(res, 403, { error: "상태·답변은 총관리자만" });
+    if (b.status !== undefined && !REQ_STATUS.includes(b.status)) return send(res, 400, { error: "상태 값이 올바르지 않습니다" });
+    db.prepare("UPDATE requests SET status = ?, answer = ?, answered_by = ?, updated = ? WHERE id = ?")
+      .run(b.status ?? r.status, String(b.answer ?? r.answer).slice(0, 2000), user.name, now(), r.id);
+    return send(res, 200, { ok: true });
+  }
+  // 글은 쓴 사람만, 아직 「접수」일 때만 고친다 — 진행 중에 내용이 바뀌면 무엇을 고치던 것인지 흐려진다
+  if (r.author_email !== user.email) return send(res, 403, { error: "본인 요청만" });
+  if (r.status !== "접수") return send(res, 403, { error: "이미 처리 중인 요청입니다" });
+  const title = b.title !== undefined ? String(b.title).trim().slice(0, 100) : r.title;
+  if (!title) return send(res, 400, { error: "제목을 적어 주세요" });
+  db.prepare("UPDATE requests SET kind = ?, title = ?, body = ?, updated = ? WHERE id = ?")
+    .run(REQ_KINDS.includes(b.kind) ? b.kind : r.kind, title, b.body !== undefined ? String(b.body).trim().slice(0, 2000) : r.body, now(), r.id);
+  send(res, 200, { ok: true });
+});
+route("DELETE", /^\/requests\/(\d+)$/, false, (req, res, user, m) => {
+  const r = db.prepare("SELECT * FROM requests WHERE id = ?").get(Number(m[1]));
+  if (!r) return send(res, 404, { error: "없는 요청입니다" });
+  if (r.author_email !== user.email && !user.isSuper) return send(res, 403, { error: "본인 요청만" });
+  db.prepare("DELETE FROM requests WHERE id = ?").run(r.id);
+  send(res, 200, { ok: true });
+});
+// 「나도 필요」 — 다시 누르면 거둔다. 자기 글에는 못 누른다(이미 한 표다).
+route("POST", /^\/requests\/(\d+)\/vote$/, false, (req, res, user, m) => {
+  const r = db.prepare("SELECT * FROM requests WHERE id = ?").get(Number(m[1]));
+  if (!r) return send(res, 404, { error: "없는 요청입니다" });
+  if (r.author_email === user.email) return send(res, 400, { error: "본인 요청입니다" });
+  const has = db.prepare("SELECT 1 FROM request_votes WHERE request_id = ? AND email = ?").get(r.id, user.email);
+  if (has) db.prepare("DELETE FROM request_votes WHERE request_id = ? AND email = ?").run(r.id, user.email);
+  else db.prepare("INSERT INTO request_votes (request_id, email) VALUES (?, ?)").run(r.id, user.email);
+  send(res, 200, { voted: !has });
+});
+
 // ---- 공지 ----
 route("GET", /^\/notices$/, false, (req, res, user) => {
   const list = db.prepare("SELECT * FROM notices ORDER BY created DESC, id DESC").all()
