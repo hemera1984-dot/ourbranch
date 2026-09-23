@@ -1242,6 +1242,23 @@ async function main() {
   assert.equal(aiSeen.body.messages[0].content[0].source.media_type, "image/jpeg");
   assert.ok(!(await (await api("t-fc1", "GET", "/events?from=2027-07-01&to=2027-07-03")).json()).some(e => e.title.includes("상담")), "스캔은 저장하지 않는다");
 
+  // 66) 가계부 — 본인만 읽고 쓴다. 총관리자도 남의 것은 못 본다. 쉼표 금액도 받는다.
+  assert.equal((await api("t-fc1", "POST", "/ledger", { date: "2027-08-01", amount: "abc" })).status, 400);
+  assert.equal((await api("t-fc1", "POST", "/ledger", { date: "2027-08-01", kind: "선물", amount: 1000 })).status, 400);
+  const lg1 = await (await api("t-fc1", "POST", "/ledger", { date: "2027-08-01", category: "식사·접대", who: "김OO", amount: "34,000원", memo: "점심" })).json();
+  const lg2 = await (await api("t-fc1", "POST", "/ledger", { date: "2027-08-15", kind: "수입", category: "수당", amount: 1500000 })).json();
+  await api("t-fc1", "POST", "/ledger", { date: "2027-09-01", amount: 5000, memo: "다음 달" });
+  const lgMonth = await (await api("t-fc1", "GET", "/ledger?month=2027-08")).json();
+  assert.deepEqual(lgMonth.map(r => [r.date, r.kind, r.amount, r.who]), [["2027-08-01", "지출", 34000, "김OO"], ["2027-08-15", "수입", 1500000, ""]], "달로 거른다, 쉼표는 벗긴다");
+  assert.equal((await (await api("t-super", "GET", "/ledger?month=2027-08")).json()).length, 0, "총관리자도 남의 가계부는 못 본다");
+  assert.equal((await api("t-esl1", "POST", "/ledger/" + lg1.id, { amount: 1 })).status, 404, "남의 줄은 없는 줄이다");
+  assert.equal((await api("t-fc1", "POST", "/ledger/" + lg1.id, { amount: 36000, memo: "점심 (2명)" })).status, 200);
+  const lgOne = (await (await api("t-fc1", "GET", "/ledger?from=2027-08-01&to=2027-08-01")).json())[0];
+  assert.equal(lgOne.amount, 36000); assert.equal(lgOne.memo, "점심 (2명)"); assert.equal(lgOne.who, "김OO", "안 보낸 칸은 그대로");
+  assert.equal((await api("t-esl1", "DELETE", "/ledger/" + lg2.id)).status, 404);
+  assert.equal((await api("t-fc1", "DELETE", "/ledger/" + lg2.id)).status, 200);
+  assert.equal((await (await api("t-fc1", "GET", "/ledger?month=2027-08")).json()).length, 1);
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {

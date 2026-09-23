@@ -601,6 +601,50 @@ route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
   send(res, 200, { ok: true });
 });
 
+// ---- 가계부 ----
+// 본인 것만 읽고 쓴다. 관리자 예외가 없다 — 영업비는 급여 명세처럼 개인의 것이다.
+const LEDGER_KINDS = ["지출", "수입"];
+function ledgerBody(b, prev) {
+  const date = b.date !== undefined ? String(b.date) : prev.date;
+  if (!isDate(date)) return { error: "날짜는 2026-09-23 형식으로 넣어 주세요" };
+  const kind = b.kind !== undefined ? String(b.kind) : prev.kind;
+  if (!LEDGER_KINDS.includes(kind)) return { error: "구분은 지출·수입 중 하나" };
+  const amount = b.amount !== undefined ? Math.round(Number(String(b.amount).replace(/[,\s원]/g, ""))) : prev.amount;
+  if (!Number.isFinite(amount) || amount < 0 || amount > 1e9) return { error: "금액이 올바르지 않습니다" };
+  return {
+    date, kind, amount,
+    category: String(b.category ?? prev.category ?? "").trim().slice(0, 30),
+    who: String(b.who ?? prev.who ?? "").trim().slice(0, 60),
+    memo: String(b.memo ?? prev.memo ?? "").trim().slice(0, 200)
+  };
+}
+route("GET", /^\/ledger$/, false, (req, res, user) => {
+  const q = new URL(req.url, "http://x").searchParams;
+  const m = q.get("month");
+  const from = q.get("from") || (m ? m + "-01" : today()), to = q.get("to") || (m ? m + "-31" : today());
+  send(res, 200, db.prepare("SELECT * FROM ledger WHERE email = ? AND date >= ? AND date <= ? ORDER BY date, id").all(user.email, from, to));
+});
+route("POST", /^\/ledger$/, false, async (req, res, user) => {
+  const v = ledgerBody(await readJson(req), { date: "", kind: "지출", amount: 0 });
+  if (v.error) return send(res, 400, { error: v.error });
+  const r = db.prepare("INSERT INTO ledger (email, date, kind, category, who, amount, memo, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(user.email, v.date, v.kind, v.category, v.who, v.amount, v.memo, now());
+  send(res, 200, { id: Number(r.lastInsertRowid) });
+});
+route("POST", /^\/ledger\/(\d+)$/, false, async (req, res, user, m) => {
+  const row = db.prepare("SELECT * FROM ledger WHERE id = ? AND email = ?").get(Number(m[1]), user.email);
+  if (!row) return send(res, 404, { error: "없는 줄입니다" });
+  const v = ledgerBody(await readJson(req), row);
+  if (v.error) return send(res, 400, { error: v.error });
+  db.prepare("UPDATE ledger SET date = ?, kind = ?, category = ?, who = ?, amount = ?, memo = ? WHERE id = ?")
+    .run(v.date, v.kind, v.category, v.who, v.amount, v.memo, row.id);
+  send(res, 200, { ok: true });
+});
+route("DELETE", /^\/ledger\/(\d+)$/, false, (req, res, user, m) => {
+  const r = db.prepare("DELETE FROM ledger WHERE id = ? AND email = ?").run(Number(m[1]), user.email);
+  send(res, r.changes ? 200 : 404, r.changes ? { ok: true } : { error: "없는 줄입니다" });
+});
+
 // ---- 수정 요청 ----
 // 누구나 쓰고 누구나 본다. 상태와 답변은 총관리자만 — 고치는 사람이 한 명이라서다.
 const REQ_KINDS = ["프로그램 수정", "기능 제안", "오류 신고", "기타"];

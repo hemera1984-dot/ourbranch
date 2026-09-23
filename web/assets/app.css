@@ -245,6 +245,21 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .rsvp .btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .rsvp-sum { font-size: 12px; color: var(--sub); }
 
+/* 가계부 */
+.cal-money { font-size: 12px; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.day-band.ledger .lg-line { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+.day-band.ledger .lg-line:first-of-type { border-top: 0; }
+.lg-memo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.lg-amt { font-variant-numeric: tabular-nums; color: var(--amber); }
+.lg-amt.in { color: var(--green); }
+.lg-del { background: none; border: 0; color: var(--ter); cursor: pointer; font-size: 14px; padding: 0 4px; }
+.lg-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lg-quick .lg-q-amt { width: 96px; }
+.lg-quick .lg-q-cat { width: 110px; }
+.lg-quick .lg-q-memo { flex: 1; min-width: 140px; }
+.lg-sum { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 14px; }
+.lg-sum .metric-value { font-variant-numeric: tabular-nums; }
+
 /* 수첩 스캔 — 읽은 표를 훑어보는 시트 */
 .scan-sheet { max-height: 88vh; overflow-y: auto; }
 .scan-wait { margin: 10px 14px; color: var(--sub); font-size: 13.5px; }

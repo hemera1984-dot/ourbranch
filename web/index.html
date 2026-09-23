@@ -57,6 +57,7 @@
       <a href="#att" data-screen="att">일일보고</a>
       <a href="#board" data-screen="board">미션·공지</a>
       <a href="#perf" data-screen="perf">업적현황</a>
+      <a href="#ledger" data-screen="ledger">가계부</a>
       <p class="nav-group-label">리쿠르팅</p>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#recruit" data-screen="recruit">도입 현황</a>
@@ -255,6 +256,23 @@
             </ol>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="screen-ledger" hidden>
+      <p class="eyebrow">내 영업비</p>
+      <h1>가계부</h1>
+      <p class="page-desc">나만 봅니다 — 지점장도 총관리자도 못 봅니다. 칸을 벗어나면 바로 저장되고, 쓴 날은 일정 달력에도 표시됩니다.</p>
+      <div class="lg-sum" id="lg-sum"></div>
+      <div class="section">
+        <div class="section-head">
+          <h2 id="lg-title">이번 달 기록</h2>
+          <div class="toolbar">
+            <span class="save-state" id="lg-state"></span>
+            <button type="button" class="btn primary" id="lg-add">+ 오늘 줄 추가</button>
+          </div>
+        </div>
+        <div id="lg-grid" class="card"></div>
       </div>
     </section>
 
@@ -578,7 +596,7 @@
     ? "https://api.insurguard.life/branch" : "");
 
   var token = null, BOOT = null, bootAt = 0, month = new Date().toISOString().slice(0, 7);
-  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs", "req"];
+  var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs", "req", "ledger"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
 
@@ -1233,7 +1251,7 @@
       a.classList.toggle("active", a.dataset.screen === name);
     });
     document.body.classList.remove("more-open");
-    $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit");
+    $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit" || name === "ledger");
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
     checkSoon();
@@ -1264,6 +1282,7 @@
     if (name === "perf") loadPerf();
     if (name === "recruit") loadRecruit();
     if (name === "docs") loadDocs();
+    if (name === "ledger") loadLedger();
   }
   // 폰 하단 탭 — 넷은 바로, 나머지는 「더보기」로 사이드 메뉴를 연다
   $("tabbar").addEventListener("click", function (e) {
@@ -1556,6 +1575,119 @@
     });
   }
 
+  // ── 가계부 (2026-09-23 사용자) ──
+  // 영업비를 적는다. 나만 본다. 쓴 날은 달력 칸에 금액 한 줄, 그날 상세에 띠로 붙는다.
+  var LEDGER_CATS = ["식사·접대", "교통·주유", "선물", "경조사", "교육·자료", "통신", "사무", "기타"];
+  var calLedger = [];
+  function ledgerOn(ds) { return calLedger.filter(function (r) { return r.date === ds; }); }
+  function moneyLine(ds) {
+    var spent = 0; ledgerOn(ds).forEach(function (r) { if (r.kind === "지출") spent += r.amount; });
+    return spent ? '<div class="cal-money">' + fmtNum(spent) + "원</div>" : "";
+  }
+  function ledgerBandHtml(ds) {
+    var rows = ledgerOn(ds), spent = 0;
+    rows.forEach(function (r) { if (r.kind === "지출") spent += r.amount; });
+    return '<div class="day-band ledger"><p class="day-band-label">가계부' + (spent ? " · 지출 " + fmtNum(spent) + "원" : "") + "</p>"
+      + rows.map(function (r) {
+        return '<div class="lg-line" data-id="' + r.id + '"><span class="badge gray">' + esc(r.category || (r.kind === "수입" ? "수입" : "기타")) + "</span>"
+          + '<span class="lg-memo">' + esc([r.who, r.memo].filter(Boolean).join(" · ")) + "</span>"
+          + '<b class="lg-amt' + (r.kind === "수입" ? " in" : "") + '">' + (r.kind === "수입" ? "+" : "") + fmtNum(r.amount) + "</b>"
+          + '<button type="button" class="lg-del" title="지우기">×</button></div>';
+      }).join("")
+      + '<form class="lg-quick" data-date="' + ds + '">'
+      + '<input class="input lg-q-amt" inputmode="numeric" placeholder="금액" required>'
+      + '<select class="input lg-q-cat">' + LEDGER_CATS.map(function (c) { return "<option" + (c === recall("가계부분류") ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select>"
+      + '<input class="input lg-q-memo" placeholder="누구·무엇 (예: 김OO 점심)">'
+      + '<button class="btn primary" type="submit">지출 저장</button></form></div>';
+  }
+  // 저장·삭제 뒤 달력 쪽을 다시 그린다 — 어느 화면이든 그 화면의 방식으로
+  function ledgerRefresh() {
+    if (screen === "ledger") { loadLedger(); return; }
+    if (screen === "sched") { if (isMobile()) loadDay(); else loadCal(); }
+  }
+  document.addEventListener("submit", function (e) {
+    var f = e.target.closest && e.target.closest(".lg-quick");
+    if (!f) return;
+    e.preventDefault();
+    var amt = Number(f.querySelector(".lg-q-amt").value.replace(/[^0-9]/g, ""));
+    if (!amt) { f.querySelector(".lg-q-amt").focus(); return; }
+    var cat = f.querySelector(".lg-q-cat").value;
+    remember("가계부분류", cat);
+    f.querySelector("button").disabled = true;
+    api("/ledger", { method: "POST", body: { date: f.dataset.date, kind: "지출", category: cat, amount: amt, memo: f.querySelector(".lg-q-memo").value } })
+      .then(function () { toast(fmtNum(amt) + "원 적었습니다"); closeSheet(); ledgerRefresh(); })
+      .catch(function () { f.querySelector("button").disabled = false; });
+  });
+  document.addEventListener("click", function (e) {
+    var del = e.target.closest && e.target.closest(".lg-del");
+    if (!del) return;
+    e.stopPropagation();
+    var line = del.closest(".lg-line");
+    api("/ledger/" + line.dataset.id, { method: "DELETE" }).then(function () { line.remove(); ledgerRefresh(); });
+  });
+
+  // 가계부 화면 — 표 한 장, 칸을 벗어나면 저장 (TA 일지와 같은 길)
+  var lgGrid = null;
+  var LG_COLS = [
+    { key: "date", label: "날짜", width: 96, date: true, dim: true },
+    { key: "kind", label: "구분", width: 56, opts: ["지출", "수입"], cls: function (v) { return v === "수입" ? "st-hire" : ""; } },
+    { key: "category", label: "분류", width: 90, opts: LEDGER_CATS.concat(["수당"]), sticky: true },
+    { key: "who", label: "누구", width: 80 },
+    { key: "amount", label: "금액", width: 90, num: true, big: true },
+    { key: "memo", label: "내용", width: 200 }
+  ];
+  function lgState(text, cls) {
+    var el = $("lg-state"); el.textContent = text || ""; el.className = "save-state" + (cls ? " " + cls : "");
+  }
+  function lgReady(r) { return r.date && Number(String(r.amount).replace(/,/g, "")) > 0; }
+  function lgCommit(r) {
+    if (!lgGrid) return;
+    if (r._id == null && !lgReady(r)) return;
+    lgState("저장 중…");
+    var req = r._id == null
+      ? api("/ledger", { method: "POST", body: r }).then(function (out) { lgGrid.markRowSaved(r, out.id); })
+      : api("/ledger/" + r._id, { method: "POST", body: r }).then(function () { lgGrid.markRowSaved(r, r._id); });
+    req.then(function () { lgState("저장됨", "ok"); lgSummary(lgGrid.rows()); })
+      .catch(function (e) { lgState("저장 실패 — " + ((e && e.message) || "다시 시도해 주세요"), "bad"); });
+  }
+  function lgSummary(rows) {
+    var spent = 0, income = 0, byCat = {};
+    rows.forEach(function (r) {
+      var a = Number(String(r.amount).replace(/,/g, "")) || 0;
+      if (r.kind === "수입") income += a; else { spent += a; byCat[r.category || "기타"] = (byCat[r.category || "기타"] || 0) + a; }
+    });
+    var cats = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; });
+    $("lg-sum").innerHTML = '<div class="metric"><span class="metric-label">지출</span><strong class="metric-value">' + fmtNum(spent) + "원</strong></div>"
+      + '<div class="metric"><span class="metric-label">수입</span><strong class="metric-value">' + fmtNum(income) + "원</strong></div>"
+      + cats.slice(0, 4).map(function (c) {
+        return '<div class="metric"><span class="metric-label">' + esc(c) + '</span><strong class="metric-value">' + fmtNum(byCat[c]) + "원</strong></div>";
+      }).join("");
+  }
+  function loadLedger() {
+    $("month-label").textContent = monthLabel();
+    $("lg-title").textContent = monthLabel() + " 기록";
+    api("/ledger?month=" + month).then(function (rows) {
+      rows = rows.map(function (r) { r._id = r.id; return r; })
+        .sort(function (a, b) { return a.date === b.date ? a.id - b.id : (a.date < b.date ? 1 : -1); });
+      lgGrid = makeGrid($("lg-grid"), {
+        cols: LG_COLS, memoryKey: "ledger", year: Number(month.slice(0, 4)), rows: rows,
+        fixed: { kind: "지출", date: fmtDate(new Date()) },
+        groupBy: taDayKey, groupLabel: taDayLabel, insertAt: taInsertAt,
+        onRowCommit: lgCommit,
+        onDeleteRow: function (r, done) { api("/ledger/" + r._id, { method: "DELETE" }).then(function () { done(); lgSummary(lgGrid.rows()); }); }
+      });
+      lgSummary(rows);
+      lgState("");
+      if (!rows.length) lgGrid.addRow();
+    });
+  }
+  $("lg-add").addEventListener("click", function () {
+    if (!lgGrid) return;
+    lgGrid.addRow({ date: fmtDate(new Date()) });
+    var td = document.activeElement;
+    if (td && td.scrollIntoView) td.scrollIntoView({ block: "center" });
+  });
+
   // 오늘·내 몫으로 입력창을 바로 연다 — 홈의 「+ 일정 적기」, 아이콘 바로가기, ?quick=add 가 다 여기로
   function openQuickAdd(onDone) {
     openPop(null, { em: BOOT.me.email, date: fmtDate(new Date()), pickMember: true, onDone: onDone || loadHome });
@@ -1580,7 +1712,8 @@
       soft(api("/ta?month=" + thisMonth), []),
       soft(api("/perf?month=" + thisMonth), { rows: [], goals: [] }),
       soft(api("/attendance?date=" + todayStr), []),
-      soft(api("/events?from=" + todayStr + "&to=" + fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14))), [])
+      soft(api("/events?from=" + todayStr + "&to=" + fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14))), []),
+      soft(api("/ledger?month=" + thisMonth), [])
     ]).then(function (res) {
       var evs = res[0].filter(function (e) {
         return (e.team_id === teamId || e.team_id == null || BOOT.me.recruits.indexOf(e.member_email) >= 0) && e.status !== "취소";
@@ -1684,6 +1817,17 @@
               + '<span class="slot-title">' + esc(evLabel(e)) + "</span>"
               + (e.place ? '<span class="slot-place">' + esc(e.place) + "</span>" : "") + "</div>";
           }).join("") + "</div>");
+      // 이번 달 영업비 — 나만 보는 숫자. 안 쓴 달엔 타일이 없다
+      var lgSpent = res[7].filter(function (r) { return r.kind === "지출"; });
+      if (lgSpent.length) {
+        var byCat = {};
+        lgSpent.forEach(function (r) { byCat[r.category || "기타"] = (byCat[r.category || "기타"] || 0) + r.amount; });
+        var top = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }).slice(0, 3);
+        tiles.push('<div class="tile"><p class="tile-label">이번 달 영업비</p>'
+          + '<div class="tile-num">' + fmtNum(lgSpent.reduce(function (s, r) { return s + r.amount; }, 0)) + "원</div>"
+          + '<p class="tile-sub">' + esc(top.map(function (c) { return c + " " + fmtNum(byCat[c]); }).join(" · ")) + "</p>"
+          + '<p style="margin:6px 0 0"><a class="tile-more" href="#ledger">가계부</a></p></div>');
+      }
       if (team.length)
         tiles.push('<div class="tile w2"><p class="tile-label">오늘 팀 일정 ' + team.length + "건</p>"
           + team.slice(0, 5).map(evLine).join("")
@@ -3244,7 +3388,8 @@
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
-    api("/events?from=" + from + "&to=" + to).then(function (evs) {
+    Promise.all([api("/events?from=" + from + "&to=" + to), api("/ledger?from=" + from + "&to=" + to).catch(function () { return []; })]).then(function (rs) {
+      var evs = rs[0]; calLedger = rs[1];
       calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null
           || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
@@ -3274,7 +3419,7 @@
     $("day-view").hidden = mColsOn;
     if (mColsOn) { dcDate = selDate; loadDayCols(); return; }
     var h = dayGroupsHtml(dayItemsOf(selDate), myTeamId());
-    $("day-view").innerHTML = h || '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+    $("day-view").innerHTML = (h || '<div class="empty">이 날짜에 일정이 없습니다.</div>') + ledgerBandHtml(selDate);
   }
   $("m-cols").addEventListener("click", function () {
     mColsOn = !mColsOn;
@@ -3296,7 +3441,8 @@
     s.innerHTML = '<div class="sheet-head"><strong>' + esc(dayLabelOf(ds)) + "</strong>"
       + '<button class="btn primary" id="sheet-add">일정 추가</button>'
       + '<button class="btn" id="sheet-close">닫기</button></div>'
-      + (dayGroupsHtml(dayItemsOf(ds), myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>');
+      + (dayGroupsHtml(dayItemsOf(ds), myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>')
+      + ledgerBandHtml(ds);
     document.body.appendChild(back);
     document.body.appendChild(s);
     s.querySelector("#sheet-close").addEventListener("click", closeSheet);
@@ -3484,7 +3630,8 @@
     $("cal-copy-month").hidden = false;
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
-    api("/events?from=" + from + "&to=" + to).then(function (evs) {
+    Promise.all([api("/events?from=" + from + "&to=" + to), api("/ledger?from=" + from + "&to=" + to).catch(function () { return []; })]).then(function (rs) {
+      var evs = rs[0]; calLedger = rs[1];
       calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null
           || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
@@ -3543,7 +3690,7 @@
           }).join("")
           + (!open && list.length > 3 ? '<div class="cal-more">+' + (list.length - 3) + "건</div>" : "");
         }
-        cell.push('<div class="cal-half">' + evLines(mineSide) + "</div>");
+        cell.push('<div class="cal-half">' + evLines(mineSide) + moneyLine(ds) + "</div>");
         cell.push('<div class="cal-half official">' + evLines(offSide) + "</div>");
       }
       cell.push("</div>");
@@ -3591,7 +3738,8 @@
       + "</strong>"
       + '<button class="btn primary" id="cal-day-add">일정 추가</button></div>'
       + quickAddHtml()
-      + daySplitHtml(items, myTeamId());
+      + daySplitHtml(items, myTeamId())
+      + ledgerBandHtml(selDate);
   }
   $("cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");

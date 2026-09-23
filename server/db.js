@@ -181,6 +181,20 @@ export function openDb(file) {
       created    TEXT NOT NULL
     );
 
+    -- 가계부 — 영업비 (2026-09-23 사용자: 「설계사는 영업비를 많이 쓴다」). 본인만 본다 — 총관리자도 못 본다.
+    CREATE TABLE IF NOT EXISTS ledger (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      email    TEXT NOT NULL,
+      date     TEXT NOT NULL,
+      kind     TEXT NOT NULL DEFAULT '지출',      -- 지출·수입
+      category TEXT NOT NULL DEFAULT '',
+      who      TEXT NOT NULL DEFAULT '',          -- 누구에게 썼나 (고객·팀원)
+      amount   INTEGER NOT NULL DEFAULT 0,
+      memo     TEXT NOT NULL DEFAULT '',
+      created  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ledger_email_date ON ledger(email, date);
+
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
     -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항
