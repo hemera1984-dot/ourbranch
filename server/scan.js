@@ -36,7 +36,7 @@ const SCHEMA = {
 export function buildScanRequest(b64, mediaType, todayStr) {
   const dow = "일월화수목금토"[new Date(todayStr + "T00:00:00").getDay()];
   return {
-    model: "claude-opus-5",
+    model: "claude-opus-5-5",
     max_tokens: 8000,
     // 거절되면 같은 요청을 대체 모델로 한 번 더 — 수첩 사진이 걸릴 일은 드물지만 걸리면 사용자는 이유를 모른다
     fallbacks: "default",

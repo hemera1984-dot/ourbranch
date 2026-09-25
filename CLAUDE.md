@@ -132,7 +132,7 @@
 ## 수첩 스캔 (2026-09-20 사용자)
 
 - 「수첩 스캔」 버튼 → 폰 카메라(`capture="environment"`) → 긴 변 1800px JPEG로 줄여 `POST /events/scan`
-  → 서버가 Claude(`claude-opus-5`, `server/scan.js`, SDK 없이 fetch — 의존성 0 원칙)로 표를 읽음 →
+  → 서버가 Claude(`claude-opus-5-5`, `server/scan.js`, SDK 없이 fetch — 의존성 0 원칙)로 표를 읽음 →
   **훑어보는 시트에서 고친 뒤 저장.** AI가 읽은 것을 바로 저장하지 않는다(입력 원칙). 추측이 섞인 줄은
   노란 바탕 + 무엇이 불확실한지 한 줄, 날짜를 못 읽은 줄은 체크가 꺼진 채 나온다.
 - **사진은 서버에도 남기지 않는다.** 전화번호·주민번호는 프롬프트에서 금지하고 `cleanRows`가 한 번 더 지운다.

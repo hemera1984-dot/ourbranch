@@ -1238,7 +1238,7 @@ async function main() {
   assert.equal(scanned.rows[0].title, "김OO 상담", "전화번호는 지운다");
   assert.deepEqual([scanned.rows[1].date, scanned.rows[1].start, scanned.rows[1].kind, scanned.rows[1].unsure], ["", "", "기타", true]);
   assert.equal(aiSeen.key, "test-key"); assert.equal(aiSeen.beta, "server-side-fallback-2026-07-01");
-  assert.equal(aiSeen.body.model, "claude-opus-5");
+  assert.equal(aiSeen.body.model, "claude-opus-5-5");
   assert.equal(aiSeen.body.messages[0].content[0].source.media_type, "image/jpeg");
   assert.ok(!(await (await api("t-fc1", "GET", "/events?from=2027-07-01&to=2027-07-03")).json()).some(e => e.title.includes("상담")), "스캔은 저장하지 않는다");
 
