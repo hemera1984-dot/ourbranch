@@ -1029,12 +1029,13 @@ document.addEventListener('DOMContentLoaded', () => {
 const NS = 'http://www.w3.org/2000/svg';
 const PAL = { k:'#0E1726', n:'#0F2A57', N:'#081B3A', b:'#0046FF', d:'#2F6BFF', c:'#8FB0FF', l:'#C9D5F2', L:'#EEF3FF', s:'#F0C9A4', h:'#2A1F1A', y:'#D9B36A',
   w:'#FFFFFF', g:'#7A8499', G:'#B7C0D0', r:'#E0473F', o:'#F2C14E', p:'#FF9BB0', e:'#3EC79A', m:'#9AA7C2', t:'#6B4A2E', u:'#4A5A78',
-  K:'#0B1224', H:'#5A4336', S:'#D9A07A', Y:'#F3D98F', P:'#D66F8A', E:'#249C74', B:'#0A2A8A', U:'#33415C', W:'#DCE3F0', Q:'#9A6A42', V:'#FFE7A8' };
+  K:'#0B1224', H:'#5A4336', S:'#D9A07A', Y:'#F3D98F', P:'#D66F8A', E:'#249C74', B:'#0A2A8A', U:'#33415C', W:'#DCE3F0', Q:'#9A6A42', V:'#FFE7A8',
+  a:'#3A2F2A', f:'#F1CFA9', i:'#F2A38A', j:'#202326', q:'#FAF8F0' };
 const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
 const R = (p, x, y, w, h, c, ex = {}) => el('rect', Object.assign({ x, y, width: w, height: h, fill: PAL[c] || c }, ex), p);
 const G = (p, cls, style, attrs = {}) => { const g = el('g', attrs, p); if (cls) g.setAttribute('class', cls); if (style) g.setAttribute('style', style); return g; };
 const at = (p, x, y) => el('g', { transform: `translate(${x} ${y})` }, p);
-function spr(p, rows, x, y, cls, style){ const a0 = at(p, x + (rows.ox || 0), y + (rows.oy || 0)); if (rows.ox) R(a0, 1, 16, 8, 1, '#061028', { opacity: .18 }); const g = G(a0, cls, style); rows.forEach((r, j) => [...r].forEach((c, i) => { if (c !== '.' && PAL[c]) R(g, i, j, 1, 1, c); })); return g; }
+function spr(p, rows, x, y, cls, style){ const a0 = at(p, x + (rows.ox || 0), y + (rows.oy || 0)); if (rows.sh) R(a0, rows.sh[0], rows.sh[1], 8, 1, '#061028', { opacity: .18 }); else if (rows.ox) R(a0, 1, 16, 8, 1, '#061028', { opacity: .18 }); const g = G(a0, cls, style); rows.forEach((r, j) => [...r].forEach((c, i) => { if (c !== '.' && PAL[c]) R(g, i, j, 1, 1, c); })); return g; }
 function txt(p, x, y, s, size = 6, fill = 'k', anchor = 'middle', ex = {}){ const t = el('text', Object.assign({ x, y, 'font-size': size, fill: PAL[fill] || fill, 'text-anchor': anchor, class: 'pxt' }, ex), p); t.textContent = s; return t; }
 const anim = (g, v) => { g.style.animation = v; return g; };
 
@@ -1056,10 +1057,23 @@ const LOOK = [
   { h: 't', H: 'Q', T: 'p', t: 'P', b: 'p', n: 'n', m: 'N', long: 1 },
   { h: 'h', H: 'H', T: 'e', t: 'E', b: 'e', n: 'u', m: 'U' } ];
 const ME = { h: 'h', H: 'H', T: 'n', t: 'N', b: 'b', n: 'N', m: 'K' };
-const FC = hero(ME), FC2 = hero(ME, 1);
-const P = LOOK.map(o => hero(o)), P2 = LOOK.map(o => hero(o, 1));
+/* 신한 FC 인물 16자세 — 공장 엔진이 Astra 그림을 격자·팔레트에 맞춘 시트 (engine/assets/astra/fc-m·fc-f_poses.json, 2026-09-28).
+   a 머리 · f 피부 · i 볼 · j 먹(눈·입·바지·구두) · n/N 정장 · q 셔츠 · b 넥타이. 시트를 새로 받으면 이 표만 갈아 끼운다.
+   손님·팀원도 같은 시트에 옷 색만 바꿔 쓴다(LOOK) — 한 화면에 그림체가 둘 섞이지 않게. */
+const FCS = {"m":{"서기":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","fffjfffjff","fiffffffif",".ffffjjff.","..nnqbqnN.",".nnnqbnNn.",".nNnnbnNn.",".NNnnnnNn.",".fNnnnnNf.","..jjjjjj..","..jjj.jj..","..jjj.jjj.","..jj..jjj."],"걷기1":["..aaaaaa...",".aaaaaaaa..","aaaaaaaaaa.","aaffffffaa.","affffffffa.","fffjfffjff.","fiffffffif.",".ffffjjff..","..nNnqbN...",".nNNnqbnNN.",".nNNnnbnnN.",".f.Nnnnn.ff","...Nnnnn...","...jjjjj...","..jjj.jjj..",".jjj...jjj.","..jj...jjj."],"걷기2":["...aaaaaa...","..aaaaaaaa..",".aaaaaaaaaa.",".aaffffffaa.",".affffffffa.",".fffjffjfff.",".fiffffffif.","..fffjjfff..","...Nnqbqn...","..nNnqbqnN..",".NNNnnbnNnN.","ff..nnnn.Nff","....nnnn....","...jjjjj....","..jjj.jjj...","..jj...jjj..","..jjj..jjj.."],"설명":["..aaaaaa.....",".aaaaaaaaa...","aaaaaaaaaa...","aaffffffaa...","affffffffa...","fffjfffjff...","fiifffffif...",".ffffjjff..f.","..nnqbqnN.fff",".nnnqbnnNnnf.",".nNnnbnNNnN..",".nNnnnnN.....",".fNnnnnN.....","..jjjjjj.....","..jjj.jj.....","..jjj.jjj...."],"가리킴":["...aaaaa......",".aaaaaaaa.....","aaaaaaaaaa....","aaafffffaa....","affffffffa....","fffjfffjff....","ffifffffif....","..fffjjff.....","..NnqbqNNNNNff",".nnnqbnNNNNNf.",".nNnnbnN......",".nNnnnnN......",".ffnnnnN......","..jjjjjj......","..jjj.jj......","..jjj.jjj.....","..jjj.jjj....."],"인사":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaaaaaaaaa","aaffffffaa","ffffffffff",".ffjffjfff",".iffjjffN.",".Nnnqbnnn.",".nnNbbNnn.","..nnNbnn..","..NffffN..","..jnffnN..","...jjjjj..","...jjjjj..","..jjjjjj.."],"서류":["..aaaaa...","aaaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","ffjfffjfff","fifffffiif",".fffjjfff.",".NnqbqNN..","NnqqqqqNN.","nffqqqffn.","NfqqqqqfN.","..NnnnnN..","..jj.jjj..","..jj.jjj..",".jjj.jjj.."],"만세":["....aaaaaa....","...aaaaaaaa...","..aaaaaaaaaa..","f.aaffffffaa.f","ffjffffffffjff","NNffffffjfffNn",".NNiffjjffiNn.",".NnNffffffnN..","..NNNnbqnNNN..","....NnbbnN....","....NnnnnN....","....NnnnnN....","....jjjjjj....","....jj.jjj....","....jj.jjj....","...jjj.jjjj..."],"생각":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","fffjffjfff","fiffjjffif",".ffffffff.","..NNffnN..",".nNNNbnNn.",".NnNfNnnn.","..NnfnnN..","..NnnnnN..","..jjjjjj..","..jj.jjj..",".jjj.jjjj."],"듣기":[".aaaaaaaa.","aaaaaaaaaa","aaaaaaaaaa","aaafffffaa","ffffffffff","fffjfffjff",".iifjjffi.",".nnnqbqnn.",".nNnnbnNn.",".nNnnbnNn.",".fNnnnnNf.",".fNnnnnNf.","..jjj.jj..","..jjj.jj..","..jjj.jjj."],"손흔들기":[".....aaaaa..","...aaaaaaaa.","...aaaaaaaaa","...aafffffaa",".f.afffffffa","fffffjfffjff",".f.fiffjffi.",".NN.fffffff.","..nnNnqbqn..","...nNnnbnNnn","....NnnbnNnn","....NnnnnNff","....NnnnnNff","....jjj.jj..","....jjj.jj..","....jjj.jjj."],"엄지":["...aaaaa.....",".aaaaaaaa....","aaaaaaaaaa...","aaffffffaa...","affffffffa...","fffjfffjff...","fiffffffif...",".ffffjjff..f.","..NnqbqnnnNff",".nNnnbnNnnnf.",".nNnnbnN.....",".nNnnnnN.....",".fNnnnnN.....","..jjjjjj.....","..jjj.jj.....","..jjj.jjj...."],"악수":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","fffjffffff",".iiffjffi.","..fffffff.",".NNnqbqNn.",".nfNnbnNN.",".fffnnnNN.","..ffnnnNn.","..NnnnnNf.","..jjjjjj..","..jjj.jj..",".jjjj.jjj."],"노트북":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","fffjffjfff","fiffjjffif",".ffffffff.",".nnnnnnnN.","nNNnnnnnnN","NnNnnnnnNn","NNffnnnffn","..NnnnnN..","..jjjjjj..","..jjj.jj..",".jjjj.jjj."],"달리기":["....aaaaaa...","...aaaaaaaa..","..aaaaaaaaaa.","..aaffffffaa.","..affffffffa.","..fffjffjfff.","..fifffffiif.","...fffjjfff..",".NnNnnqbnn.ff",".NNnNnnbnNNNf",".fN.NnnbnNNN.","....Nnnnn....","....jjjjj....","..jjjjjjjj...","jjjjjj..jjj..","jj.......jjjj",".........jj.."],"놀람":["..aaaaaa..",".aaaaaaaa.","aaaaaaaaaa","aaffffffaa","affffffffa","fffjffjfff","ffffjjffff","ffffffffff","NNnnbbnNnN","nnNnbbnNnn","..NnnnnN..","..NnnnnN..","..jjjjjj..",".jjj..jjj.",".jjj..jjj.","jjjj..jjjj"]},"f":{"서기":["..aaaaaaa..","..aaaaaaa..",".aaaaaaaaaa","aafffffffaa","afffffffffa","afjfffffjfa","afffffffffa","afiffjjfifa",".nnnqbqnn..",".nnnqbqnnn.","nnnnnbnnnnn","nnnnnnnnnnn","fnnnnnnnnff",".NjNNnnnN..",".jjj...jj..",".jjj...jj.."],"걷기1":["..aaaaaaa...","..aaaaaaaa..",".aaaaaaaaaa.","aafffffffaaa","affffffffffa","afjfffffjffa","affffffffffa","afiffjjfiffa","...nqbqnnn..","...nnbqnnnn.","..nnnbnnnnn.","ffnnnnnnnnff","...nnnnnnnff","...nnnnnnnj.",".jjjj...jjj.",".jjjj...jjj."],"걷기2":["...aaaaaaa...","..aaaaaaaaa..",".aaaaaaaaaaa.","aaaffffffffaa","aaffffffffffa","aafjjfffffjfa","aaffffffffffa","aaffifjjffifa","...fnnfqbn...","...nnnnqbn...","..nnnnnnbnnf.","..nnnnnnnnnff","..ffnnnnnn...","..nnnnnnnn...","..jj...jjjj..","..jj....jjjj."],"설명":["..aaaaaaaa....",".aaaaaaaaaa...","aaaaaaaaaaaa..","aaffffffffaa..","affffffffffa..","afjfffffjjfa..","afiffffffffa..",".ffffffffff...","..nnqqbqnn..ff",".nnnnbbnnnnnn.",".nnnnbbnnnnn..",".nnnnnnnnn....","ffnnnnnnnn....","..nnnnnnnn....","..jjj..jjj....","..jjj..jjj...."],"가리킴":["..aaaaaaaa.....",".aaaaaaaaaa....",".aaaaaaaaaa....","aaffffffffaa...","affffffffffa...","afjffffffjfa...","affffffffffa...","afiffjjfiifa...",".ffffffffff....","..nnnqbnnnnnnff",".nnnnbbnnnnnnf.",".nnnnbbnnn.....","ffnnnnnnnn.....","ffnnnnnnnn.....","..nnnnnnnn.....","..jjj..jjj.....","..jjj..jjj....."],"인사":["...aaaaaaa...","..aaaaaaaaa..",".aaaaaaaaaaa.","aaaaaaaaaaaaa","aaafiiiiiiaaa","aafiiiiiiiifa","aafjfffffjffa","aaffffffffffa","..niffijffi..","..nnnqbqnnn..","..nnnnbnnnn..","...nnnbnnnn..","...nnffffnn..","...nnnnnnnn..","...jjj.jjj...","...jjj.jjj..."],"서류":["...aaaaaaa..",".aaaaaaaaaa.","aaaaaaaaaaaa","aaafffffffaa","affffffffffa","affjfffffjfa","affffffffffa","..fifjjffif.","..nnqqbqnn..",".nnnqqqqqnn.",".nnffqqqfnn.","..nffqqqfn..","..nnqqqqqn..","..nnnnnnnn..","..jjj..jjj..","..jjj..jjj.."],"만세":[".....aaaaaaa....","...aaaaaaaaaa...","..aaaaaaaaaaaa..","..aaafffffffaa..","..affffffffffa..","..affjfffffjfa..","..affffffffffa..","ffnffifjjffifnff",".nnnffffffffnnn.","..nnnnnqbqnnnnn.","...nnnnqbnnnn...","....nnnnbnnn....","....nnnnnnnn....","....nnnnnnnn....","....nnnnnnnn....","....jjj..jjj....","....jjj..jjj...."],"생각":["...aaaaaaa..",".aaaaaaaaaa.","aaaaaaaaaaaa","aaafffffffaa","affffffffffa","affjfffffjfa","affffffffffa","afffffjjfffa","..nffqbqnn..","..nnnqbqnnn.","..nnnffnnnn.","..nnnfnnnn..","..nnnnnnnn..","..nnnnnnnn..","..jjj...jj..","..jjj...jj.."],"듣기":["...aaaaaaa...","..aaaaaaaaa..",".aaaaaaaaaaa.","aaaaaaaaaaaaa","aaafffffffaaa","aaffffffffffa","aafjfffffjffa","aaffffffffffa","...fffjjfif..","..nnnnbqnnn..",".nnnnnbnnnnn.",".nnnnnnnnnnn.",".ffnnnnnnnnf.","...nnnnnnnn..","...jjj.jjj...","...jjj.jjj..."],"손흔들기":[".....aaaaaaa...","...aaaaaaaaaa..","..aaaaaaaaaaaa.","..aaafffffffaaa","..affffffffffaa","..affjfffffjfaa","fffffffffffffaa","fffffifjjjfifaa",".nnnfffffffff..","..nnnnnqbnnnn..","...nnnnnbnnnn..","....nnnnnnnnnn.","....nnnnnnnnff.","....NnNnNnnNf..","....nnn..nnj...","....jjj..jjj...","....jjj..jjj..."],"엄지":["..aaaaaaaa...",".aaaaaaaaaa..","aaaaaaaaaaaa.","aaffffffffaa.","affffffffffa.","afjffffffjfa.","affffffffffa.","affffjjffffff","..nnqqbqnn.ff",".nnnnqbnnnnff",".nnnnnbnnnnnn",".nnnnnnnnn...","ffnnnnnnnn...","..nnnnnnnn...","..jjj..jjj...","..jjj..jjj..."],"악수":["...aaaaaaa...",".aaaaaaaaaa..","aaaaaaaaaaaa.","aaafffffffaaa","affffffffffaa","affjfffffjfaa","affffffffffaa","affifjjffifaa","..fffffffff..",".nnnnqbnnnn..",".ffnnqbnnnn..","fffnnnbnnnnn.","fffnnnnnnnff.","..nnnnnnnnff.","..nnnnnnnn...","..jjj..jjj...","..jjj..jjj..."],"노트북":["...aaaaaaa..",".aaaaaaaaaa.","aaaaaaaaaaaa","aaafffffffaa","affffffffffa","affjfffffjfa","affffffffffa","affifjjjfifa","..fffffffff.","..aaaaaaaan.",".naaaaaaaan.",".nffaaaaafnn",".nffaaaaffn.","..nnnnnnnn..","..nnnnnnnn..","..jjj...jjj.","..jjj...jjj."],"달리기":["....aaaaaaa..","...aaaaaaaaa.","..aaaaaaaaaaa",".aaafffffffaa",".aafffffffffa",".aafjjffffjfa",".aafffffffffa",".aaffffjjfif.",".nnnnfqbqf...","fnnnnnqbnn.ff","ff.nnnnbnnnn.","..nnnnnnnnn..","..nnnnnnnn...","jjjjnnnnn....","jjjj...jjjj..","jj.....jjjj.."],"놀람":["..aaaaaaaa..",".aaaaaaaaaa.","aaaaaaaaaaaa","aaafffffffaa","affffffffffa","affjfffffjfa","affffffffffa","afiifjfffifa",".ffffffffff.",".nffnqbqfff.",".nnnnqbnnnn.",".nnnnnbnnnn.","..nnnnnnnn..","..nnnnnnnn..","..nnnnnnnn..","..jjj..jjj..","..jjj..jjj.."]}};
+function fc(pose, o, tie){
+  const src = FCS[o && o.long ? 'f' : 'm'][pose] || FCS.m['서기'];
+  const map = o ? { a: o.h, n: o.T, N: o.t, b: tie ? o.b : o.T } : {};          // 손님은 넥타이 대신 윗옷 색
+  const rows = src.map(r => [...r].map(c => map[c] || c).join(''));
+  const last = rows[rows.length - 1]; let lo = last.search(/[^.]/), hi = last.length - 1; while (hi > lo && last[hi] === '.') hi--;
+  const cx = (lo + hi + 1) / 2;                                              // 발 가운데를 옛 인물의 몸 가운데(x+4)에 맞춘다
+  rows.ox = Math.round(4 - cx); rows.oy = 12 - rows.length; rows.sh = [Math.round(cx) - 4, rows.length];
+  return rows;
+}
+const FC = fc('서기'), FC2 = fc('걷기1'), FC3 = fc('걷기2');
+const P = LOOK.map(o => fc('서기', o)), P2 = LOOK.map(o => fc('걷기1', o)), P3 = LOOK.map(o => fc('걷기2', o));
 const KID = Object.assign(['..KKKK..', '.KHhhhK.', 'KhsssshK', 'KskssksK', '.KsSSsK.', '.KppppK.', 'KpPppPpK', '.KnKKnK.', '.KkK.KkK'].map(r => r), { ox: 0, oy: -1 });
-window.__PX = { hero, LOOK, ME, PAL, atmos: null, room: s => { wall(s, ['#E2E9F9', '#E9EFFB', '#F1F5FE'], 72); wood(s, 72); win(s, 8, 8, 30, 24); plant(s, 106, 60); clock(s, 26, 36); } };
+window.__PX = { hero, fc, LOOK, ME, PAL, atmos: null, room: s => { wall(s, ['#E2E9F9', '#E9EFFB', '#F1F5FE'], 72); wood(s, 72); win(s, 8, 8, 30, 24); plant(s, 106, 60); clock(s, 26, 36); } };
 function walker(p, a, b, x, y, delay = 0){ const g = at(p, x, y); spr(g, a, 0, 0, '', `animation:blink .5s steps(1) ${delay}s infinite`); spr(g, b, 0, 0, '', `animation:blink .5s steps(1) ${delay + .25}s infinite`); return g; }
 function bubble(p, x, y, w, h, lines, cls, style, tailX){ const tw = Math.max(...lines.map(l => [...l].reduce((a, c) => a + (/[ -~]/.test(c) ? 3.4 : 6), 0))); if (tw + 6 > w) { w = tw + 6; if (x + w > 118) x = Math.max(2, 118 - w); } const g = G(p, cls, style); R(g, x, y, w, h, 'w', { stroke: PAL.k, 'stroke-width': .7 }); R(g, tailX ?? x + 5, y + h - .4, 3, 3, 'w'); R(g, (tailX ?? x + 5), y + h + 2.2, 1, 1, 'k');
   lines.forEach((s, i) => txt(g, x + w / 2, y + 7.2 + i * 7, s)); return g; }
@@ -1123,8 +1137,8 @@ SC.team = s => {
   R(s, 0, 70, 120, 20, 'G'); R(s, 0, 70, 120, 2, 'm');
   const road = G(s, '', 'animation:road .8s steps(4) infinite'); for (let x = -16; x < 136; x += 16) R(road, x, 80, 8, 2, 'w');
   const grp = G(s, 'bob');
-  walker(grp, FC, FC2, 30, 57, 0);
-  walker(grp, P[1], P2[1], 44, 58, .1); walker(grp, P[0], P2[0], 56, 57, .2); walker(grp, P[3], P2[3], 68, 58, .05); walker(grp, P[4], P2[4], 80, 57, .15);
+  walker(grp, FC2, FC3, 30, 57, 0);
+  walker(grp, P2[1], P3[1], 44, 58, .1); walker(grp, P2[0], P3[0], 56, 57, .2); walker(grp, P2[3], P3[3], 68, 58, .05); walker(grp, P2[4], P3[4], 80, 57, .15);
   const flag = at(s, 24, 30); R(flag, 5, 0, 1, 28, 'u'); const f = G(flag, '', 'animation:wave .6s steps(2) infinite'); R(f, 6, 1, 30, 11, 'b'); txt(f, 21, 9, '같이 가요', 6, 'w');
   [[14, 8], [60, 12], [110, 30], [40, 24]].forEach(([x, y], i) => sparkle(s, x, y, 'w', i * .3));
 };
@@ -1152,7 +1166,7 @@ SC.job = s => {
   win(s, 8, 8, 32, 28); plant(s, 106, 56);
   R(s, 46, 6, 70, 50, 'k'); R(s, 48, 8, 66, 44, 'w'); R(s, 78, 56, 6, 6, 'u'); R(s, 70, 62, 22, 2, 'u');
   R(s, 4, 62, 60, 4, 't'); R(s, 8, 66, 3, 18, 't'); R(s, 56, 66, 3, 18, 't');
-  spr(s, FC, 22, 50, 'bob'); R(s, 36, 58, 8, 4, 'g'); R(s, 37, 57, 6, 1, 'G');
+  spr(s, fc('가리킴'), 22, 50, 'bob'); R(s, 36, 58, 8, 4, 'g'); R(s, 37, 57, 6, 1, 'G');
   const mug = at(s, 10, 56); R(mug, 0, 0, 5, 6, 'w', { stroke: PAL.g, 'stroke-width': .4 }); G(mug, '', 'animation:steam 1.2s steps(3) infinite'); R(mug.lastChild, 1, -4, 1, 3, 'G'); R(mug.lastChild, 3, -6, 1, 3, 'G');
   const ph = (i) => G(s, '', `opacity:0;animation:phase 12s steps(1) ${i * 3}s infinite`);
   let g = ph(0); [[54, 16, 44], [54, 24, 26], [54, 32, 0], [54, 40, 36]].forEach(([x, y, w], k) => { R(g, x, y, 50, 5, 'L'); if (w) R(g, x, y, w, 5, k === 3 ? 'b' : 'd', { class: 'grow', style: `transform-box:fill-box;transform-origin:left;animation:grow 3s steps(8) infinite` }); });
@@ -1176,7 +1190,7 @@ SC.hard = s => {
   ['엄마', '친구', '동창', '이모', '선배', '사촌'].forEach((n, i) => { const y = 18 + i * 8; R(ph, 5, y, 5, 5, P[i % 5][6][2] === '.' ? 'g' : PAL[P[i % 5][7][1]] || 'g'); txt(ph, 12, y + 4.5, n, 5.5, 'k', 'start');
     R(ph, 5, y + 2, 32, 1, 'r', { style: `transform-box:fill-box;transform-origin:left;transform:scaleX(0);animation:strikeA 9s steps(6) ${.9 + i * 1}s infinite` }); });
   const z = G(ph, '', 'opacity:0;animation:zero 9s steps(1) infinite'); txt(z, 22, 68, '연락할 곳 없음', 5.5, 'r');
-  spr(s, FC, 80, 60, 'bob');
+  spr(s, fc('생각'), 80, 60, 'bob');
   const cl = at(s, 70, 20); cloud(cl, 0, 0, 'g', 28); for (let i = 0; i < 6; i++) { const g = G(cl, '', `animation:rainS .8s steps(6) ${i * .14}s infinite`); R(g, 3 + i * 4, 8, 1, 3, 'c'); }
   bubble(s, 92, 42, 22, 11, ['…'], '', '', 96);
 };
@@ -1187,7 +1201,7 @@ SC.gap = s => {
   R(s, 96, 8, 8, 8, '#F3E7C4', { rx: 4 }); R(s, 98, 8, 6, 6, '#081B3A', { rx: 3 }); haze(s, 60, 74, 60, '#2F6BFF', .12);
   skyline(s, 74, '#0B1838', 'V', 5); R(s, 0, 74, 120, 16, 'n'); R(s, 0, 74, 120, 1, '#1E3A70'); dith(s, 0, 75, 120, 15, '#081B3A', .5);
   for (let i = 0; i < 5; i++) { R(s, 6 + i * 11, 74 - (i + 1) * 9, 12, (i + 1) * 9, i === 4 ? 'd' : 'u'); R(s, 6 + i * 11, 74 - (i + 1) * 9, 12, 1, i === 4 ? 'c' : 'm'); R(s, 16 + i * 11, 74 - (i + 1) * 9, 2, (i + 1) * 9, i === 4 ? 'b' : 'U'); }
-  const cl = G(s, '', 'animation:climb 6s steps(5) infinite'); spr(cl, FC, 8, 53, 'bob');
+  const cl = G(s, '', 'animation:climb 6s steps(5) infinite'); spr(cl, FC2, 8, 53, 'bob');
   for (let i = 0; i < 5; i++) { const c = G(s, '', `opacity:0;animation:coinUp 6s steps(3) ${i * 1.2}s infinite`); R(c, 12 + i * 11, 58 - i * 9, 4, 4, 'o'); }
   const st = G(s, '', 'animation:blink .8s steps(1) infinite'); R(st, 62, 12, 1, 5, 'o'); R(st, 60, 14, 5, 1, 'o');
   R(s, 76, 6, .6, 68, 'u');
@@ -1203,7 +1217,7 @@ SC.doubt = s => {
   win(s, 6, 6, 34, 26); plant(s, 104, 46);
   R(s, 59, 0, 1, 18, 'U'); R(s, 54, 18, 11, 3, 'U'); R(s, 56, 21, 7, 1, 'V'); const lg = G(s, '', 'animation:spot 3s steps(3) infinite'); el('polygon', { points: '55,22 64,22 84,64 35,64', fill: '#FFE7A8', opacity: .16 }, lg);
   [[34, 52], [74, 52]].forEach(([x, y]) => { R(s, x - 1, y, 12, 12, '#7C5A3C'); R(s, x - 1, y, 12, 1, '#9C7650'); });
-  spr(s, P[1], 36, 50, 'bob'); spr(s, FC, 76, 50, '', 'animation:nod 1.6s steps(2) infinite');
+  spr(s, P[1], 36, 50, 'bob'); spr(s, fc('듣기'), 76, 50, '', 'animation:nod 1.6s steps(2) infinite');
   R(s, 24, 62, 72, 3, '#9C7650'); R(s, 24, 62, 72, 1, '#C49C72'); R(s, 26, 65, 68, 9, '#7C5A3C'); R(s, 26, 65, 68, 1, '#5E4229'); dith(s, 26, 66, 68, 8, '#000', .12);
   [[44, 58], [70, 58]].forEach(([x, y], i) => { R(s, x, y, 5, 4, 'w'); R(s, x + 5, y + 1, 1, 2, 'w'); R(s, x + 1, y, 3, 1, '#8A5A3A'); const st = G(s, '', `animation:steam 1.4s steps(3) ${i * .5}s infinite`); R(st, x + 1, y - 4, 1, 3, 'G'); R(st, x + 3, y - 6, 1, 3, 'G'); });
   R(s, 80, 59, 10, 3, 'w'); R(s, 80, 59, 10, .6, 'c'); R(s, 81, 60.3, 7, .6, 'c', { style: 'transform-box:fill-box;transform-origin:left;animation:grow 4s steps(6) infinite' }); R(s, 89, 57, 1, 4, 'k', { style: 'animation:bob .5s steps(2) infinite' });
@@ -1223,7 +1237,7 @@ SC.arms = s => {
   R(s, 48, 62, 24, 3, 'U'); R(s, 48, 62, 24, 1, 'c');
   for (let i = 0; i < 18; i++) R(s, (i * 29) % 118, (i * 17) % 60, 1, 1, i % 3 ? 'c' : 'w', { style: `animation:blink ${1 + (i % 4) * .4}s steps(1) ${i * .1}s infinite` });
   const glow = G(s, '', 'animation:spot 1.6s steps(3) infinite'); R(glow, 48, 30, 24, 30, 'd', { opacity: .35 });
-  spr(s, FC, 56, 38, 'bob');
+  spr(s, fc('만세'), 56, 38, 'bob');
   const ttl = G(s, '', 'animation:blink 1s steps(1) infinite'); txt(ttl, 60, 16, '무기 획득!', 9, 'o');
   const items = [
     ['모임', ['..kk.kk..', '.ksskssk.', '.ksskssk.', 'kccckccck', 'kccckccck']],
@@ -1245,10 +1259,10 @@ SC.lecture = s => {
   lamp(s, 64, 0, 44); R(s, 56, 70, 18, 2, '#FFFFFF', { opacity: .4 });
   R(s, 6, 10, 50, 32, 'k'); R(s, 8, 12, 46, 28, 'w'); R(s, 11, 15, 16, 2, 'k');
   [[12, 10], [20, 15], [28, 19], [36, 23]].forEach(([x, h], i) => R(s, x, 37 - h, 6, h, ['l', 'c', 'd', 'b'][i], { style: `transform-box:fill-box;transform-origin:bottom;animation:bars 7s steps(10) ${i * .12}s infinite` }));
-  R(s, 60, 48, 10, 22, 'm'); R(s, 58, 46, 14, 3, 'k'); spr(s, FC, 61, 34, 'bob');
+  R(s, 60, 48, 10, 22, 'm'); R(s, 58, 46, 14, 3, 'k'); spr(s, fc('설명'), 61, 34, 'bob');
   const seats = [[80, 66], [93, 66], [106, 66], [80, 82], [93, 82], [106, 82]];
   seats.forEach(([x, y]) => spr(s, ['mmmmmm', 'm....m', 'mmmmmm', 'm....m', 'm....m'], x, y + 2));
-  seats.forEach(([x, y], i) => { const g = G(s, '', `--dx:${x - 128}px;animation:walkIn 7s steps(28) ${i * .35}s infinite`); spr(g, P[i % 5], 128, y - 8, 'bob'); });
+  seats.forEach(([x, y], i) => { const g = G(s, '', `--dx:${x - 128}px;animation:walkIn 7s steps(28) ${i * .35}s infinite`); spr(g, P2[i % 5], 128, y - 8, 'bob'); });
   bubble(s, 76, 14, 40, 20, ['상담', '가능할까요?'], '', 'transform-box:fill-box;transform-origin:left bottom;animation:popA 7s steps(8) infinite', 82);
   [[4, 60], [52, 8], [116, 40]].forEach(([x, y], i) => sparkle(s, x, y, 'o', i * .4));
 };
@@ -1263,7 +1277,7 @@ SC.pro = s => {
     const f = G(s, '', `opacity:0;animation:flash 6s steps(1) ${.9 + i * 1.2}s infinite`); R(f, x - 1, y - 1, 32, 16, 'none', { stroke: PAL.b, 'stroke-width': 1.4 });
     el('path', { d: `M60 52 L${x + 15} ${y + 14}`, stroke: PAL.c, 'stroke-width': .6, 'stroke-dasharray': '2 2', fill: 'none' }, s);
     const dot = R(s, -2, -2, 4, 4, i === 1 ? 'b' : 'd'); const am = el('animateMotion', { dur: '6s', repeatCount: 'indefinite', begin: `${i * 1.2}s`, keyPoints: '0;1;1;0;0', keyTimes: '0;.12;.2;.32;1', calcMode: 'linear', path: `M60 52 L${x + 15} ${y + 14}` }, dot); });
-  spr(s, FC, 56, 58, 'bob');
+  spr(s, fc('설명'), 56, 58, 'bob');
   bubble(s, 70, 44, 18, 11, ['?'], '', 'animation:doubt 6s steps(1) infinite', 72);
   const ok = G(s, '', 'opacity:0;animation:sure 6s steps(1) infinite'); R(ok, 68, 42, 30, 12, 'e'); txt(ok, 83, 50, '해결!', 6, 'w');
   txt(s, 60, 86, '각자 자기 영역만 맡습니다', 5, 'n');
@@ -1282,7 +1296,7 @@ SC.ai = s => {
   const pp = G(s, '', 'animation:paper 5s steps(10) infinite'); R(pp, 66, 30, 14, 18, 'w', { stroke: PAL.k, 'stroke-width': .5 }); [34, 38, 42].forEach(y => R(pp, 68, y, 10, 1.5, 'c'));
   R(s, 92, 18, 22, 40, 'k'); R(s, 94, 22, 18, 32, 'w');
   const sy = G(s, '', 'opacity:0;animation:sure 5s steps(1) infinite'); [28, 33, 38].forEach((y, i) => R(sy, 96, y, [14, 10, 12][i], 2.5, i === 2 ? 'b' : 'c')); R(sy, 96, 44, 14, 6, 'e'); txt(sy, 103, 48.5, '완성', 4.5, 'w');
-  spr(s, FC, 36, 60, 'bob'); spr(s, P[1], 70, 60, 'bob');
+  spr(s, fc('노트북'), 36, 60, 'bob'); spr(s, P[1], 70, 60, 'bob');
   [[86, 12], [62, 10], [116, 60]].forEach(([x, y], i) => sparkle(s, x, y, 'o', i * .3));
 };
 
@@ -1293,7 +1307,7 @@ SC.exp = s => {
   R(s, 0, 70, 120, 20, 'N'); for (let x = -60; x <= 180; x += 12) el('line', { x1: 60 + (x - 60) * .2, y1: 70, x2: x, y2: 90, stroke: '#2F6BFF', 'stroke-width': .5, opacity: .5 }, s);
   [73, 77, 83].forEach((y, i) => R(s, 0, y, 120, .6, '#2F6BFF', { opacity: .5 - i * .1 }));
   for (let i = 0; i < 14; i++) R(s, (i * 31) % 118, (i * 13) % 50, 1, 1, 'c', { style: `animation:blink ${1 + (i % 3) * .5}s steps(1) ${i * .15}s infinite` });
-  spr(s, FC, 56, 46, 'bob');
+  spr(s, fc('엄지'), 56, 46, 'bob');
   const icons = [['공부', 'c'], ['상담', 'o'], ['모임', 'e']];
   icons.forEach(([n, c], i) => { const g = G(s, '', `opacity:0;animation:iconUp 6s steps(4) ${i * 1.4}s infinite`); R(g, 34 + i * 20, 30, 14, 9, c); txt(g, 41 + i * 20, 36.5, n, 5, 'k'); txt(g, 41 + i * 20, 27, '+EXP', 5, 'w'); });
   txt(s, 14, 79, 'EXP', 5.5, 'c', 'start'); R(s, 28, 75, 80, 5, 'N', { stroke: PAL.c, 'stroke-width': .6 });
@@ -1311,7 +1325,7 @@ SC.chair = s => {
   wood(s, 70, '#16264D', '#0E1B3A', '#23386A'); stars(s, 6, 30);
   const sp = G(s, '', 'animation:spot 2s steps(4) infinite'); el('polygon', { points: '76,0 100,0 112,72 64,72', fill: PAL.c, opacity: .25 }, sp);
   spr(s, ['mmmmmmmmmm', 'm........m', 'm........m', 'mmmmmmmmmm', 'mmmmmmmmmm', 'm........m', 'm........m', 'm........m'], 83, 60);
-  spr(s, FC, 36, 58, 'bob'); spr(s, P[0], 20, 58); spr(s, P[3], 50, 58);
+  spr(s, fc('손흔들기'), 36, 58, 'bob'); spr(s, P[0], 20, 58); spr(s, P[3], 50, 58);
   bubble(s, 30, 30, 44, 20, ['이 자리,', '비어 있어요'], '', 'transform-box:fill-box;transform-origin:left bottom;animation:popA 6s steps(8) infinite', 40);
   [[88, 50], [104, 54], [96, 44]].forEach(([x, y], i) => sparkle(s, x, y, 'o', i * .35));
 };
@@ -1328,7 +1342,7 @@ SC.mlm = s => {
   const sw = G(s, '', 'animation:blink .6s steps(1) infinite'); R(sw, 34, 52, 1, 2, 'c'); R(sw, 18, 54, 1, 2, 'c');
   const nx = G(s, '', 'opacity:0;animation:stackX 7s steps(1) infinite'); R(nx, 40, 8, 12, 12, 'r', { rx: 6 }); el('path', { d: 'M43 11 L49 17 M49 11 L43 17', stroke: '#fff', 'stroke-width': 1.6 }, nx);
   R(s, 2, 78, 54, 9, '#4A5A78', { opacity: .85 }); txt(s, 29, 84.4, '쌓이는 물건', 5.5, 'w');
-  spr(s, FC, 70, 56, 'bob'); spr(s, P[3], 100, 56, 'bob');
+  spr(s, fc('악수'), 70, 56, 'bob'); spr(s, P[3], 100, 56, 'bob');
   R(s, 80, 63, 18, 2, '#9C7650'); R(s, 81, 65, 1, 5, '#7C5A3C'); R(s, 96, 65, 1, 5, '#7C5A3C');
   const doc = G(s, '', 'animation:bob 1.4s steps(2) infinite'); R(doc, 85, 55, 8, 8, 'w', { stroke: PAL.u, 'stroke-width': .4 }); R(doc, 86.5, 57, 5, .8, 'c'); R(doc, 86.5, 59, 4, .8, 'c');
   const ok = G(s, '', 'opacity:0;animation:sure 7s steps(1) infinite'); R(ok, 88, 58, 6, 6, 'b', { rx: 3 }); el('path', { d: 'M89.5 61 L90.8 62.3 L92.8 59.8', stroke: '#fff', 'stroke-width': .9, fill: 'none' }, ok);
@@ -1350,7 +1364,7 @@ SC.road = s => {
   const flags = [[12, 80, '시험'], [44, 68, '위촉'], [70, 74, '교육'], [96, 64, '동행']];
   flags.forEach(([x, y, n], i) => { R(s, x, y - 14, 1, 14, 'U'); const f = G(s, '', `animation:wave .6s steps(2) ${i * .15}s infinite`); R(f, x + 1, y - 14, 15, 7, i === 3 ? 'o' : 'b'); txt(f, x + 8.5, y - 8.8, n, 5, 'w');
     const ck = G(s, '', `opacity:0;animation:fl${i} 10s steps(1) infinite`); R(ck, x - 3, y - 4, 5, 5, 'e', { rx: 2.5 }); el('path', { d: `M${x - 2} ${y - 1.5} l1 1 l2 -2.4`, stroke: '#fff', 'stroke-width': .8, fill: 'none' }, ck); });
-  const w = G(s, '', 'animation:roadWalk 10s steps(40) infinite'); walker(w, FC, FC2, 0, 0, 0);
+  const w = G(s, '', 'animation:roadWalk 10s steps(40) infinite'); walker(w, FC2, FC3, 0, 0, 0);
   const star = G(s, '', 'opacity:0;animation:fl4 10s steps(1) infinite'); R(star, 106, 44, 12, 9, 'o'); txt(star, 112, 50.5, '독립!', 4.5, 'k');
   sparkle(s, 114, 36, 'o', .3); sparkle(s, 60, 30, 'w', .8);
 };
@@ -1476,12 +1490,12 @@ const NS = 'http://www.w3.org/2000/svg';
 const PAL = { k:'#0E1726', n:'#0F2A57', b:'#0046FF', d:'#2F6BFF', c:'#8FB0FF', l:'#C9D5F2', L:'#EEF3FF', s:'#F0C9A4', h:'#2A1F1A', y:'#D9B36A', w:'#FFFFFF', g:'#7A8499', G:'#B7C0D0', o:'#F2C14E', e:'#3EC79A', p:'#FF9BB0', u:'#4A5A78', t:'#6B4A2E', m:'#9AA7C2' };
 const el = (t, a, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
 const R = (p, x, y, w, h, c, ex = {}) => el('rect', Object.assign({ x, y, width: w, height: h, fill: PAL[c] || c }, ex), p);
-const spr = (p, rows, x, y, style) => { const g = el('g', { transform: `translate(${x + (rows.ox || 0)} ${y + (rows.oy || 0)})` }, p); if (rows.ox) R(g, 1, 16, 8, 1, '#061028', { opacity: .18 }); const i = el('g', style ? { style } : {}, g); rows.forEach((r, j) => [...r].forEach((c, k) => { if (c !== '.' && PAL[c]) R(i, k, j, 1, 1, c); })); return i; };
+const spr = (p, rows, x, y, style) => { const g = el('g', { transform: `translate(${x + (rows.ox || 0)} ${y + (rows.oy || 0)})` }, p); if (rows.sh) R(g, rows.sh[0], rows.sh[1], 8, 1, '#061028', { opacity: .18 }); else if (rows.ox) R(g, 1, 16, 8, 1, '#061028', { opacity: .18 }); const i = el('g', style ? { style } : {}, g); rows.forEach((r, j) => [...r].forEach((c, k) => { if (c !== '.' && PAL[c]) R(i, k, j, 1, 1, c); })); return i; };
 const txt = (p, x, y, s, size = 6, fill = 'k') => { const t = el('text', { x, y, 'font-size': size, fill: PAL[fill] || fill, 'text-anchor': 'middle', class: 'pxt' }, p); t.textContent = s; return t; };
 const body = (hair, top, legs = 'nn') => [`..${hair}${hair}${hair}${hair}..`, `.${hair.repeat(6)}.`, `.${hair}ssss${hair}.`, '.skssks.', '.ssssss.', '..ssss..', `.${top}.`, `${top[0]}${top}${top[0]}`, `${top[0]}${top}${top[0]}`, `.${legs}..${legs}.`, `.${legs}..${legs}.`, '.kk..kk.'];
 Object.assign(PAL, window.__PX.PAL);
-const FC = window.__PX.hero(window.__PX.ME);
-const TEAM = [1, 2, 3, 4].map(i => window.__PX.hero(window.__PX.LOOK[i]));
+const FC = window.__PX.fc('설명');
+const TEAM = [1, 2, 3, 4].map(i => window.__PX.fc('서기', window.__PX.LOOK[i], true));   // 팀원도 FC — 넥타이를 맨다
 
 function coach(s){
   R(s, 0, 0, 120, 90, 'L'); window.__PX.room(s);
