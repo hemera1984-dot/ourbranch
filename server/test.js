@@ -53,7 +53,7 @@ const aiStub = mkServer((rq, rs) => {
   });
 }).listen(18799);
 const srv = spawn(process.execPath, ["server.js"], {
-  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES, AI_API: "http://127.0.0.1:18799", ANTHROPIC_API_KEY: "test-key" },
+  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES, AI_API: "http://127.0.0.1:18799", ANTHROPIC_API_KEY: "test-key", WEB_DIR: new URL("../web", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1") },
   stdio: "inherit"
 });
 
@@ -1262,6 +1262,36 @@ async function main() {
   assert.equal((await api("t-esl1", "DELETE", "/ledger/" + lg2.id)).status, 404);
   assert.equal((await api("t-fc1", "DELETE", "/ledger/" + lg2.id)).status, 200);
   assert.equal((await (await api("t-fc1", "GET", "/ledger?month=2027-08")).json()).length, 1);
+
+  // 67) 랜딩 고치기 — 총관리자만 저장, 태그·속성은 걸러지고, 랜딩을 내줄 때 입혀지고, 판이 남는다
+  assert.equal((await api("t-esl1", "POST", "/pages/recruit/edits", { edits: { t1: { html: "x" } } })).status, 403, "총관리자만");
+  assert.equal((await api("t-esl1", "GET", "/pages/recruit/edits")).status, 403);
+  assert.equal((await api("t-super", "POST", "/pages/nope/edits", { edits: {} })).status, 404);
+  const pe = await (await api("t-super", "POST", "/pages/recruit/edits", { edits: {
+    t24: { html: '새 제목<br><b onclick="x()">강조</b><script>alert(1)</script><img src=x onerror=alert(1)>' },
+    t25: { html: '이 페이지는 <span data-me="who" style="color:red">누구</span> 자료 <a href="//evil">링크</a> 1 < 2' },
+    g6: { src: "up/0123456789abcdef.jpg" }, g7: { src: "https://evil/x.pgPng" }, "BAD KEY": { html: "x" }
+  } })).json();
+  assert.equal(pe.edits.t24.html, "새 제목<br><b>강조</b>alert(1)", "스크립트·이벤트 속성·그림 태그는 빠진다");
+  assert.equal(pe.edits.t25.html, '이 페이지는 <span data-me="who">누구</span> 자료 링크 1 ', "보여주는 사람 자리는 남기고 링크는 벗긴다");
+  assert.equal(pe.edits.g6.src, "up/0123456789abcdef.jpg");
+  assert.ok(!pe.edits.g7 && !pe.edits["BAD KEY"], "밖 주소·이상한 표식은 버린다");
+  const landing = await (await fetch(BASE + "/recruit/index.html")).text();
+  assert.ok(landing.includes('window.__PAGE_EDITS={"t24":{"html":"새 제목<br>'.replace(/</g, "\\u003c")) && landing.includes('<script src="edits.js">'), "랜딩에 입혀서 내준다");
+  assert.ok(landing.indexOf("__PAGE_EDITS") < landing.indexOf("const ME"), "다른 스크립트보다 앞");
+  await api("t-super", "POST", "/pages/recruit/edits", { edits: { t24: { html: "둘째 판" } } });
+  const pv = await (await api("t-super", "GET", "/pages/recruit/edits")).json();
+  assert.equal(pv.edits.t24.html, "둘째 판"); assert.ok(pv.versions.length >= 1 && pv.versions[0].n === 3, "직전 판이 남는다");
+  assert.equal((await api("t-super", "POST", "/pages/recruit/restore", { id: pv.versions[0].id })).status, 200);
+  assert.equal((await (await api("t-super", "GET", "/pages/recruit/edits")).json()).edits.t24.html, "새 제목<br><b>강조</b>alert(1)", "되살린다");
+  const pgPng = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 7)]);
+  assert.equal((await fetch(BASE + "/pages/recruit/upload", { method: "POST", headers: { Authorization: "Bearer t-esl1" }, body: pgPng })).status, 403);
+  assert.equal((await fetch(BASE + "/pages/recruit/upload", { method: "POST", headers: { Authorization: "Bearer t-super" }, body: Buffer.from("그림 아님 그림 아님") })).status, 400);
+  const upRes = await (await fetch(BASE + "/pages/recruit/upload", { method: "POST", headers: { Authorization: "Bearer t-super" }, body: pgPng })).json();
+  assert.ok(/^up\/[a-f0-9]{16}\.png$/.test(upRes.src));
+  const upGet = await fetch(BASE + "/recruit/" + upRes.src);
+  assert.equal(upGet.status, 200); assert.equal(upGet.headers.get("content-type"), "image/png", "올린 사진을 내준다");
+  await api("t-super", "POST", "/pages/recruit/edits", { edits: {} });
 
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.

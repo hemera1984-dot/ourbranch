@@ -195,6 +195,23 @@ export function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_ledger_email_date ON ledger(email, date);
 
+    -- 랜딩 고치기 — 리쿠르팅 소개의 글·사진을 총관리자가 화면에서 고친 것 (2026-09-28 사용자).
+    -- 저장소 원본은 그대로 두고 「data-k 칸 → 바뀐 내용」만 적는다. 서버가 랜딩을 내줄 때 입힌다.
+    CREATE TABLE IF NOT EXISTS page_edits (
+      page    TEXT PRIMARY KEY,
+      edits   TEXT NOT NULL DEFAULT '{}',
+      updated TEXT NOT NULL DEFAULT '',
+      by_name TEXT NOT NULL DEFAULT ''
+    );
+    -- 저장할 때마다 직전 판을 남긴다 — 잘못 고쳐도 되살린다
+    CREATE TABLE IF NOT EXISTS page_versions (
+      id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      page    TEXT NOT NULL,
+      edits   TEXT NOT NULL,
+      created TEXT NOT NULL,
+      by_name TEXT NOT NULL DEFAULT ''
+    );
+
     -- 출석·하루 상태 (하루 한 줄) — 실물 스케줄표의 출근일정·점심일정 칸 +
     -- 카톡 일일보고 항목(오전·점심·오후·특이사항)을 한 줄에 담는다.
     -- work = 오전 활동, afternoon = 오후 활동, note = 특이사항/요청사항

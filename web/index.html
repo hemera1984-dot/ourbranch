@@ -1293,7 +1293,8 @@
   function openRecruitIntro() {
     if (document.querySelector(".recruit-show")) return;
     var m = (BOOT.members || []).filter(function (x) { return x.email === BOOT.me.email; })[0];
-    window.OB_RECRUIT_ME = { name: BOOT.me.name || "", role: (m && m.role) || BOOT.me.role || "", branch: BOOT.branchName || "" };
+    // canEdit — 랜딩 조작 바에 「고치기」를 띄울지만 정한다. 저장 권한은 서버가 따로 본다(총관리자만).
+    window.OB_RECRUIT_ME = { name: BOOT.me.name || "", role: (m && m.role) || BOOT.me.role || "", branch: BOOT.branchName || "", canEdit: !!BOOT.me.isSuper };
     try { sessionStorage.setItem("ob_recruit_me", JSON.stringify(window.OB_RECRUIT_ME)); } catch (e) { /* 사파리 비공개 */ }
     var box = document.createElement("div");
     box.className = "recruit-show";

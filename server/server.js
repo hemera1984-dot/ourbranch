@@ -11,7 +11,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSyn
 import { join, normalize, extname } from "node:path";
 import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken, listAccounts } from "./auth.js";
-import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { scryptSync, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import { scanImage } from "./scan.js";
 
 const PORT = Number(process.env.PORT || 8788);
@@ -336,6 +336,7 @@ function purgeOrphanFiles() {
   }
   const known = new Set(db.prepare("SELECT path FROM docs").all().map(r => r.path));
   known.add(FILE_MARK);
+  known.add("pages");                                   // 랜딩 사진 폴더 — 서류가 아니다
   const cutoff = Date.now() - ORPHAN_GRACE;
   let n = 0;
   for (const f of readdirSync(FILE_DIR)) {
@@ -599,6 +600,97 @@ route("DELETE", /^\/trainings\/(\d+)$/, false, (req, res, user, m) => {
     return send(res, 403, { error: "권한 없음" });
   db.prepare("DELETE FROM trainings WHERE id = ?").run(t.id);
   send(res, 200, { ok: true });
+});
+
+// ---- 랜딩 고치기 (2026-09-28 사용자: 「랜딩페이지를 내가 계속 고칠 수 있게」) ----
+// 총관리자만 고친다. 고친 것은 칸(data-k)별로 저장하고, 서버가 랜딩을 내줄 때 입힌다.
+// 저장소의 원본 HTML은 건드리지 않으므로, 클로드가 원본을 고쳐도 표식이 같은 칸은 고친 내용이 그대로 남는다.
+const PAGES = { recruit: "recruit/index.html" };
+const PAGE_UP = join(FILE_DIR, "pages");
+const EDIT_TAGS = new Set(["br", "b", "strong", "em", "i", "mark", "small", "span"]);
+// 랜딩은 로그인 없이 열린다 — 글에 스크립트·속성이 섞여 들어가지 않게 꾸밈 태그만 남긴다
+function cleanEditHtml(h) {
+  return String(h).slice(0, 4000).replace(/<[^>]*>?|[^<]+/g, tok => {
+    if (tok[0] !== "<") return tok.replace(/>/g, "&gt;");
+    const m = /^<(\/?)([a-zA-Z0-9]+)([^>]*)>$/.exec(tok);
+    if (!m) return "";
+    const tag = m[2].toLowerCase();
+    if (!EDIT_TAGS.has(tag)) return "";
+    if (tag === "br") return m[1] ? "" : "<br>";
+    if (tag === "span" && !m[1]) {
+      const me = /\bdata-me="(name|who|title)"/.exec(m[3]);   // 보여주는 사람 자리 — 화면이 채운다
+      return me ? `<span data-me="${me[1]}">` : "<span>";
+    }
+    return `<${m[1]}${tag}>`;
+  });
+}
+function cleanEdits(page, raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw).slice(0, 400)) {
+    if (!/^[a-z][a-z0-9-]{0,19}$/.test(k) || !v || typeof v !== "object") continue;
+    if (typeof v.src === "string" && new RegExp("^up/[a-f0-9]{16}\\.(jpg|png|webp)$").test(v.src)) out[k] = { src: v.src };
+    else if (typeof v.html === "string") out[k] = { html: cleanEditHtml(v.html) };
+  }
+  return out;
+}
+function pageEdits(page) {
+  const r = db.prepare("SELECT edits FROM page_edits WHERE page = ?").get(page);
+  try { return r ? JSON.parse(r.edits) : {}; } catch { return {}; }
+}
+function setPageEdits(page, edits, user) {
+  const before = db.prepare("SELECT edits FROM page_edits WHERE page = ?").get(page);
+  const json = JSON.stringify(edits);
+  if (before && before.edits === json) return;
+  tx(() => {
+    if (before) db.prepare("INSERT INTO page_versions (page, edits, created, by_name) VALUES (?, ?, ?, ?)").run(page, before.edits, now(), user.name);
+    db.prepare("INSERT INTO page_edits (page, edits, updated, by_name) VALUES (?, ?, ?, ?) ON CONFLICT(page) DO UPDATE SET edits = excluded.edits, updated = excluded.updated, by_name = excluded.by_name")
+      .run(page, json, now(), user.name);
+    // ponytail: 판은 50개까지만 — 더 오래된 것은 지운다. 올린 사진 파일은 지우지 않는다(작고, 옛 판이 가리킨다)
+    db.prepare("DELETE FROM page_versions WHERE page = ? AND id NOT IN (SELECT id FROM page_versions WHERE page = ? ORDER BY id DESC LIMIT 50)").run(page, page);
+  });
+}
+route("GET", /^\/pages\/([a-z]+)\/edits$/, false, (req, res, user, m) => {
+  if (!PAGES[m[1]]) return send(res, 404, { error: "없는 화면입니다" });
+  if (!user.isSuper) return send(res, 403, { error: "총관리자만 고칩니다" });
+  const r = db.prepare("SELECT updated, by_name FROM page_edits WHERE page = ?").get(m[1]) || {};
+  const versions = db.prepare("SELECT id, edits, created, by_name FROM page_versions WHERE page = ? ORDER BY id DESC").all(m[1])
+    .map(v => { let n = 0; try { n = Object.keys(JSON.parse(v.edits)).length; } catch {} return { id: v.id, created: v.created, by_name: v.by_name, n }; });
+  send(res, 200, { edits: pageEdits(m[1]), updated: r.updated || "", by_name: r.by_name || "", versions });
+});
+route("POST", /^\/pages\/([a-z]+)\/edits$/, false, async (req, res, user, m) => {
+  if (!PAGES[m[1]]) return send(res, 404, { error: "없는 화면입니다" });
+  if (!user.isSuper) return send(res, 403, { error: "총관리자만 고칩니다" });
+  const b = await readJson(req);
+  const edits = cleanEdits(m[1], b.edits);
+  setPageEdits(m[1], edits, user);
+  send(res, 200, { ok: true, edits });
+});
+route("POST", /^\/pages\/([a-z]+)\/restore$/, false, async (req, res, user, m) => {
+  if (!PAGES[m[1]]) return send(res, 404, { error: "없는 화면입니다" });
+  if (!user.isSuper) return send(res, 403, { error: "총관리자만 고칩니다" });
+  const b = await readJson(req);
+  const v = db.prepare("SELECT edits FROM page_versions WHERE id = ? AND page = ?").get(Number(b.id), m[1]);
+  if (!v) return send(res, 404, { error: "없는 판입니다" });
+  let edits = {};
+  try { edits = cleanEdits(m[1], JSON.parse(v.edits)); } catch {}
+  setPageEdits(m[1], edits, user);
+  send(res, 200, { ok: true });
+});
+// 사진 바꾸기 — 본문 그대로 받는다(서류함과 같은 방식). 파일 이름은 내용으로 짓는다
+route("POST", /^\/pages\/([a-z]+)\/upload$/, false, async (req, res, user, m) => {
+  if (!PAGES[m[1]]) return send(res, 404, { error: "없는 화면입니다" });
+  if (!user.isSuper) return send(res, 403, { error: "총관리자만 고칩니다" });
+  let buf;
+  try { buf = await readBody(req, 8 * 1024 * 1024); } catch { return send(res, 413, { error: "사진이 너무 큽니다 (8MB까지)" }); }
+  const mime = ["image/jpeg", "image/png", "image/webp"].find(t => looksLike(t, buf));
+  if (!mime) return send(res, 400, { error: "JPG·PNG·WEBP 사진만 받습니다" });
+  const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[mime];
+  const name = createHash("sha256").update(buf).digest("hex").slice(0, 16) + "." + ext;
+  const dir = join(PAGE_UP, m[1]);
+  mkdirSync(dir, { recursive: true });
+  if (!existsSync(join(dir, name))) writeFileSync(join(dir, name), buf);
+  send(res, 200, { src: "up/" + name });
 });
 
 // ---- 가계부 ----
@@ -1978,6 +2070,29 @@ const server = createServer(async (req, res) => {
 
   // 개발용 정적 서빙 — API 경로와 겹치지 않는 GET만
   if (WEB_DIR && req.method === "GET") {
+    // 랜딩: 저장된 고치기를 다른 스크립트보다 앞에 넣는다(글자 쪼개기·서명 채우기 전에 입혀야 한다)
+    const pageKey = Object.keys(PAGES).find(k => path === "/" + PAGES[k]);
+    if (pageKey) {
+      try {
+        let html = readFileSync(normalize(join(WEB_DIR, PAGES[pageKey])), "utf8");
+        const json = JSON.stringify(pageEdits(pageKey)).replace(/</g, "\\u003c");
+        const at = html.indexOf("<script>", html.indexOf("<body"));
+        if (at > 0) html = html.slice(0, at) + `<script>window.__PAGE_EDITS=${json}</script>\n<script src="edits.js"></script>\n` + html.slice(at);
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+        return res.end(html);
+      } catch {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end("파일을 찾을 수 없습니다");
+      }
+    }
+    const up = /^\/([a-z]+)\/up\/([a-f0-9]{16}\.(jpg|png|webp))$/.exec(path);
+    if (up && Object.values(PAGES).some(p => p.startsWith(up[1] + "/"))) {
+      const file = join(PAGE_UP, up[1], up[2]);
+      if (existsSync(file)) {
+        res.writeHead(200, { "Content-Type": { jpg: "image/jpeg", png: "image/png", webp: "image/webp" }[up[3]], "Cache-Control": "public, max-age=31536000, immutable" });
+        return res.end(readFileSync(file));
+      }
+    }
     const rel = path === "/" ? "index.html" : path.slice(1);
     const file = normalize(join(WEB_DIR, rel));
     try {
