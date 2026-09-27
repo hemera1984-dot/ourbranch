@@ -1730,6 +1730,10 @@ const NOTES = {
   const hub = document.getElementById('hub');
   const hubWords = () => document.querySelectorAll('.hub [data-words]').forEach((el, k) => { el.style.setProperty('--d', (2.1 + k * .25) + 's'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('words-in'))); });
   if (document.body.classList.contains('intro-on')) document.addEventListener('intro-done', hubWords, { once: true }); else hubWords();
+  /* 모달 안 사진은 처음엔 미뤄 두었다가(첫 화면을 빨리 띄우려고) 인트로가 끝나면 미리 받아 둔다 —
+     화면을 넘겼을 때 사진이 늦게 뜨면 발표 중에 빈 배경이 보인다. */
+  const warm = () => setTimeout(() => document.querySelectorAll('img[loading="lazy"]').forEach(i => { i.loading = 'eager'; }), 1200);
+  if (document.body.classList.contains('intro-on')) document.addEventListener('intro-done', warm, { once: true }); else warm();
   const mark = () => heads.forEach(h => { const r = h.getBoundingClientRect(); if (h.offsetParent && r.top < innerHeight * .92 && r.bottom > 0) h.classList.add('words-in'); });
   addEventListener('scroll', mark, { passive: true }); addEventListener('resize', mark); setInterval(mark, 400); mark();
   const card = document.getElementById('hubCard'); if (!card) return;
