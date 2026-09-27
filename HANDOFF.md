@@ -14,4 +14,4 @@
 
 ## 남은 것
 - 배포 후 실제 계정으로 열어 서명 확인, 폰(아이폰·갤럭시)에서 덮개·나가기 확인.
-- 인트로 B안(코덱스) — `?intro=b`로 `intro-b.html` 비교 가능. 요청서는 insur-study `recruiting/intro_codex_brief.md`.
+- 인트로는 클로드 안(A안)으로 확정. 코덱스 비교 장치(?intro=b)는 뺐다.

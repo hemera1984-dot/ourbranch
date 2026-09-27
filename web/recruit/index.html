@@ -1741,22 +1741,8 @@ const NOTES = {
   card.style.setProperty('--dur', DUR / 1000 + 's'); const go0 = () => setTimeout(() => show(0), 2500); if (document.body.classList.contains('intro-on')) document.addEventListener('intro-done', go0, { once: true }); else go0();
 })();
 
-/* 오프닝 인트로: 빛 입자 → 로고 → FC → 블루로 번지며 메인 등장
-   ?intro=b 로 열면 intro-b.html(코덱스 안 등 다른 시안)을 불러와 비교할 수 있다.
-   다른 시안의 약속: #intro 를 만들고, 끝나면 document 에 'intro-end' 이벤트를 보낸다. */
+/* 오프닝 인트로: 빛 입자 → 로고 → FC → 블루로 번지며 메인 등장 (클로드 안으로 확정, 2026-09-27 사용자) */
 (() => {
-  if (new URLSearchParams(location.search).get('intro') === 'b') {
-    const body = document.body; document.getElementById('intro')?.remove();
-    const finish = () => { body.classList.remove('intro-on'); document.getElementById('hub').classList.add('enter'); document.dispatchEvent(new Event('intro-done')); };
-    document.addEventListener('intro-end', finish, { once: true });
-    fetch('intro-b.html').then(r => { if (!r.ok) throw 0; return r.text(); }).then(html => {
-      const box = document.createElement('div'); box.innerHTML = html;
-      [...box.querySelectorAll('script')].forEach(o => { const n = document.createElement('script'); n.textContent = o.textContent; o.replaceWith(n); });
-      [...box.childNodes].forEach(n => body.appendChild(n.nodeName === 'SCRIPT' ? (() => { const x = document.createElement('script'); x.textContent = n.textContent; return x; })() : n));
-      setTimeout(finish, 8000);
-    }).catch(finish);
-    return;
-  }
   const intro = document.getElementById('intro'); const body = document.body;
   const done = () => { if (!intro || intro.classList.contains('out')) return; intro.classList.add('out'); body.classList.remove('intro-on');
     const hub = document.getElementById('hub'); hub.classList.add('enter'); document.dispatchEvent(new Event('intro-done'));
