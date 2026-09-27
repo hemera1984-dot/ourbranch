@@ -15,3 +15,11 @@
 ## 남은 것
 - 배포 후 실제 계정으로 열어 서명 확인, 폰(아이폰·갤럭시)에서 덮개·나가기 확인.
 - 인트로는 클로드 안(A안)으로 확정. 코덱스 비교 장치(?intro=b)는 뺐다.
+
+
+## 2026-09-27 추가 — 배포 전 막힌 것 두 가지
+- iframe 주소를 `recruit/` → `recruit/index.html`. 서버 정적 서빙은 확장자가 있는 파일만 보고, 폴더 주소는 API로 넘긴다 —
+  `GET /recruit`(도입 현황)와 겹쳐 401이 났다.
+- 정적 서빙 형식표에 jpg·jpeg·webp·woff2·mp4 추가(전에는 octet-stream). 서버를 다시 켜야 반영된다.
+- 검증: `node test.js` 전체 통과. `node dev.js`로 실제 앱을 띄워 메뉴 → 랜딩 → 서명(dev 계정 「안창민 · 신한라이프 하랑지점 팀장」) → 나가기 확인.
+- 배포: NCP 서버에서 `sudo bash /opt/ourbranch/server/setup.sh` (git pull + 서비스 재시작).

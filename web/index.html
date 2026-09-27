@@ -1297,7 +1297,8 @@
     try { sessionStorage.setItem("ob_recruit_me", JSON.stringify(window.OB_RECRUIT_ME)); } catch (e) { /* 사파리 비공개 */ }
     var box = document.createElement("div");
     box.className = "recruit-show";
-    box.innerHTML = '<iframe src="recruit/" title="리쿠르팅 소개" allow="fullscreen" allowfullscreen></iframe>';
+    // 폴더 주소(recruit/)는 서버가 정적 파일로 보지 않고 API(GET /recruit, 도입 현황)로 넘겨 401이 난다 — 파일 이름까지 쓴다.
+    box.innerHTML = '<iframe src="recruit/index.html" title="리쿠르팅 소개" allow="fullscreen" allowfullscreen></iframe>';
     document.body.appendChild(box);
     document.body.classList.remove("more-open");
     window.OB_RECRUIT_CLOSE = function () {
