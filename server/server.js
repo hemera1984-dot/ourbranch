@@ -1985,10 +1985,11 @@ const server = createServer(async (req, res) => {
         const types = {
           ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
           ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
+          ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".woff2": "font/woff2", ".mp4": "video/mp4",
           ".webmanifest": "application/manifest+json", ".json": "application/json"
         };
         const ct = types[extname(file)] || "application/octet-stream";
-        const binary = /^(image|font)\//.test(ct) || ct === "application/octet-stream";
+        const binary = /^(image|font|video)\//.test(ct) || ct === "application/octet-stream";
         // 화면·설정 파일은 매번 서버에 물어본다. 안 그러면 배포해도 옛 화면이 그대로 남는다
         // (부지점장 화면만 옛 구분이 보이던 사고 — 2026-08-03).
         // 그림·영상은 잘 바뀌지 않으니 하루 정도 들고 있게 둔다.
