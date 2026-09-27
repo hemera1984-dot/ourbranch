@@ -136,6 +136,10 @@ async function main() {
   assert.equal(mine2[0].date, "2026-08-06");
   assert.equal(mine2[0].start, "15:00");
   assert.equal(mine2[0].customer_code, "C-2026-014");
+  assert.equal(mine2[0].title, "C-2026-014 · 3차", "이름이 안 오면 코드로");
+  assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "표시명": "김고객" })).status, 200);
+  assert.equal((await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-31")).json())
+    .filter(e => e.source_key === "fc1@x.com|mg:C-2026-014:3")[0].title, "김고객 · 3차", "이름이 오면 제목은 이름");
   assert.equal((await api("t-fc1", "POST", "/events/upsert", { ...meet, "상태": "취소" })).status, 200);
   mEvs = await (await api("t-fc1", "GET", "/events?from=2026-08-01&to=2026-08-10")).json();
   assert.equal(mEvs.filter(e => e.source_key === "fc1@x.com|mg:C-2026-014:3")[0].status, "취소");
