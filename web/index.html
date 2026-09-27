@@ -2296,13 +2296,20 @@
       .catch(function (err) { alert(err.message || "내리지 못했습니다."); });
   }
 
+  // 창은 누른 자리 밑에 띄우되 화면 안에 가둔다. 사이드바 뒤로 숨거나 화면 아래로 빠지면
+  // 사용자는 「아무 일도 안 일어났다」고 느낀다 (2026-09-28 최연 수정 요청: 서류함 올리기).
   function placePop(p, anchor) {
-    if (anchor && !isMobile()) {
-      var r = anchor.getBoundingClientRect();
-      var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - 290);
-      p.style.left = Math.max(8, left) + "px";
-      p.style.top = (r.bottom + window.scrollY + 4) + "px";
-    }
+    if (!anchor || isMobile()) return;
+    var r = anchor.getBoundingClientRect();
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+    var main = document.querySelector(".main");
+    var minL = (main ? main.getBoundingClientRect().left : 0) + 8;
+    var w = p.offsetWidth || 264, h = p.offsetHeight || 0;
+    var left = Math.max(minL, Math.min(r.left, vw - w - 16));
+    var top = r.bottom + 4;                                   // 아래가 모자라면 위로, 위도 모자라면 화면 아래쪽에 붙인다
+    if (top + h > vh - 8) top = r.top - h - 4 >= 8 ? r.top - h - 4 : Math.max(8, vh - h - 8);
+    p.style.left = (left + window.scrollX) + "px";
+    p.style.top = (top + window.scrollY) + "px";
   }
 
   function placeholderEmail(nm) {
@@ -4337,7 +4344,7 @@
     if (trChip && trChip.dataset.tid) { openTrainPop(trChip, { id: Number(trChip.dataset.tid) }); return; }
     var add = e.target.closest(".doc-add");
     if (add) {
-      docPick = { scope: add.dataset.scope, email: add.dataset.email || "" };
+      docPick = { scope: add.dataset.scope, email: add.dataset.email || "", anchor: add };
       $("doc-file").value = "";
       $("doc-file").click();
       return;
@@ -4349,7 +4356,8 @@
   $("doc-file").addEventListener("change", function () {
     var f = this.files && this.files[0];
     if (!f || !docPick) return;
-    openDocPop($("doc-people"), Object.assign({ file: f }, docPick));
+    // 누른 「올리기」 단추 밑에 띄운다 — 목록 전체에 붙이면 창이 목록 맨 아래(화면 밖)로 간다
+    openDocPop(docPick.anchor || $("doc-people"), Object.assign({ file: f }, docPick));
     docPick = null;
   });
 
