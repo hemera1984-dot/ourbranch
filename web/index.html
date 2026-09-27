@@ -61,6 +61,7 @@
       <p class="nav-group-label">리쿠르팅</p>
       <a href="#ta" data-screen="ta">TA 일지</a>
       <a href="#recruit" data-screen="recruit">도입 현황</a>
+      <a href="#" data-open="recruit-intro">리쿠르팅 소개</a>
       <p class="nav-group-label">자료</p>
       <a href="#docs" data-screen="docs">서류함</a>
       <p class="nav-group-label">내 계정</p>
@@ -1284,6 +1285,29 @@
     if (name === "docs") loadDocs();
     if (name === "ledger") loadLedger();
   }
+
+  // ── 리쿠르팅 소개 ──
+  // 지원자에게 링크로 보내는 물건이 아니다. 앱에서 눌러 전체 화면으로 띄우고 앞에서 보여 준다
+  // (2026-09-27 사용자). 보여주는 사람의 이름·직급·지점명을 넘겨 페이지 서명에 쓴다 —
+  // 지점명은 설정에서 오므로 코드에 박지 않는다. 페이지 자체는 web/recruit/(정적).
+  function openRecruitIntro() {
+    if (document.querySelector(".recruit-show")) return;
+    var m = (BOOT.members || []).filter(function (x) { return x.email === BOOT.me.email; })[0];
+    window.OB_RECRUIT_ME = { name: BOOT.me.name || "", role: (m && m.role) || BOOT.me.role || "", branch: BOOT.branchName || "" };
+    try { sessionStorage.setItem("ob_recruit_me", JSON.stringify(window.OB_RECRUIT_ME)); } catch (e) { /* 사파리 비공개 */ }
+    var box = document.createElement("div");
+    box.className = "recruit-show";
+    box.innerHTML = '<iframe src="recruit/" title="리쿠르팅 소개" allow="fullscreen" allowfullscreen></iframe>';
+    document.body.appendChild(box);
+    document.body.classList.remove("more-open");
+    window.OB_RECRUIT_CLOSE = function () {
+      if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+      box.remove();
+    };
+    // 전체 화면은 누른 순간에만 요청할 수 있다. 폰(아이폰)은 요소 전체 화면이 없어 화면을 덮는 것으로 대신한다.
+    if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
+  }
+
   // 폰 하단 탭 — 넷은 바로, 나머지는 「더보기」로 사이드 메뉴를 연다
   $("tabbar").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
@@ -1297,6 +1321,7 @@
 
   $("nav").addEventListener("click", function (e) {
     var a = e.target.closest("a"); if (!a) return;
+    if (a.dataset.open === "recruit-intro") { e.preventDefault(); openRecruitIntro(); return; }
     e.preventDefault(); location.hash = a.dataset.screen; show(a.dataset.screen);
   });
   // 화면을 넓게 쓰려고 접는 것들 — 접은 상태는 기억한다.
