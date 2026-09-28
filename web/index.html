@@ -144,7 +144,7 @@
         <div class="me-field">
           <label for="me-input-bday">생년월일</label>
           <input class="input" id="me-input-bday" inputmode="numeric" maxlength="10" placeholder="1984-02-11">
-          <span class="note">연도는 나만 봅니다. 지점에는 월·일만 보이고, 홈에 「며칠 뒤 생일」로 뜹니다.</span>
+          <span class="note">조직도 연락처 카드에 보이고, 홈에 「며칠 뒤 생일」로 뜹니다.</span>
         </div>
         <div class="me-field">
           <label for="me-input-joined">위촉일 <span class="note">(선택)</span></label>
@@ -2351,7 +2351,7 @@
     p.innerHTML = '<div class="pop-title">' + esc(memberLabel(m)) + "</div>"
       + line("소속", esc(tn) + " · " + esc(roleTag(m.role)))
       + line("연락처", m.phone ? '<a href="tel:' + esc(m.phone) + '">' + esc(m.phone) + "</a>" : "")
-      + line("생일", m.birthday ? esc(mdLabel(String(m.birthday).slice(-5))) : "")
+      + line("생일", m.birthday ? esc((/^\d{4}-/.test(m.birthday) ? +m.birthday.slice(0, 4) + "년 " : "") + mdLabel(String(m.birthday).slice(-5))) : "")
       + line("위촉", m.joined_at ? esc(m.joined_at) + (monthsIn(m.joined_at) ? " · " + monthsIn(m.joined_at) + "차월" : "") : "")
       + (m.phone || m.birthday || m.joined_at ? "" : '<div class="pop-row"><span class="note">아직 「내 정보」를 채우지 않았습니다.</span></div>')
       + '<div class="pop-row"><button class="btn" id="mi-close">닫기</button></div>';
