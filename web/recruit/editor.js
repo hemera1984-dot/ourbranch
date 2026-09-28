@@ -42,7 +42,10 @@
     'body.pe-on [data-k].pe-changed{outline:2px solid #22C55E}',
     'body.pe-on [data-k].pe-editing{outline:2px solid #FACC15;background:rgba(250,204,21,.12)}',
     'body.pe-off [data-k]{outline:none;cursor:auto}',
-    '.pe-panel{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:2147483000;width:min(720px,calc(100vw - 20px));max-height:calc(100vh - 90px);overflow:auto;padding:14px;border-radius:10px;background:#fff;color:#111827;font:500 14px/1.5 Pretendard,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)}',
+    /* 막대 높이만큼 갈래 화면을 내린다 — 폰·패드에서 막대가 갈래 머리(탭·닫기)를 덮었다 */
+    'body.pe-mode .deck{top:var(--pe-h,60px)}',
+    '@media(max-width:760px){.pe-bar{top:6px;left:6px;right:6px;transform:none;max-width:none;gap:4px;padding:5px;font-size:13px}.pe-bar>b{display:none}.pe-bar button{height:32px;padding:0 9px}.pe-msg{flex-basis:100%;font-size:12px;padding:0 4px}}',
+    '.pe-panel{position:fixed;left:50%;top:var(--pe-h,62px);transform:translateX(-50%);z-index:2147483000;width:min(720px,calc(100vw - 20px));max-height:calc(100vh - 90px);overflow:auto;padding:14px;border-radius:10px;background:#fff;color:#111827;font:500 14px/1.5 Pretendard,system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)}',
     '.pe-panel h3{margin:0 0 10px;font-size:16px}',
     '.pe-panel .pe-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #E5E7EB}',
     '.pe-panel .pe-row:first-of-type{border-top:0}',
@@ -77,7 +80,10 @@
   });
 
   function start() {
-    document.body.classList.add('pe-on');
+    document.body.classList.add('pe-on', 'pe-mode');
+    var fit = function () { document.documentElement.style.setProperty('--pe-h', (bar.getBoundingClientRect().bottom + 8) + 'px'); };
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(bar);
+    addEventListener('resize', fit);
     bar.innerHTML = '<b>고치기</b>'
       + '<button type="button" class="pe-onoff" id="peOnoff" title="끄면 화면을 평소처럼 넘길 수 있습니다">누르면 고침</button>'
       + '<button type="button" id="pePhotos">사진 바꾸기</button>'
@@ -90,6 +96,7 @@
     bar.querySelector('#peHist').onclick = historyPanel;
     bar.querySelector('#peSave').onclick = save;
     bar.querySelector('#peDone').onclick = done;
+    requestAnimationFrame(function () { document.documentElement.style.setProperty('--pe-h', (bar.getBoundingClientRect().bottom + 8) + 'px'); });
     Object.keys(saved).forEach(function (k) { var el = byKey(k); if (el) el.classList.add('pe-changed'); });
     refreshCount();
   }

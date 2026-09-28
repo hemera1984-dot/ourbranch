@@ -535,6 +535,11 @@ body.fc:not(.pp-off) .deck{right:420px}
 .deck-stage .h2{font-size:clamp(30px,3.5vw,54px)}
 .deck-stage .hero.phsec .h1{font-size:clamp(34px,4vw,62px)}
 @media(max-width:900px){.deck-stage .split{grid-template-columns:1fr}}
+/* 패드 세로(820px 안팎): 한 단으로 접힌 본문이 폭을 다 쓰는데 이전·다음 단추가 좌우 가운데 떠 있어 글줄을 덮었다 — 폰처럼 아래로 내린다 (2026-09-28) */
+@media(max-width:1100px){
+  .deck-nav{top:auto;bottom:16px;margin:0;width:52px;height:52px}
+  .deck-stage section[data-stop]{padding-bottom:86px!important}
+}
 @media(max-width:760px){
   .deck-panel{inset:0;border-radius:0}
   .deck-head{height:58px;padding:0 10px 0 14px;gap:8px}.deck-logo{display:none}

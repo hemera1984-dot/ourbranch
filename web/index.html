@@ -142,9 +142,9 @@
           <input class="input" id="me-input-phone" inputmode="tel" maxlength="13" placeholder="010-0000-0000">
         </div>
         <div class="me-field">
-          <label for="me-input-bday">생일 <span class="note">(월-일, 연도는 받지 않습니다)</span></label>
-          <input class="input" id="me-input-bday" inputmode="numeric" maxlength="5" placeholder="08-15">
-          <span class="note">넣어두면 지점 홈에 「며칠 뒤 생일」로 뜹니다.</span>
+          <label for="me-input-bday">생년월일</label>
+          <input class="input" id="me-input-bday" inputmode="numeric" maxlength="10" placeholder="1984-02-11">
+          <span class="note">연도는 나만 봅니다. 지점에는 월·일만 보이고, 홈에 「며칠 뒤 생일」로 뜹니다.</span>
         </div>
         <div class="me-field">
           <label for="me-input-joined">위촉일 <span class="note">(선택)</span></label>
@@ -415,6 +415,9 @@
               <input class="input" id="rep-reason" placeholder="미출근 사유 (선택)" style="flex:1;min-width:120px">
             </span>
           </div>
+          <div class="rep-row"><span>목표 CANP</span><span class="rep-goal"><input class="input rg-in" id="rg-goal" placeholder="예: 3,000,000"><span class="note" id="rg-goal-now"></span></span></div>
+          <div class="rep-row"><span>목표 건수</span><span class="rep-goal"><input class="input rg-in" id="rg-cases" type="number" min="0" inputmode="numeric" placeholder="건"><span class="note" id="rg-cases-now"></span></span></div>
+          <div class="rep-row"><span>도입 목표</span><span class="rep-goal"><input class="input rg-in" id="rg-intro" type="number" min="0" inputmode="numeric" placeholder="명"><span class="note" id="rg-intro-now"></span></span></div>
           <label class="rep-row"><span>오전 활동</span><input class="input" id="rep-work" placeholder="예: 이사 / 고객 상담"></label>
           <label class="rep-row"><span>점심 일정</span><input class="input" id="rep-lunch" placeholder="예: 팀 점심 / 고객 식사"></label>
           <label class="rep-row"><span>오후 활동</span><input class="input" id="rep-afternoon" placeholder="예: 저녁 약속 / 교육"></label>
@@ -1500,12 +1503,12 @@
   function upcomingBirthdays(within) {
     var now = new Date(), y = now.getFullYear();
     var todayMs = new Date(y, now.getMonth(), now.getDate()).getTime();
-    return BOOT.members.filter(function (m) { return /^\d{2}-\d{2}$/.test(m.birthday || ""); })
+    return BOOT.members.filter(function (m) { return /^\d{2}-\d{2}$/.test(String(m.birthday || "").slice(-5)); })
       .map(function (m) {
-        var p = m.birthday.split("-");
+        var p = m.birthday.slice(-5).split("-");
         var t = new Date(y, +p[0] - 1, +p[1]).getTime();
         if (t < todayMs) t = new Date(y + 1, +p[0] - 1, +p[1]).getTime();   // 지났으면 내년 것
-        return { label: memberLabel(m), md: m.birthday, days: Math.round((t - todayMs) / 86400000) };
+        return { label: memberLabel(m), md: m.birthday.slice(-5), days: Math.round((t - todayMs) / 86400000) };
       })
       .filter(function (b) { return b.days <= within; })
       .sort(function (a, b) { return a.days - b.days; });
@@ -1932,6 +1935,17 @@
   }
 
   // 0815 · 8/15 · 8월 15일 → 08-15. 입력 모양을 따지지 않는 게 원칙이다.
+  // 생년월일 — 19840211 · 1984.2.11 · 1984-02-11 를 1984-02-11 로. 두 덩어리면 예전처럼 월-일
+  function normBirth(v) {
+    var n = String(v || "").match(/\d+/g);
+    if (!n) return "";
+    if (n.length === 1 && n[0].length === 8) n = [n[0].slice(0, 4), n[0].slice(4, 6), n[0].slice(6)];
+    if (n.length === 3) {
+      var y = n[0].length === 2 ? (+n[0] > (new Date().getFullYear() % 100) ? "19" : "20") + n[0] : n[0];
+      return y + "-" + String(+n[1]).padStart(2, "0") + "-" + String(+n[2]).padStart(2, "0");
+    }
+    return normMonthDay(v);
+  }
   function normMonthDay(v) {
     var n = String(v || "").match(/\d+/g);
     if (!n) return "";
@@ -1957,7 +1971,7 @@
   $("me-save").addEventListener("click", function () {
     api("/me", { method: "POST", body: {
       name: $("me-input-name").value, phone: $("me-input-phone").value,
-      birthday: normMonthDay($("me-input-bday").value), joinedAt: $("me-input-joined").value
+      birthday: normBirth($("me-input-bday").value), joinedAt: $("me-input-joined").value
     } })
       .then(function () {
         return refreshBoot().then(renderMe).then(function () {
@@ -2337,7 +2351,7 @@
     p.innerHTML = '<div class="pop-title">' + esc(memberLabel(m)) + "</div>"
       + line("소속", esc(tn) + " · " + esc(roleTag(m.role)))
       + line("연락처", m.phone ? '<a href="tel:' + esc(m.phone) + '">' + esc(m.phone) + "</a>" : "")
-      + line("생일", m.birthday ? esc(mdLabel(m.birthday)) : "")
+      + line("생일", m.birthday ? esc(mdLabel(String(m.birthday).slice(-5))) : "")
       + line("위촉", m.joined_at ? esc(m.joined_at) + (monthsIn(m.joined_at) ? " · " + monthsIn(m.joined_at) + "차월" : "") : "")
       + (m.phone || m.birthday || m.joined_at ? "" : '<div class="pop-row"><span class="note">아직 「내 정보」를 채우지 않았습니다.</span></div>')
       + '<div class="pop-row"><button class="btn" id="mi-close">닫기</button></div>';
@@ -3937,19 +3951,50 @@
 
   // 이번 달 목표·현재 실적 — 보고 문구에 자동으로 들어간다
   var repGoal = { goal: "", intro: 0, canp: 0 };
+  // 목표 세 줄은 보고 칸 안에 둔다(2026-09-28 사용자: 「일일보고 내용에 있었으면」). 옆에 이번 달 현재 값.
+  // 목표를 쓰는 것은 부지점장 이상(2026-08-05 규칙) — 그 밖에는 값만 보인다.
+  // 주인은 이메일로 가린다 — 이름으로 찾으면 동명이인의 목표가 섞인다.
+  function mineRow(r) { return r.member_email ? r.member_email === BOOT.me.email : r.member === BOOT.me.name; }
   function loadReportGoal() {
     var m = fmtDate(attBase).slice(0, 7);
     api("/perf?month=" + m).then(function (data) {
-      var g = data.goals.filter(function (x) { return x.member === BOOT.me.name; })[0] || {};
-      var canp = 0;
-      data.rows.filter(function (r) { return r.member === BOOT.me.name; })
-        .forEach(function (r) { canp += Number(r.canp) || 0; });
-      repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp };
-      $("report-goal").textContent = "이번 달 목표 " + (g.goal || "미설정(업적현황에서 부지점장이 넣습니다)")
-        + (g.cases ? " · " + g.cases + "건" : "")
-        + " · 도입 " + (g.intro || 0) + " · 현재 CANP " + canp.toLocaleString("ko-KR");
+      var g = data.goals.filter(mineRow)[0] || {};
+      var canp = 0, cases = 0;
+      data.rows.filter(mineRow).forEach(function (r) {
+        canp += Number(r.canp) || 0;
+        if (r.contract_date || r.canp || r.premium) cases++;
+      });
+      var intro = BOOT.members.filter(function (x) {
+        return x.recruiter_email === BOOT.me.email && String(x.joined_at || "").slice(0, 7) === m;
+      }).length;
+      repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp, nowCases: cases, nowIntro: intro, month: m };
+      var can = !!BOOT.me.canSetGoal;
+      [["rg-goal", g.goal || ""], ["rg-cases", g.cases || ""], ["rg-intro", g.intro || ""]].forEach(function (x) {
+        var el = $(x[0]); el.value = x[1]; el.dataset.init = String(x[1]); el.readOnly = !can;
+        el.placeholder = can ? el.placeholder : "미설정";
+        el.title = can ? "" : "목표는 부지점장이 업적현황·일일보고에서 정합니다";
+      });
+      var num = Number(String(g.goal || "").replace(/[^0-9]/g, ""));
+      $("rg-goal-now").textContent = "현재 " + fmtNum(canp) + (num ? " · " + Math.round(canp / num * 100) + "%" : "");
+      $("rg-cases-now").textContent = "현재 " + cases + "건";
+      $("rg-intro-now").textContent = "현재 " + intro + "명";
+      $("report-goal").textContent = can ? "목표 칸은 벗어나면 바로 저장됩니다" : "";
     });
   }
+  // 목표는 칸을 벗어나면 바로 저장 — 업적현황의 목표 칸과 같은 자리(perf_goals)다
+  document.querySelectorAll(".rg-in").forEach(function (el) {
+    el.addEventListener("change", function () {
+      if (!BOOT.me.canSetGoal || el.readOnly || !repGoal.month) return;   // 목표를 아직 못 불러왔으면 어느 달인지 모른다
+      var me = BOOT.members.filter(function (x) { return x.email === BOOT.me.email; })[0] || {};
+      var body = { member: BOOT.me.name, memberEmail: BOOT.me.email };
+      if (el.id === "rg-goal") body.goal = el.value.trim();
+      if (el.id === "rg-cases") body.cases = Number(el.value) || 0;
+      if (el.id === "rg-intro") body.intro = Number(el.value) || 0;
+      api("/perf/goals", { method: "POST", body: { teamId: me.team_id != null ? me.team_id : myTeamId(), month: repGoal.month, goals: [body] } })
+        .then(function () { $("report-goal").textContent = "목표를 저장했습니다"; loadReportGoal(); })
+        .catch(function () { el.value = el.dataset.init || ""; });
+    });
+  });
 
   // 지난 보고 그대로 가져오기 — 매일 비슷한 일정을 다시 치지 않게.
   // 자동으로 채우지는 않는다. 누른 사람만 가져간다(엉뚱한 내용이 저장되는 사고 방지).
@@ -4006,9 +4051,9 @@
     lines.push("[" + BOOT.me.name + " " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
       + DOW_FULL[d.getDay()] + " 일일보고]");
     lines.push("");
-    lines.push("이번 달 영업 목표 CANP: " + (repGoal.goal || "-"));
-    lines.push("이번 달 목표 건수: " + (repGoal.cases || "-"));
-    lines.push("이번 달 도입 목표: " + (repGoal.intro || 0));
+    lines.push("이번 달 영업 목표 CANP: " + (repGoal.goal || "-") + " (현재 " + fmtNum(repGoal.canp || 0) + ")");
+    lines.push("이번 달 목표 건수: " + (repGoal.cases || "-") + " (현재 " + (repGoal.nowCases || 0) + "건)");
+    lines.push("이번 달 도입 목표: " + (repGoal.intro || 0) + " (현재 " + (repGoal.nowIntro || 0) + "명)");
     lines.push("");
     var bar = "━━━━━━━━━━━━━";
     lines.push(bar);

@@ -363,7 +363,9 @@ route("GET", /^\/bootstrap$/, false, (req, res, user) => {
   // 조직도는 지점 전체가 다 보인다 (2026-08-02 사용자 지시) — 팀·구성원 명단은 가리지 않는다.
   // 가리는 것은 자료(일정·업적·TA·공지)이고, 그건 각 엔드포인트가 팀 단위로 막는다.
   const teams = db.prepare("SELECT * FROM teams ORDER BY id").all();
-  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at, sort_order, active, left_at FROM members ORDER BY team_id, name").all();
+  // 생년월일의 연도는 본인만 본다 — 명단은 지점 전체에 열려 있어 연도가 나가면 나이가 공개된다 (2026-09-28 사용자)
+  const members = db.prepare("SELECT email, name, team_id, role, is_manager, can_view_all, recruiter_email, profile_done, phone, birthday, joined_at, sort_order, active, left_at FROM members ORDER BY team_id, name").all()
+    .map(m => m.email === user.email || !m.birthday ? m : { ...m, birthday: String(m.birthday).slice(-5) });
   send(res, 200, {
     branchName: getSetting(db, "지점명") || "",
     me: { ...user, canApprove: canApprove(user), isBranchHead: isBranchHead(user), canSetGoal: canSetGoal(user) },
@@ -1850,10 +1852,11 @@ route("POST", /^\/me$/, false, async (req, res, user) => {
   if (name.length < 2 || name.length > 20) return send(res, 400, { error: "이름을 2~20자로 입력해 주세요" });
   const phone = String(b.phone || "").trim().replace(/[^0-9\-]/g, "");
   if (phone && !/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(phone)) return send(res, 400, { error: "휴대폰 번호 형식을 확인해 주세요" });
-  // 생일은 MM-DD만 — 연도를 받으면 나이가 지점 전체에 공개된다
+  // 생년월일(1984-02-11) 또는 월-일(02-11). 연도는 저장하되 명단에는 월-일만 나간다(부트스트랩에서 자른다)
   const birthday = String(b.birthday || "").trim();
-  if (birthday && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(birthday))
-    return send(res, 400, { error: "생일은 08-15 형식으로 넣어 주세요" });
+  if (birthday && !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(birthday)
+      && !(isDate(birthday) && birthday.slice(0, 4) >= "1900" && birthday <= today()))
+    return send(res, 400, { error: "생년월일은 1984-02-11 형식으로 넣어 주세요" });
   const joinedAt = String(b.joinedAt || "").trim();
   if (joinedAt && !isDate(joinedAt)) return send(res, 400, { error: "위촉일은 2026-08-01 형식으로 넣어 주세요" });
   db.prepare("UPDATE members SET name = ?, phone = ?, birthday = ?, joined_at = ?, profile_done = 1 WHERE email = ?")

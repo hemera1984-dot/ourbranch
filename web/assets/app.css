@@ -515,6 +515,10 @@ a.slot-title:hover { text-decoration: underline; }
 .rep-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; gap: 10px; }
 .rep-row > span:first-child { font-size: 13px; font-weight: 600; color: var(--sub); }
 .rep-row textarea.input { resize: vertical; font-family: inherit; }
+.rep-goal { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rep-goal .input { width: 180px; max-width: 100%; }
+.rep-goal .input[readonly] { background: var(--canvas); color: var(--ink); }
+.rep-goal .note { font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) {
   .rep-row { grid-template-columns: 1fr; gap: 4px; }
 }

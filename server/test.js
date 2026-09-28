@@ -479,8 +479,8 @@ async function main() {
   assert.equal(meBoot.me.isManager, false);          // 직급·관리자 권한은 그대로
   assert.equal(meBoot.me.teamId, 1);                 // 팀도 그대로
 
-  // 22) 생일·위촉일 — MM-DD만 받고(나이 비공개), 명단에 실려 지점 전체가 챙긴다
-  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "2026-08-15" })).status, 400);
+  // 22) 생일·위촉일 — 명단에 실려 지점 전체가 챙긴다 (연도까지 받는 것은 68번, 2026-09-28 사용자)
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "2026-02-30" })).status, 400, "없는 날짜");
   assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "13-01" })).status, 400);
   assert.equal((await api("t-fc1", "POST", "/me", { name: "김일번", birthday: "08-15", joinedAt: "2024-03-01" })).status, 200);
   const bdBoot = await (await api("t-fc2", "GET", "/bootstrap")).json();
@@ -1292,6 +1292,16 @@ async function main() {
   const upGet = await fetch(BASE + "/recruit/" + upRes.src);
   assert.equal(upGet.status, 200); assert.equal(upGet.headers.get("content-type"), "image/png", "올린 사진을 내준다");
   await api("t-super", "POST", "/pages/recruit/edits", { edits: {} });
+
+  // 68) 생년월일 — 연도까지 받되 명단에는 월-일만, 본인에게만 연도
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "팀원1", birthday: "2999-01-01" })).status, 400, "앞날은 안 받는다");
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "팀원1", birthday: "1984-02-11" })).status, 200);
+  const bdSelf = (await (await api("t-fc1", "GET", "/bootstrap")).json()).members.find(m => m.email === "fc1@x.com");
+  const bdOther = (await (await api("t-esl1", "GET", "/bootstrap")).json()).members.find(m => m.email === "fc1@x.com");
+  assert.equal(bdSelf.birthday, "1984-02-11", "본인은 연도까지");
+  assert.equal(bdOther.birthday, "02-11", "남에게는 월-일만");
+  assert.equal((await (await api("t-fc1", "GET", "/me")).json()).birthday, "1984-02-11");
+  assert.equal((await api("t-fc1", "POST", "/me", { name: "팀원1", birthday: "02-11" })).status, 200, "월-일만도 그대로 받는다");
 
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
