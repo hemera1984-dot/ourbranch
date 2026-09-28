@@ -532,6 +532,12 @@ a.slot-title:hover { text-decoration: underline; }
 .rep-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; gap: 10px; }
 .rep-row > span:first-child { font-size: 13px; font-weight: 600; color: var(--sub); }
 .rep-row textarea.input { resize: vertical; font-family: inherit; }
+.rep-goals { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
+.rep-goals summary { cursor: pointer; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rep-goals summary .rg-t { font-weight: 700; }
+.push-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 12px; padding: 8px 12px;
+  border-radius: 6px; background: var(--canvas); font-size: 14px; }
+.push-bar span { flex: 1; min-width: 180px; }
 .rep-goal { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rep-goal .input { width: 180px; max-width: 100%; }
 .rep-goal .input[readonly] { background: var(--canvas); color: var(--ink); }
@@ -981,7 +987,10 @@ a.slot-title:hover { text-decoration: underline; }
   .rep-row .input, .rep-row textarea.input { width: 100%; }
   .pickchip span { min-height: 44px; padding: 0 22px; font-size: 15px; }
   #rep-save { flex: 1 0 100%; min-height: 46px; font-size: 15px; }
-  #rep-last, #rep-copy { flex: 1; min-height: 44px; }
+  .rep-fill .btn { flex: 1; min-height: 44px; }
+  /* 저장은 엄지 닿는 자리에 — 보고 칸이 화면에 있는 동안 하단 탭 위에 붙어 있다 */
+  .rep-actions { position: sticky; bottom: calc(54px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+    background: var(--surface); margin: 12px -20px -16px !important; padding: 10px 20px; border-top: 1px solid var(--line); }
   .slot { min-height: 44px; padding: 8px 10px; }
   .slot-title { font-size: 14px; }
   .slot-time, .slot-place { font-size: 13px; }

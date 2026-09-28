@@ -393,7 +393,7 @@
     <section id="screen-att" hidden>
       <p class="eyebrow">하루 상태</p>
       <h1>일일보고</h1>
-      <p class="page-desc">한 번 적으면 출석·스케줄에 함께 반영되고, 카톡으로 보낼 문구는 버튼 한 번으로 복사됩니다.</p>
+      <p class="page-desc">한 번 적으면 출석·스케줄에 함께 반영되고, 부지점장이 팀 현황에서 바로 봅니다.</p>
       <div class="toolbar" style="margin-bottom:10px">
         <button class="btn" id="att-prev">이전 날</button>
         <button class="btn" id="att-today">오늘</button>
@@ -407,6 +407,7 @@
         저녁이라 <strong>다음 날 보고</strong> 화면으로 열렸습니다. 오늘 현황은 위 「오늘」을 누르세요.</p>
 
       <div class="card card-pad" id="report-box" style="margin-bottom:14px">
+        <div class="push-bar" id="push-bar" hidden></div>
         <div class="toolbar" style="margin-bottom:10px">
           <strong style="font-size:15px">내 보고</strong>
           <span class="note" id="report-goal"></span>
@@ -419,18 +420,26 @@
               <input class="input" id="rep-reason" placeholder="미출근 사유 (선택)" style="flex:1;min-width:120px">
             </span>
           </div>
-          <div class="rep-row"><span>목표 CANP</span><span class="rep-goal"><input class="input rg-in" id="rg-goal" placeholder="예: 3,000,000"><span class="note" id="rg-goal-now"></span></span></div>
-          <div class="rep-row"><span>목표 건수</span><span class="rep-goal"><input class="input rg-in" id="rg-cases" type="number" min="0" inputmode="numeric" placeholder="건"><span class="note" id="rg-cases-now"></span></span></div>
-          <div class="rep-row"><span>도입 목표</span><span class="rep-goal"><input class="input rg-in" id="rg-intro" type="number" min="0" inputmode="numeric" placeholder="명"><span class="note" id="rg-intro-now"></span></span></div>
+          <!-- 목표는 한 달에 한 번 정한다 — 매일 쓰는 칸을 밀어내지 않게 한 줄로 접는다(2026-09-28 폰 우선) -->
+          <details class="rep-goals" id="rg-fold">
+            <summary><span class="rg-t">이번 달 목표</span> <span class="note" id="rg-sum"></span></summary>
+            <div class="rep-grid" style="margin-top:8px">
+              <div class="rep-row"><span>목표 CANP</span><span class="rep-goal"><input class="input rg-in" id="rg-goal" inputmode="numeric" placeholder="예: 3,000,000"><span class="note" id="rg-goal-now"></span></span></div>
+              <div class="rep-row"><span>목표 건수</span><span class="rep-goal"><input class="input rg-in" id="rg-cases" type="number" min="0" inputmode="numeric" placeholder="건"><span class="note" id="rg-cases-now"></span></span></div>
+              <div class="rep-row"><span>도입 목표</span><span class="rep-goal"><input class="input rg-in" id="rg-intro" type="number" min="0" inputmode="numeric" placeholder="명"><span class="note" id="rg-intro-now"></span></span></div>
+            </div>
+          </details>
+          <div class="toolbar rep-fill">
+            <button class="btn" id="rep-from-cal" type="button">일정에서 가져오기</button>
+            <button class="btn" id="rep-last" type="button">지난 보고 불러오기</button>
+          </div>
           <label class="rep-row"><span>오전 활동</span><input class="input" id="rep-work" placeholder="예: 이사 / 고객 상담"></label>
           <label class="rep-row"><span>점심 일정</span><input class="input" id="rep-lunch" placeholder="예: 팀 점심 / 고객 식사"></label>
           <label class="rep-row"><span>오후 활동</span><input class="input" id="rep-afternoon" placeholder="예: 저녁 약속 / 교육"></label>
           <label class="rep-row"><span>특이사항</span><textarea class="input" id="rep-note" rows="2" placeholder="줄바꿈으로 여러 줄. 현재 CANP는 자동으로 붙습니다"></textarea></label>
         </div>
-        <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar rep-actions" style="margin-top:12px">
           <button class="btn primary" id="rep-save">저장</button>
-          <button class="btn" id="rep-last">지난 보고 불러오기</button>
-          <button class="btn" id="rep-copy">카톡 문구 복사</button>
           <span class="note" id="rep-msg"></span>
         </div>
       </div>
@@ -4099,7 +4108,65 @@
     });
     loadAttTable(ds, teamId);
     if (isMobile()) foldTeam(false); else foldTeam(true);
+    renderPushBar(); syncPush();
   }
+
+  // ── 일일보고 알림 (웹 푸시) — 저녁 6시·8시, 내일 보고를 안 낸 사람에게만 (2026-09-28 사용자) ──
+  // 폰 홈 화면에 설치한 앱에서 알림을 한 번 허용하면 앱을 꺼 둬도 온다. 아이폰은 iOS 16.4+ · 홈 화면 앱에서만.
+  var swReg = null, pushSynced = false;
+  if ("serviceWorker" in navigator)
+    navigator.serviceWorker.register("sw.js").then(function (r) { swReg = r; if (screen === "att" && BOOT) { renderPushBar(); syncPush(); } }).catch(function () {});
+  function pushOk() { return !!swReg && "PushManager" in window && "Notification" in window; }
+  function b64uBytes(s) {
+    var raw = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+    return Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
+  }
+  // 이미 켠 폰은 들어올 때마다 서버에 다시 알린다 — 계정을 바꿔 쓰거나 서버가 지운 구독을 되살린다
+  function syncPush() {
+    if (pushSynced || !pushOk() || Notification.permission !== "granted") return;
+    pushSynced = true;
+    swReg.pushManager.getSubscription().then(function (s) {
+      if (s) api("/push/subscribe", { method: "POST", body: { endpoint: s.endpoint } }).catch(function () {});
+    });
+  }
+  function renderPushBar() {
+    var bar = $("push-bar");
+    var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    var home = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+    if (!pushOk()) {
+      bar.hidden = !(ios && !home);             // 아이폰 사파리 창 — 설치하면 된다는 것만 알린다
+      bar.innerHTML = "<span>아이폰은 사파리 공유 단추 → 「홈 화면에 추가」로 설치한 앱에서 저녁 알림을 켤 수 있습니다.</span>";
+      return;
+    }
+    bar.hidden = false;
+    if (Notification.permission === "denied") {
+      bar.innerHTML = "<span>알림이 막혀 있습니다. 폰 설정 → 알림에서 이 앱을 허용해 주세요.</span>";
+      return;
+    }
+    swReg.pushManager.getSubscription().then(function (s) {
+      bar.innerHTML = s && Notification.permission === "granted"
+        ? '<span>저녁 6시·8시 일일보고 알림 켜짐</span><button type="button" class="btn" id="push-test">시험 알림</button>'
+        : '<span>저녁 6시·8시에 내일 일일보고 알림을 받습니다</span><button type="button" class="btn primary" id="push-on">알림 켜기</button>';
+    });
+  }
+  $("push-bar").addEventListener("click", function (e) {
+    if (e.target.id === "push-on") {
+      e.target.disabled = true;
+      Promise.resolve(Notification.requestPermission()).then(function (p) {
+        if (p !== "granted") { renderPushBar(); return; }
+        return api("/push/key").then(function (k) {
+          return swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(k.key) });
+        }).then(function (s) {
+          return api("/push/subscribe", { method: "POST", body: { endpoint: s.endpoint } });
+        }).then(function () { toast("알림을 켰습니다. 「시험 알림」으로 확인해 보세요."); renderPushBar(); });
+      }).catch(function () { toast("알림을 켜지 못했습니다. 잠시 뒤 다시 눌러 주세요."); renderPushBar(); });
+    }
+    if (e.target.id === "push-test") {
+      api("/push/test", { method: "POST" }).then(function (r) {
+        toast(r.sent ? "시험 알림을 보냈습니다. 몇 초 안에 옵니다." : "보낼 곳이 없습니다. 알림을 다시 켜 주세요.");
+      });
+    }
+  });
 
   // 이번 달 목표·현재 실적 — 보고 문구에 자동으로 들어간다
   var repGoal = { goal: "", intro: 0, canp: 0 };
@@ -4130,7 +4197,11 @@
       $("rg-goal-now").textContent = "현재 " + fmtNum(canp) + (num ? " · " + Math.round(canp / num * 100) + "%" : "");
       $("rg-cases-now").textContent = "현재 " + cases + "건";
       $("rg-intro-now").textContent = "현재 " + intro + "명";
-      $("report-goal").textContent = can ? "목표 칸은 벗어나면 바로 저장됩니다" : "";
+      $("report-goal").textContent = "";
+      var none = !g.goal && !g.cases && !g.intro;
+      $("rg-sum").textContent = (none ? "미설정" : (g.goal ? fmtNum(num || g.goal) : "-") + " · " + (g.cases || "-") + "건 · " + (g.intro || "-") + "명")
+        + "  /  현재 " + fmtNum(canp) + " · " + cases + "건 · " + intro + "명";
+      $("rg-fold").open = can && none;       // 정할 사람이 아직 안 정했을 때만 펴 둔다
     });
   }
   // 목표는 칸을 벗어나면 바로 저장 — 업적현황의 목표 칸과 같은 자리(perf_goals)다
@@ -4143,7 +4214,7 @@
       if (el.id === "rg-cases") body.cases = Number(el.value) || 0;
       if (el.id === "rg-intro") body.intro = Number(el.value) || 0;
       api("/perf/goals", { method: "POST", body: { teamId: me.team_id != null ? me.team_id : myTeamId(), month: repGoal.month, goals: [body] } })
-        .then(function () { $("report-goal").textContent = "목표를 저장했습니다"; loadReportGoal(); })
+        .then(function () { toast("목표를 저장했습니다"); loadReportGoal(); })
         .catch(function () { el.value = el.dataset.init || ""; });
     });
   });
@@ -4159,6 +4230,30 @@
       $("rep-note").value = r.note || "";
       if (r.present) $("rep-yes").checked = true; else $("rep-no").checked = true;
       $("rep-msg").textContent = (r.date || "") + " 보고를 가져왔습니다. 고쳐서 저장하세요.";
+    });
+  });
+
+  // 그날 달력 일정을 오전·점심·오후 칸에 채운다 (2026-09-28 폰 우선). 12시 전·시각 없음 = 오전, 12~14시 = 점심, 그 뒤 = 오후.
+  // 이미 쓴 글은 지우지 않고 뒤에 붙인다. 내 일정 + 우리 팀·지점 공유 일정(팀미팅·지점조회).
+  $("rep-from-cal").addEventListener("click", function () {
+    var ds = fmtDate(attBase);
+    api("/events?from=" + ds + "&to=" + ds).then(function (evs) {
+      var list = evs.filter(function (e) {
+        if (e.status === "취소" || e.date !== ds) return false;
+        return e.member_email === BOOT.me.email || (!e.member_email && (e.team_id == null || e.team_id === BOOT.me.teamId));
+      }).sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      if (!list.length) { $("rep-msg").textContent = "이 날짜에 가져올 일정이 없습니다."; return; }
+      var put = { "rep-work": [], "rep-lunch": [], "rep-afternoon": [] };
+      list.forEach(function (e) {
+        var s = e.start || "";
+        put[!s || s < "12:00" ? "rep-work" : s < "14:00" ? "rep-lunch" : "rep-afternoon"].push((s ? s + " " : "") + evLabel(e));
+      });
+      Object.keys(put).forEach(function (id) {
+        var cur = $(id).value.trim();
+        var add = put[id].filter(function (t) { return cur.indexOf(t) < 0; });
+        if (add.length) $(id).value = (cur ? cur + " / " : "") + add.join(" / ");
+      });
+      $("rep-msg").textContent = "일정 " + list.length + "건을 가져왔습니다. 고쳐서 저장하세요.";
     });
   });
 
@@ -4191,54 +4286,8 @@
     saveReport().then(function () { loadAtt(); $("rep-msg").textContent = "저장했습니다."; });
   });
 
-  // 카톡에 붙여넣을 문구 — 팀에서 쓰던 형식 그대로 만든다
-  function reportText() {
-    var d = attBase;
-    var lines = [];
-    function bullet(v) {
-      var t = (v || "").trim();
-      if (!t) return "- ";                       // 빈 항목도 줄은 남긴다 (카톡에서 쓰던 모양)
-      return t.split("\n").map(function (s) { return "-  " + s.trim(); }).join("\n");
-    }
-    lines.push("[" + BOOT.me.name + " " + (d.getMonth() + 1) + "월 " + d.getDate() + "일 "
-      + DOW_FULL[d.getDay()] + " 일일보고]");
-    lines.push("");
-    lines.push("이번 달 영업 목표 CANP: " + (repGoal.goal || "-") + " (현재 " + fmtNum(repGoal.canp || 0) + ")");
-    lines.push("이번 달 목표 건수: " + (repGoal.cases || "-") + " (현재 " + (repGoal.nowCases || 0) + "건)");
-    lines.push("이번 달 도입 목표: " + (repGoal.intro || 0) + " (현재 " + (repGoal.nowIntro || 0) + "명)");
-    lines.push("");
-    var bar = "━━━━━━━━━━━━━";
-    lines.push(bar);
-    lines.push("1️⃣ 출근 상태");
-    lines.push($("rep-yes").checked ? "☑ 출근"
-      : "☐ 미출근" + ($("rep-reason").value.trim() ? " · " + $("rep-reason").value.trim() : ""));
-    lines.push(bar);
-    lines.push("2️⃣ 오전 활동 ");
-    lines.push(bullet($("rep-work").value));
-    lines.push(bar);
-    lines.push("3️⃣ 점심 일정");
-    lines.push(bullet($("rep-lunch").value));
-    lines.push("");
-    lines.push(bar);
-    lines.push("4️⃣ 오후 활동");
-    lines.push(bullet($("rep-afternoon").value));
-    lines.push("");
-    lines.push(bar);
-    lines.push("5️⃣ 특이사항 / 요청사항");
-    lines.push("-  현재 canp : " + repGoal.canp);
-    var note = $("rep-note").value.trim();
-    if (note) lines.push(bullet(note));
-    return lines.join("\n");
-  }
-  $("rep-copy").addEventListener("click", function () {
-    var text = reportText();
-    saveReport().then(function () {
-      function done() { loadAtt(); $("rep-msg").textContent = "복사했습니다. 카톡에 붙여넣으세요."; }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
-      } else { fallbackCopy(text); done(); }
-    });
-  });
+  // 카톡 문구 복사는 걷었다 (2026-09-28 사용자: 일일보고는 이제 카톡이 아니라 우리 시스템에서만).
+  // 부지점장의 「팀 전체 보고 복사」·「미보고자 복사」는 윗선에 옮길 일이 있어 남긴다.
   function fallbackCopy(text) {
     var ta = document.createElement("textarea");
     ta.value = text;

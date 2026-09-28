@@ -13,6 +13,7 @@ import { openDb, getSetting, setSetting, getMember } from "./db.js";
 import { openAuthDb, accountForToken, listAccounts } from "./auth.js";
 import { scryptSync, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import { scanImage } from "./scan.js";
+import { vapidKeys, okEndpoint, sendPush } from "./push.js";
 
 const PORT = Number(process.env.PORT || 8788);
 const DB_FILE = process.env.DB_FILE || "./ourbranch.db";
@@ -1147,6 +1148,61 @@ route("DELETE", /^\/events\/(\d+)$/, false, (req, res, user, m) => {
   send(res, 200, { ok: true });
 });
 
+// ---- 일일보고 알림 (웹 푸시) ----
+// 저녁 6시·8시(한국 시각)에 내일 일일보고를 아직 안 낸 사람에게만 보낸다(2026-09-28 사용자).
+// 일일보고는 전날 저녁에 내일 것을 쓴다(화면도 18시부터 내일로 열린다) — 그래서 「내일」 보고를 본다.
+// 내일이 토·일이면 보내지 않는다(금·토 저녁 쉼). ponytail: 공휴일은 모른다 — 필요하면 날짜 목록을 settings에.
+// 보고 대상은 화면 집계와 같다 — 부지점장·지점장은 보고를 받는 쪽이라 뺀다.
+const PUSH_SLOTS = [18, 20];
+route("GET", /^\/push\/key$/, false, (req, res) => send(res, 200, { key: vapidKeys(db).pub }));
+route("POST", /^\/push\/subscribe$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  if (!okEndpoint(b.endpoint)) return send(res, 400, { error: "알림 주소가 올바르지 않습니다" });
+  // 같은 폰을 다른 계정으로 쓰면 마지막 계정으로 옮긴다
+  db.prepare("INSERT INTO push_subs (endpoint, email, created) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET email = excluded.email")
+    .run(b.endpoint, user.email, now());
+  send(res, 200, { ok: true });
+});
+route("POST", /^\/push\/unsubscribe$/, false, async (req, res, user) => {
+  const b = await readJson(req);
+  db.prepare("DELETE FROM push_subs WHERE endpoint = ? AND email = ?").run(String(b.endpoint || ""), user.email);
+  send(res, 200, { ok: true });
+});
+async function pushTo(emails) {
+  const keys = vapidKeys(db);
+  let sent = 0;
+  for (const s of db.prepare("SELECT * FROM push_subs").all().filter(s => emails.includes(s.email))) {
+    try {
+      const st = await sendPush(s.endpoint, keys);
+      if (st === 404 || st === 410) db.prepare("DELETE FROM push_subs WHERE endpoint = ?").run(s.endpoint);   // 알림을 끈 폰
+      else if (st < 300) sent++;
+      else console.error("[푸시] " + st + " " + new URL(s.endpoint).hostname);
+    } catch (e) { console.error("[푸시] " + (e && e.message)); }
+  }
+  return sent;
+}
+// 내 폰으로 지금 한 번 — 알림이 제대로 오는지 각자 확인한다
+route("POST", /^\/push\/test$/, false, async (req, res, user) => send(res, 200, { sent: await pushTo([user.email]) }));
+function reportDue(date) {
+  const done = new Set(db.prepare("SELECT email FROM attendance WHERE date = ?").all(date).map(a => a.email));
+  return db.prepare("SELECT email, role, active, team_id FROM members").all()
+    .filter(m => m.active !== 0 && m.team_id != null && m.role !== "부지점장" && m.role !== "지점장" && !done.has(m.email))
+    .map(m => m.email);
+}
+async function pushTick(at = Date.now()) {
+  const k = new Date(at + KST), hh = k.getUTCHours();
+  const slot = PUSH_SLOTS.find(h => hh === h);           // 그 시각 한 시간 안에 한 번 — 서버를 껐다 켜도 빠지지 않게
+  if (slot == null) return null;
+  const date = k.toISOString().slice(0, 10), mark = date + ":" + slot;
+  if ((getSetting(db, "push_last") || "") >= mark) return null;     // 이미 보냈다
+  setSetting(db, "push_last", mark);
+  const t = new Date(at + KST + 86400e3), dow = t.getUTCDay();
+  if (dow === 0 || dow === 6) return { mark, sent: 0 };
+  return { mark, sent: await pushTo(reportDue(t.toISOString().slice(0, 10))) };
+}
+if (process.env.PUSH_TEST === "1")   // 시험에서 시각을 정해 한 번 돌린다
+  route("POST", /^\/push\/tick$/, true, async (req, res) => send(res, 200, await pushTick(Date.parse((await readJson(req)).at)) || {}));
+
 // ---- 출근·Aitom (자가 보고) ----
 route("GET", /^\/attendance$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
@@ -2190,3 +2246,6 @@ setInterval(purgeOrphanFiles, 24 * 3600e3).unref();
 // 요청에 안 붙은 캡처 청소 — 같은 주기
 purgeLooseShots();
 setInterval(purgeLooseShots, 24 * 3600e3).unref();
+
+// 일일보고 알림 — 1분마다 시각을 본다
+if (process.env.PUSH_TEST !== "1") setInterval(() => pushTick().catch(e => console.error("[푸시]", e && e.message)), 60e3).unref();

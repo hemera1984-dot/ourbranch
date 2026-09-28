@@ -55,7 +55,7 @@
     {
       "name": "일일보고",
       "short_name": "일일보고",
-      "url": "./#att",
+      "url": "./?quick=report#att",
       "icons": [
         {
           "src": "assets/icon-192.png",

@@ -231,6 +231,13 @@ export function openDb(file) {
       UNIQUE(email, date)
     );
 
+    -- 웹 푸시 구독 — 폰·브라우저 하나에 한 줄. 알림은 일일보고 저녁 알림에만 쓴다(2026-09-28 사용자).
+    CREATE TABLE IF NOT EXISTS push_subs (
+      endpoint TEXT PRIMARY KEY,
+      email    TEXT NOT NULL,
+      created  TEXT NOT NULL
+    );
+
     -- TA 일지 — 실물 시트(TA일지 미래4팀/하랑1팀) 열 구조 그대로.
     -- 후보자 개인정보(이름·번호·주소)는 서버에만 두고 저장소·외부 산출물에는 마스킹.
     CREATE TABLE IF NOT EXISTS ta_logs (

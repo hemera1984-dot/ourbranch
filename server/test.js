@@ -52,8 +52,14 @@ const aiStub = mkServer((rq, rs) => {
     ] }) }] }));
   });
 }).listen(18799);
+// 가짜 푸시 서버 — 받은 요청을 적어 두고, /gone 은 410(알림 끈 폰)을 돌려준다
+const pushSeen = [];
+const pushStub = mkServer((rq, rs) => {
+  pushSeen.push({ path: rq.url, auth: rq.headers.authorization, ttl: rq.headers.ttl });
+  rs.writeHead(rq.url === "/gone" ? 410 : 201); rs.end();
+}).listen(18798);
 const srv = spawn(process.execPath, ["server.js"], {
-  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES, AI_API: "http://127.0.0.1:18799", ANTHROPIC_API_KEY: "test-key", WEB_DIR: new URL("../web", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1") },
+  env: { ...process.env, PORT: String(PORT), DB_FILE: DATA, AUTH_DB_FILE: AUTH, FILE_DIR: FILES, AI_API: "http://127.0.0.1:18799", ANTHROPIC_API_KEY: "test-key", PUSH_TEST: "1", PUSH_ALLOW_LOCAL: "1", WEB_DIR: new URL("../web", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1") },
   stdio: "inherit"
 });
 
@@ -1311,6 +1317,44 @@ async function main() {
   assert.equal((await (await api("t-fc1", "GET", "/me")).json()).birthday, "1984-02-11");
   assert.equal((await api("t-fc1", "POST", "/me", { name: "팀원1", birthday: "02-11" })).status, 200, "월-일만도 그대로 받는다");
 
+  // 69) 일일보고 알림 — 알려진 푸시 서버만 받고, VAPID 서명이 맞고, 저녁 6·8시에 내일 보고 안 낸 사람에게만
+  {
+    const { createPublicKey, verify } = await import("node:crypto");
+    const key = (await (await api("t-fc1", "GET", "/push/key")).json()).key;
+    assert.equal(Buffer.from(key, "base64url").length, 65, "압축 안 한 P-256 공개키");
+    assert.equal((await api("t-fc1", "POST", "/push/subscribe", { endpoint: "https://evil.example/x" })).status, 400, "아무 주소나 받지 않는다");
+    assert.equal((await api("t-fc1", "POST", "/push/subscribe", { endpoint: "http://127.0.0.1:18798/fc1" })).status, 200);
+    assert.equal((await api("t-fc2", "POST", "/push/subscribe", { endpoint: "http://127.0.0.1:18798/gone" })).status, 200);
+    assert.equal((await api("t-esl1", "POST", "/push/subscribe", { endpoint: "http://127.0.0.1:18798/esl1" })).status, 200);
+    // 내 폰으로 시험 한 번 — 서명을 공개키로 검증한다
+    pushSeen.length = 0;
+    assert.equal((await (await api("t-fc1", "POST", "/push/test")).json()).sent, 1);
+    const [, jwt, k] = pushSeen[0].auth.match(/^vapid t=([^,]+), k=(.+)$/);
+    assert.equal(k, key);
+    const [h, p, sg] = jwt.split(".");
+    const pub = Buffer.from(key, "base64url");
+    const pk = createPublicKey({ key: { kty: "EC", crv: "P-256", x: pub.subarray(1, 33).toString("base64url"), y: pub.subarray(33).toString("base64url") }, format: "jwk" });
+    assert.ok(verify("sha256", Buffer.from(h + "." + p), { key: pk, dsaEncoding: "ieee-p1363" }, Buffer.from(sg, "base64url")), "VAPID 서명");
+    assert.equal(JSON.parse(Buffer.from(p, "base64url")).aud, "http://127.0.0.1:18798");
+    // 월요일 18시 — 내일(화) 보고가 없는 팀원에게. 부지점장은 보고를 받는 쪽이라 빠진다. 410이면 구독을 지운다
+    pushSeen.length = 0;
+    const t1 = await (await api("t-super", "POST", "/push/tick", { at: "2027-10-04T18:05:00+09:00" })).json();
+    assert.equal(t1.mark, "2027-10-04:18");
+    assert.deepEqual(pushSeen.map(x => x.path).sort(), ["/fc1", "/gone"]);
+    assert.deepEqual(await (await api("t-super", "POST", "/push/tick", { at: "2027-10-04T18:40:00+09:00" })).json(), {}, "한 시간에 한 번");
+    assert.deepEqual(await (await api("t-super", "POST", "/push/tick", { at: "2027-10-04T19:10:00+09:00" })).json(), {}, "6시·8시 말고는 안 보낸다");
+    // 8시 — 그 사이 보고를 냈으면 빠진다. 410이던 폰은 이미 지워졌다
+    await api("t-fc1", "POST", "/attendance", { date: "2027-10-05", present: true, work: "상담" });
+    pushSeen.length = 0;
+    const t2 = await (await api("t-super", "POST", "/push/tick", { at: "2027-10-04T20:01:00+09:00" })).json();
+    assert.equal(t2.sent, 0); assert.equal(pushSeen.length, 0, "낸 사람·끈 폰에는 안 간다");
+    // 금요일 저녁 — 내일이 토요일이라 쉰다
+    pushSeen.length = 0;
+    assert.equal((await (await api("t-super", "POST", "/push/tick", { at: "2027-10-08T18:02:00+09:00" })).json()).sent, 0);
+    assert.equal(pushSeen.length, 0);
+    assert.equal((await api("t-fc1", "POST", "/push/tick", { at: "2027-10-11T18:02:00+09:00" })).status, 403, "시험 경로도 관리자만");
+  }
+
   // 52) 주인 없는 서류 파일 청소 — 막 올라온 것은 건드리지 않는다.
   // 유예 시간이 없으면 INSERT 직전의 파일을 청소가 먼저 지운다.
   {
@@ -1350,7 +1394,7 @@ main().catch(e => { console.error(e); process.exitCode = 1; })
   .finally(async () => {
     // 윈도우는 프로세스가 살아 있는 동안 DB 파일을 지울 수 없다 — 종료를 기다린다
     const exited = new Promise(r => srv.on("exit", r));
-    aiStub.close(); srv.kill();
+    aiStub.close(); pushStub.close(); srv.kill();
     await exited;
     for (const f of [AUTH, DATA, DATA + "-wal", DATA + "-shm"])
       try { rmSync(f, { force: true }); } catch { /* WAL 잔재는 다음 실행이 지운다 */ }
