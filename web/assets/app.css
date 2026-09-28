@@ -311,7 +311,8 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .ev-changes .ev-strip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--blue-bg); border: 1px solid var(--line); border-radius: 6px; font-weight: 600; }
 .ev-changes .ev-strip .note { margin-left: auto; }
 .ev-changes .ev-list { padding: 6px 12px; }
-.ev-item { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 5px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+.ev-item { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 5px 0; border-top: 1px dashed var(--line); font-size: 13px; cursor: pointer; }
+.ev-item:hover { background: var(--blue-bg); }
 .ev-item:first-child { border-top: 0; }
 .ev-item .when { color: var(--ter); font-variant-numeric: tabular-nums; }
 .ev-item .who { font-weight: 700; }

@@ -1212,13 +1212,22 @@
             + (l.member_email ? nameOf(l.member_email) + " · " : "")
             + (l.kind ? l.kind + " " : "") + (l.title && l.title !== l.kind ? l.title : "")
             + (l.count > 1 ? " ×" + l.count : "");
-          return '<div class="ev-item"><span class="when">' + esc(when) + '</span><span class="who">' + esc(l.by_name || l.by_email)
+          return '<div class="ev-item" data-date="' + esc(l.date || "") + '" title="눌러서 그날로 가기"><span class="when">' + esc(when) + '</span><span class="who">' + esc(l.by_name || l.by_email)
             + '</span><span class="act ' + esc(l.action) + '">' + esc(l.action) + "</span><span>" + esc(what) + "</span></div>";
         }).join("") + "</div>" : "")
       + "</div>";
   }
   $("ev-changes").addEventListener("click", function (e) {
     var box = $("ev-changes");
+    // 줄을 누르면 그 날짜로 — 다음 달에 넣은 일정이 이번 달 달력에 안 보여 헤맨다 (2026-09-28 사용자)
+    var item = e.target.closest(".ev-item");
+    if (item && /^\d{4}-\d{2}-\d{2}$/.test(item.dataset.date || "")) {
+      var d = new Date(item.dataset.date + "T00:00:00");
+      calBase = new Date(d.getFullYear(), d.getMonth(), 1);
+      selDate = item.dataset.date; openDate = null;
+      if (isMobile()) loadDay(); else { if (schedView !== "cal") setSchedView("cal"); else loadCal(); }
+      return;
+    }
     if (e.target.id === "ev-toggle") { box.dataset.open = box.dataset.open === "1" ? "0" : "1"; renderEvChanges(); }
     if (e.target.id === "ev-ack") {
       try { localStorage.setItem("ob_ev_seen", kstNow()); } catch (err) { /* 무시 */ }
