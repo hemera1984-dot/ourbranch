@@ -999,8 +999,10 @@
   });
 
   // ── 셸 ──
+  // 일정 화면에서는 부지점장 이상도 다른 팀을 골라 본다(2026-09-28 사용자). 다른 화면은 자기 팀 그대로.
+  function pickTeams() { return BOOT.me.seesAll || (BOOT.me.canSetGoal && screen === "sched"); }
   function myTeamId() {
-    if (!BOOT.me.seesAll) return BOOT.me.teamId;
+    if (!pickTeams()) return BOOT.me.teamId;
     var v = Number($("team-pick").value);
     return isNaN(v) || !v ? (BOOT.teams[0] ? BOOT.teams[0].id : null) : v;
   }
@@ -1013,12 +1015,12 @@
     // 직급이 먼저다. 총관리자는 직급이 아니라 권한이라 뒤에 덧붙인다
     $("me-role").textContent = (myGrade() || "") + (BOOT.me.isSuper ? " · 총관리자" : "");
     var pick = $("team-pick");
-    if (BOOT.me.seesAll && BOOT.teams.length) {
+    if ((BOOT.me.seesAll || BOOT.me.canSetGoal) && BOOT.teams.length) {
       var cur = pick.value;
-      pick.hidden = false;
       pick.innerHTML = BOOT.teams.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
-      if (cur) pick.value = cur;
+      pick.value = cur || (BOOT.me.teamId != null ? String(BOOT.me.teamId) : pick.value);   // 처음엔 내 팀
     }
+    pick.hidden = !pickTeams() || !BOOT.teams.length;
   }
   function refreshBoot() {
     return api("/bootstrap").then(function (b) { BOOT = b; bootAt = Date.now(); renderShell(); }).then(loadInterviewers);
@@ -1256,6 +1258,7 @@
     });
     document.body.classList.remove("more-open");
     $("month-nav").hidden = !(name === "ta" || name === "perf" || name === "recruit" || name === "ledger");
+    $("team-pick").hidden = !pickTeams() || !BOOT.teams.length;
     closePop(); closeSheet();                      // 화면을 옮기면 열려 있던 입력창은 닫는다
     refreshBadges();
     checkSoon();
@@ -2935,7 +2938,10 @@
     };
   }
 
+  // 다른 팀을 보는 중이면 쓰지 않는다 — 부지점장은 다른 팀 일정을 볼 뿐 고치지 못한다(서버도 막는다)
+  function viewingOtherTeam() { return !BOOT.me.seesAll && myTeamId() !== BOOT.me.teamId; }
   function canWriteCell(em) {
+    if (viewingOtherTeam()) return false;
     // 빈 em = 팀 공유. 본인 칸은 본인, 남의 칸과 팀 공유는 부지점장 이상
     // (2026-08-05 사용자). 서버도 같은 선으로 막는다.
     return em ? (em === BOOT.me.email || BOOT.me.canSetGoal) : BOOT.me.canSetGoal;
@@ -3537,7 +3543,7 @@
   function initScope() {
     if (calScope) return;
     calScope = BOOT.me.seesAll ? "esl" : "team";
-    document.querySelectorAll('[data-scope="esl"]').forEach(function (b) { b.hidden = !BOOT.me.seesAll; });
+    document.querySelectorAll('[data-scope="esl"]').forEach(function (b) { b.hidden = !(BOOT.me.seesAll || BOOT.me.canSetGoal); });
     syncScopeSeg();
   }
   function syncScopeSeg() {
@@ -3750,7 +3756,7 @@
   // 늘 있는 팀 공적 일정 — 한 번 누르면 그 날짜에 바로 들어간다
   var QUICK = ["팀미팅", "지점조회", "지점행사"];
   function quickAddHtml() {
-    if (!BOOT.me.canSetGoal) return "";     // 지점 일정은 부지점장 이상만
+    if (!BOOT.me.canSetGoal || viewingOtherTeam()) return "";     // 지점 일정은 부지점장 이상만, 내 팀에만
     return '<div class="quick-add"><span class="note">빠른 추가</span>'
       + '<input type="time" class="input" id="q-start" value="' + esc(recall("빠른시작") || "07:30") + '">'
       + '<input type="time" class="input" id="q-end" value="' + esc(recall("빠른끝") || "08:00") + '">'

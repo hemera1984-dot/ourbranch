@@ -156,7 +156,9 @@ async function main() {
   const fc2boot = await (await api("t-fc1", "GET", "/bootstrap")).json();
   assert.ok(fc2boot.members.some(m => m.email === "fc2@x.com"));               // 명단에도 나타난다
   const otherView = await (await api("t-esl1", "GET", "/events?from=2026-08-04&to=2026-08-04")).json();
-  assert.equal(otherView.filter(e => e.member_email === "fc2@x.com").length, 0); // 도입자 아닌 1팀 부지점장에겐 안 보인다
+  assert.equal(otherView.filter(e => e.member_email === "fc2@x.com").length, 1); // 다른 팀 일정도 부지점장은 본다 (2026-09-28 사용자)
+  const fcOther = await (await api("t-fc2", "GET", "/events?from=2026-08-04&to=2026-08-04")).json();
+  assert.ok(fcOther.every(e => e.kind === "강의" || e.team_id == null || e.team_id === 2 || e.member_email === "fc2@x.com"), "팀원은 자기 팀 일정만");
 
   // 6-4) 강의: 누구나 등록(지점 전체), 다른 팀도 신청 가능, 토글
   const lec = await (await api("t-fc1", "POST", "/events", { date: "2026-08-07", memberEmail: "fc1@x.com", kind: "강의", title: "화법 강의", place: "회의실" })).json();

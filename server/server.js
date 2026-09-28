@@ -193,14 +193,16 @@ function canManageMember(user, targetEmail) {
 // 일정 열람 — 주인이 있는 일정에는 canSeeTeam을 그대로 쓰지 않는다.
 // canSeeTeam(_, null)은 「대상 없는 지점 공통」이라 전원 통과인데, 팀이 없는 사람의
 // 개인 일정까지 그 길로 새어 나갔다 (코덱스 검증 2026-08-05).
+// 다른 팀 일정은 지점장·부지점장(부지점장 이상)만 본다. 팀장·부팀장·팀원은 자기 팀 일정만 (2026-09-28 사용자).
+// 일정에만 해당한다 — 업적·TA·서류·공지의 팀 경계는 그대로다.
 function canSeeEvent(user, e) {
   if (e.kind === "강의") return true;                           // 강의는 지점 전체 대상이다
-  if (!e.member_email) return canSeeTeam(user, e.team_id);      // 대상 없는 팀·지점 일정
+  if (!e.member_email) return canSeeTeam(user, e.team_id) || canSetGoal(user);   // 대상 없는 팀·지점 일정
   if (e.member_email === user.email) return true;
   if (user.recruits.includes(e.member_email)) return true;      // 내가 도입한 사람
   const t = teamOfOwner(e.member_email);                        // 지금 그 사람의 팀
   if (t == null) return user.isSuper || user.grade === "BM";    // 팀이 없으면 지점장 이상만
-  return canSeeTeam(user, t);
+  return canSeeTeam(user, t) || canSetGoal(user);
 }
 
 // 열람 가능한 team_id (지점 공통 = NULL은 전원 열람)
@@ -979,7 +981,8 @@ route("GET", /^\/events\/changes$/, false, (req, res, user) => {
   const since = String(q.get("since") || "");
   const rows = db.prepare("SELECT * FROM event_log WHERE created > ? AND by_email <> ? ORDER BY id DESC LIMIT 300")
     .all(since, user.email)
-    .filter(l => canSeeEvent(user, l))
+    // 바뀐 일정 배지는 내 팀 것만 센다 — 부지점장이 다른 팀 일정을 볼 수 있다고 옆 팀 변경까지 쌓이면 배지가 늘 차 있다
+    .filter(l => canSeeEvent(user, l) && (user.seesAll || l.team_id == null || l.team_id === user.teamId || user.recruits.includes(l.member_email)))
     .slice(0, 100);
   send(res, 200, rows);
 });
