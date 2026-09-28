@@ -2879,7 +2879,7 @@
   // 고른 일정 한 건 — Del로 지운다 (2026-08-05 사용자)
   var pickedSlot = null, pickedRefresh = null;
   function clearPick() {
-    document.querySelectorAll(".slot.picked").forEach(function (x) { x.classList.remove("picked"); });
+    document.querySelectorAll(".picked").forEach(function (x) { x.classList.remove("picked"); });
     pickedSlot = null;
   }
   function pickSlot(slot, refresh) {
@@ -2910,14 +2910,17 @@
 
   // 지우기 — 물어보지 않고 지우되 되돌릴 수 있게 한다.
   // 「정말 지울까요?」는 매번 손이 한 번 더 가는데 실수는 그대로 난다.
-  function removeEvent(ev, refresh) {
-    var back = {
+  function evBody(ev, date) {
+    return {
       // 원래 팀을 실어 보낸다 — 안 보내면 지운 사람의 팀으로 되살아난다
       teamId: ev.team_id ?? null,
-      memberEmail: ev.member_email || null, date: ev.date, kind: ev.kind,
+      memberEmail: ev.member_email || null, date: date || ev.date, kind: ev.kind,
       start: ev.start || "", end: ev.end || "", title: ev.title || "", place: ev.place || "",
       detail: (function () { try { return ev.detail ? JSON.parse(ev.detail) : undefined; } catch (err) { return undefined; } })()
     };
+  }
+  function removeEvent(ev, refresh) {
+    var back = evBody(ev);
     clearPick();
     api("/events/" + ev.id, { method: "DELETE" }).then(function () {
       refresh();
@@ -2937,7 +2940,9 @@
     undoTimer = setTimeout(function () { bar.hidden = true; }, 3000);
   }
 
+  var lastUndo = null;   // Ctrl+Z가 부르는 마지막 되돌리기 — 띠가 사라져도 다음 일을 하기 전까지 남는다
   function showUndo(text, onUndo) {
+    lastUndo = onUndo;
     var bar = $("undo-bar");
     bar.innerHTML = "<span>" + esc(text) + "</span>"
       + '<button type="button" class="btn" id="undo-go">되돌리기</button>';
@@ -2947,9 +2952,72 @@
     bar.querySelector("#undo-go").onclick = function () {
       bar.hidden = true;
       if (undoTimer) clearTimeout(undoTimer);
+      lastUndo = null;
       onUndo();
     };
   }
+
+  // ── 달력 칸 단축키 (2026-09-28 사용자) — 날짜 칸을 고르고 Ctrl+C·Ctrl+V·Del·Ctrl+Z ──
+  // 복사는 고른 일정 한 건, 없으면 그날 내가 쓸 수 있는 일정 전부(사람 칩으로 끈 사람은 빠진다).
+  // Del은 그날 「내 일정」만 지운다 — 키 한 번에 팀 일정이 날아가면 안 된다(2026-08-05 원칙 그대로).
+  // 붙여넣기·지우기 모두 되돌리기 띠 + Ctrl+Z로 되돌린다. 폰은 키보드가 없어 달지 않는다.
+  var calClip = [];
+  function calKeysOn(e) {
+    if (screen !== "sched" || schedView !== "cal" || isMobile()) return false;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return false;
+    return !document.querySelector(".pop, .sheet");
+  }
+  function copyable(ev) { return ev && ev.kind !== "고객미팅" && canWriteCell(ev.member_email || ""); }
+  document.addEventListener("keydown", function (e) {
+    if (!calKeysOn(e)) return;
+    var k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (mod && k === "z") {
+      if (!lastUndo) return;
+      e.preventDefault();
+      var u = lastUndo; lastUndo = null; $("undo-bar").hidden = true;
+      u();
+      return;
+    }
+    if (mod && k === "c") {
+      if (String(window.getSelection() || "")) return;         // 글자를 긁어 둔 건 보통 복사로
+      var one = pickedSlot && document.body.contains(pickedSlot) ? evsById[pickedSlot.dataset.eid] : null;
+      var list = one ? [one] : dayItemsOf(selDate);
+      calClip = list.filter(copyable);
+      e.preventDefault();
+      toast(calClip.length ? calClip.length + "건 복사했습니다. 다른 날짜를 고르고 Ctrl+V" : "복사할 수 있는 일정이 없습니다");
+      return;
+    }
+    if (mod && k === "v") {
+      if (!calClip.length) return;
+      e.preventDefault();
+      var date = selDate, items = calClip.slice();
+      Promise.allSettled(items.map(function (ev) { return api("/events", { method: "POST", body: evBody(ev, date) }); }))
+        .then(function (rs) {
+          var ids = [];
+          rs.forEach(function (r) { if (r.status === "fulfilled" && r.value) ids = ids.concat(r.value.ids || [r.value.id]); });
+          var fail = rs.length - rs.filter(function (r) { return r.status === "fulfilled"; }).length;
+          loadCal();
+          if (!ids.length) { toast("붙여 넣지 못했습니다"); return; }
+          showUndo(ids.length + "건 붙여 넣었습니다" + (fail ? " (" + fail + "건 실패)" : ""), function () {
+            Promise.allSettled(ids.map(function (id) { return api("/events/" + id, { method: "DELETE" }); })).then(loadCal);
+          });
+        });
+      return;
+    }
+    if (e.key === "Delete" && !(pickedSlot && document.body.contains(pickedSlot))) {   // 한 건 고른 Del은 위 처리기가 맡는다
+      var mine = dayItemsOf(selDate).filter(function (ev) { return ev.member_email === BOOT.me.email && ev.kind !== "고객미팅"; });
+      e.preventDefault();
+      if (!mine.length) { toast("이 날짜에 지울 내 일정이 없습니다"); return; }
+      var backs = mine.map(function (ev) { return evBody(ev); });
+      Promise.allSettled(mine.map(function (ev) { return api("/events/" + ev.id, { method: "DELETE" }); })).then(function () {
+        loadCal();
+        showUndo("내 일정 " + mine.length + "건을 지웠습니다", function () {
+          Promise.allSettled(backs.map(function (b) { return api("/events", { method: "POST", body: b }); })).then(loadCal);
+        });
+      });
+    }
+  });
 
   // 다른 팀을 보는 중이면 쓰지 않는다 — 부지점장은 다른 팀 일정을 볼 뿐 고치지 못한다(서버도 막는다)
   function viewingOtherTeam() { return !BOOT.me.seesAll && myTeamId() !== BOOT.me.teamId; }
@@ -3806,7 +3874,7 @@
           return show.map(function (e) {
             // 남의 일정은 사람 색 점 + 이름 (2026-09-18 사용자). 내 일정·팀 공유는 구분 색 그대로
             var person = calScope !== "mine" && e.member_email && e.member_email !== BOOT.me.email;
-            return '<div class="cal-ev">' + (person ? pdot(e.member_email) : '<span class="dot ' + kindClsOf(e) + '"></span>')
+            return '<div class="cal-ev" data-eid="' + e.id + '" tabindex="-1">' + (person ? pdot(e.member_email) : '<span class="dot ' + kindClsOf(e) + '"></span>')
               + (e.start ? '<span class="slot-time">' + esc(e.start) + "</span>" : "")
               + "<span>" + (person ? esc(nameOf(e.member_email)) + " " : "") + esc(evLabel(e)) + "</span></div>";
           }).join("")
@@ -3868,12 +3936,21 @@
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
     // 이미 고른 날을 다시 누르면 펴고, 또 누르면 접는다. 다른 날이면 고르기만 한다
-    if (cell.dataset.date === selDate) openDate = openDate === selDate ? null : selDate;
+    // 칸 안의 일정 줄을 누르면 그 한 건을 고른다 — 여러 건 있는 날 하나만 Del로 지우게 (2026-09-28 사용자)
+    var line = e.target.closest(".cal-ev[data-eid]");
+    if (line) selDate = cell.dataset.date;
+    else if (cell.dataset.date === selDate) openDate = openDate === selDate ? null : selDate;
     else { selDate = cell.dataset.date; openDate = null; }
     // 날짜를 눌렀다는 건 그날 상세를 보겠다는 뜻이다 — 접어 뒀어도 편다 (2026-08-05 사용자)
     if (recall("일정칸접힘") === "1") { remember("일정칸접힘", "0"); applyFolds(); }
     renderCalGrid();
     renderCalDay();
+    if (line) {
+      var again = $("cal-view").querySelector('.cal-ev[data-eid="' + line.dataset.eid + '"]');
+      if (again) pickSlot(again, loadCal);
+      var side = $("cal-day").querySelector('.slot[data-eid="' + line.dataset.eid + '"]');
+      if (side) side.classList.add("picked");      // 오른쪽 상세에서도 같은 건에 표시
+    }
   });
   $("cal-day").addEventListener("click", function (e) {
     var q = e.target.closest(".q-add");

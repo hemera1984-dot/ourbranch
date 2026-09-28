@@ -194,7 +194,8 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .dcol-grid .slot.dcol-ev { border-top: 1px solid rgba(0,0,0,.08); }   /* .slot + .slot 점선을 이긴다 */
 .dcol-allday .dcol-ev { position: static; }
 .dcol-ev .dcol-t { font-weight: 500; font-size: 11px; opacity: .85; }
-.dcol-ev.picked { outline: 2px solid var(--blue); outline-offset: 1px; }
+.dcol-ev.picked, .cal-ev.picked { outline: 2px solid var(--blue); outline-offset: 1px; }
+.cal-ev.picked { border-radius: 3px; }
 
 /* 팀원 열은 가로 스크롤에도 고정 */
 .week-name, .week-head-cell:first-child {
