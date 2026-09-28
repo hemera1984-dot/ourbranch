@@ -2899,10 +2899,10 @@
     e.preventDefault();
     var ev = evsById[pickedSlot.dataset.eid];
     if (!ev) { clearPick(); return; }
-    // Del 키로는 내 일정만 지운다 — 키 한 번에 팀 일정이 날아가면 안 된다
-    // (2026-08-05 사용자). 남의 것·팀 공유는 줄의 × 로만.
-    if (ev.member_email !== BOOT.me.email) {
-      alert("Del 키로는 내 일정만 지울 수 있습니다. 팀 일정은 줄 오른쪽 × 를 눌러 주세요.");
+    // Del은 내가 쓸 수 있는 일정만 — 팀원은 내 일정, 부지점장 이상은 팀 일정·팀원 일정까지.
+    // 처음엔 내 일정만이었다(2026-08-05). Ctrl+Z 되돌리기가 생겨 부지점장 이상은 풀었다(2026-09-28 사용자).
+    if (!copyable(ev)) {
+      alert("Del 키로는 내 일정만 지울 수 있습니다.");
       return;
     }
     removeEvent(ev, pickedRefresh);
@@ -2959,7 +2959,7 @@
 
   // ── 달력 칸 단축키 (2026-09-28 사용자) — 날짜 칸을 고르고 Ctrl+C·Ctrl+V·Del·Ctrl+Z ──
   // 복사는 고른 일정 한 건, 없으면 그날 내가 쓸 수 있는 일정 전부(사람 칩으로 끈 사람은 빠진다).
-  // Del은 그날 「내 일정」만 지운다 — 키 한 번에 팀 일정이 날아가면 안 된다(2026-08-05 원칙 그대로).
+  // Del은 그날 보이는 일정 중 내가 쓸 수 있는 것 — 팀원은 내 일정, 부지점장 이상은 팀 일정까지(2026-09-28 사용자).
   // 붙여넣기·지우기 모두 되돌리기 띠 + Ctrl+Z로 되돌린다. 폰은 키보드가 없어 달지 않는다.
   var calClip = [];
   function calKeysOn(e) {
@@ -3006,13 +3006,13 @@
       return;
     }
     if (e.key === "Delete" && !(pickedSlot && document.body.contains(pickedSlot))) {   // 한 건 고른 Del은 위 처리기가 맡는다
-      var mine = dayItemsOf(selDate).filter(function (ev) { return ev.member_email === BOOT.me.email && ev.kind !== "고객미팅"; });
+      var mine = dayItemsOf(selDate).filter(copyable);      // 칩으로 끈 사람 일정은 안 지운다 — 보이는 것만
       e.preventDefault();
-      if (!mine.length) { toast("이 날짜에 지울 내 일정이 없습니다"); return; }
+      if (!mine.length) { toast("이 날짜에 지울 수 있는 일정이 없습니다"); return; }
       var backs = mine.map(function (ev) { return evBody(ev); });
       Promise.allSettled(mine.map(function (ev) { return api("/events/" + ev.id, { method: "DELETE" }); })).then(function () {
         loadCal();
-        showUndo("내 일정 " + mine.length + "건을 지웠습니다", function () {
+        showUndo("일정 " + mine.length + "건을 지웠습니다", function () {
           Promise.allSettled(backs.map(function (b) { return api("/events", { method: "POST", body: b }); })).then(loadCal);
         });
       });
