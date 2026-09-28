@@ -322,6 +322,7 @@
           <button class="btn seg-btn" data-scope="team">팀 전체</button>
           <button class="btn seg-btn" data-scope="mine">내 일정</button>
         </div>
+        <div class="people-pick" id="m-people" hidden></div>
         <div class="card cal-mini" style="margin-bottom:10px"><div id="m-cal-view"></div></div>
         <strong id="day-label" style="display:block;margin:0 0 6px;font-variant-numeric:tabular-nums"></strong>
         <div class="card" id="day-view"></div>
@@ -366,7 +367,10 @@
       </div>
       <div id="cal-wrap" class="cal-layout">
         <div class="card"><div id="cal-view"></div></div>
-        <div class="card" id="cal-day"></div>
+        <div class="cal-side">
+          <div class="card" id="cal-day"></div>
+          <div class="card people-pick" id="people-pick" hidden></div>
+        </div>
         <button type="button" id="day-fold" class="edge-handle desktop-only" title="오른쪽 칸 접기">▶</button>
       </div>
       <div id="week-wrap" hidden>
@@ -3198,7 +3202,7 @@
       // (일정 추가는 간단해야 한다 — 헌법 「일정 화면 불변 원칙」)
       + (isNew
         ? '<div class="pop-row"><select class="input" id="pop-rep" style="flex:1">'
-          + '<option value="">반복 안 함</option><option value="week">매주</option>'
+          + '<option value="">반복 안 함</option><option value="weekday">평일마다</option><option value="week">매주</option>'
           + '<option value="2week">격주</option><option value="day">매일</option>'
           + '<option value="month">매월</option></select>'
           + '<select class="input" id="pop-rep-n" hidden>'
@@ -3476,6 +3480,7 @@
   // 폰에서도 사람별 열 보기 (2026-09-18 사용자). 목록 자리에 열 표가 대신 선다 — 옆으로 넘겨 본다.
   var mColsOn = (function () { try { return localStorage.getItem("ob_m_cols") === "1"; } catch (e) { return false; } })();
   function renderMobileDay() {
+    renderPeoplePick();
     $("day-label").textContent = dayLabelOf(selDate);
     $("m-cols").classList.toggle("active", mColsOn);
     $("dcol-wrap").hidden = !mColsOn;
@@ -3682,10 +3687,64 @@
     // 달력이 위아래로 갈려 있어 개인 활동을 가리지 않는다.
     if (calScope === "mine")
       return e.member_email === BOOT.me.email || !e.member_email || isOfficial(e);
+    if (e.member_email && peopleOff[e.member_email]) return false;   // 사람 고르기 칩에서 끈 사람
     if (calScope === "esl")
       return !e.member_email || e.team_id == null || roleOf(e.member_email) === "부지점장";  // 부지점장 기록 + 공통·지점 단위
     return true;   // team = 팀 전체
   }
+  // ── 사람 고르기 칩 (2026-09-28 사용자: 팀원이 다 적으면 달력이 빽빽하다) ──
+  // 「팀 전체」·「부지점장」 보기에서 사람을 끄고 켠다. 끈 사람은 기억한다. 팀 공유·지점 일정은 늘 보인다.
+  // 「내 일정」에서는 칩을 숨기고 거르지도 않는다 — 내 것만 보는 화면이라 고를 사람이 없다.
+  var peopleOff = (function () { try { return JSON.parse(localStorage.getItem("ob_people_off") || "{}"); } catch (e) { return {}; } })();
+  function savePeopleOff() { try { localStorage.setItem("ob_people_off", JSON.stringify(peopleOff)); } catch (e) { /* 무시 */ } }
+  // 출근한 사람은 칩에 초록 불 (2026-09-28 사용자·김지아 부지점장: 달력에서 출근 인원을 한눈에).
+  // 고른 날짜의 출석을 본다 — 출석 체크는 홈의 「출석 체크」와 같은 기록(attendance)이다.
+  var ppAtt = { date: null, list: [] };
+  function renderPeoplePick() {
+    var box = $(isMobile() ? "m-people" : "people-pick");
+    var list = calScope === "mine" ? [] : rosterOf(myTeamId()).filter(function (m) { return calScope !== "esl" || m.role === "부지점장"; });
+    box.hidden = !list.length;
+    if (!list.length) return;
+    if (ppAtt.date !== selDate) {
+      var want = selDate;
+      api("/attendance?date=" + want).catch(function () { return []; }).then(function (l) {
+        ppAtt = { date: want, list: l };
+        if (selDate === want) renderPeoplePick();
+      });
+    }
+    var att = {};
+    if (ppAtt.date === selDate) ppAtt.list.forEach(function (a) { if (a.present) att[a.email] = (a.checked_at || "").slice(11, 16) || "출근"; });
+    var cnt = {};
+    calEvs.forEach(function (e) { if (e.member_email) cnt[e.member_email] = (cnt[e.member_email] || 0) + 1; });
+    var inN = list.filter(function (m) { return att[m.email]; }).length;
+    var meOut = selDate === fmtDate(new Date()) && ppAtt.date === selDate && !att[BOOT.me.email] && list.some(function (m) { return m.email === BOOT.me.email; });
+    box.innerHTML = '<div class="pp-head"><strong>사람 고르기</strong>'
+      + '<span class="pp-in">출근 ' + inN + "/" + list.length + "</span>"
+      + (meOut ? '<button type="button" class="btn primary pp-check">출석 체크</button>' : "")
+      + '<button type="button" class="btn pp-all">모두</button><button type="button" class="btn pp-me">나만</button></div>'
+      + '<div class="pp-chips">' + list.map(function (m) {
+          return '<button type="button" class="pp-chip' + (peopleOff[m.email] ? " off" : "") + (att[m.email] ? " in" : "") + '" data-em="' + esc(m.email) + '"'
+            + (att[m.email] ? ' title="출근 ' + esc(att[m.email]) + '"' : "") + ">"
+            + pdot(m.email) + esc(memberLabel(m)) + (cnt[m.email] ? '<span class="pp-n">' + cnt[m.email] + "</span>" : "") + "</button>";
+        }).join("") + "</div>";
+  }
+  function onPeopleClick(e) {
+    if (e.target.closest(".pp-check")) {
+      e.target.disabled = true;
+      api("/attendance", { method: "POST", body: { present: true } }).then(function () { ppAtt.date = null; renderPeoplePick(); });
+      return;
+    }
+    var chip = e.target.closest(".pp-chip");
+    var list = rosterOf(myTeamId());
+    if (chip) { if (peopleOff[chip.dataset.em]) delete peopleOff[chip.dataset.em]; else peopleOff[chip.dataset.em] = 1; }
+    else if (e.target.closest(".pp-all")) peopleOff = {};
+    else if (e.target.closest(".pp-me")) { peopleOff = {}; list.forEach(function (m) { if (m.email !== BOOT.me.email) peopleOff[m.email] = 1; }); }
+    else return;
+    savePeopleOff();
+    if (isMobile()) { renderCalGrid("m-cal-view", true); renderMobileDay(); } else { renderCalGrid(); renderCalDay(); }
+  }
+  $("people-pick").addEventListener("click", onPeopleClick);
+  $("m-people").addEventListener("click", onPeopleClick);
   function loadCal() {
     initScope();
     var y = calBase.getFullYear(), mo = calBase.getMonth();
@@ -3792,6 +3851,7 @@
   }
 
   function renderCalDay() {
+    renderPeoplePick();
     var d = new Date(selDate + "T00:00:00");
     var items = calEvs.filter(function (e) { return e.date === selDate && scopePass(e); });
     var hasOfficial = items.some(isOfficial);

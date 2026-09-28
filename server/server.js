@@ -1037,7 +1037,9 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   // 반복 — 규칙을 저장하지 않고 그 자리에서 날짜를 펼쳐 넣는다.
   // 수정·삭제가 한 건 단위로 단순해지고, 조회에 규칙 해석이 끼지 않는다.
   const rep = b.repeat || {};
-  const stepDays = { day: 1, week: 7, "2week": 14 }[rep.every] || 0;
+  const stepDays = { day: 1, weekday: 1, week: 7, "2week": 14 }[rep.every] || 0;
+  // 평일마다 — 지점조회처럼 월~금 아침마다 서는 일정 (2026-09-28 김지아 부지점장). 토·일은 건너뛰고 횟수는 평일로 센다
+  const weekdayOnly = rep.every === "weekday";
   const byMonth = rep.every === "month";            // 매월 같은 날짜 (교육·정기 회의)
   // 소수를 주면 루프가 한 번 더 돌아 13건이 된다 — 정수로 못박는다
   const count = stepDays || byMonth
@@ -1050,12 +1052,13 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
   // 반복은 통째로 되거나 통째로 안 된다 — 중간에 멈추면 앞부분만 남고,
   // 다시 누르면 그만큼 겹친다 (코덱스 검증 2026-08-05).
   tx(() => {
-  for (let i = 0; i < count; i++) {
-    const d = byMonth
+  for (let i = 0, skip = 0; i < count; i++) {
+    let d = byMonth
       // 31일에 매월을 걸면 2월은 3월로 넘어간다 — 말일로 당겨 그 달에 남긴다
       ? new Date(base.getFullYear(), base.getMonth() + i,
           Math.min(base.getDate(), new Date(base.getFullYear(), base.getMonth() + i + 1, 0).getDate()))
-      : new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i);
+      : new Date(base.getFullYear(), base.getMonth(), base.getDate() + stepDays * i + skip);
+    while (weekdayOnly && (d.getDay() === 0 || d.getDay() === 6)) { skip++; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); }
     const ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     ids.push(Number(ins.run(teamId, memberEmail, ds, b.start || null, b.end || null,
       b.kind || "기타", b.title || "", b.place || "", detail).lastInsertRowid));

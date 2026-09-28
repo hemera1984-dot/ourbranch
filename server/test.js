@@ -543,6 +543,12 @@ async function main() {
   const mm = await (await api("t-esl1", "GET", "/events?from=2027-01-01&to=2027-04-30")).json();
   assert.deepEqual(mm.filter(e => e.title === "월말 회의").map(e => e.date).sort(),
     ["2027-01-31", "2027-02-28", "2027-03-31"]);
+  // 평일마다 — 금요일에서 시작하면 토·일을 건너뛰고 월·화로 간다
+  const rwd = await (await api("t-esl1", "POST", "/events",
+    { date: "2027-04-02", kind: "회의", title: "아침 조회", repeat: { every: "weekday", count: 3 } })).json();
+  assert.equal(rwd.count, 3);
+  const wd = await (await api("t-esl1", "GET", "/events?from=2027-04-01&to=2027-04-30")).json();
+  assert.deepEqual(wd.filter(e => e.title === "아침 조회").map(e => e.date).sort(), ["2027-04-02", "2027-04-05", "2027-04-06"]);
 
   // 26) 도입 현황 — 단계별 집계. 숫자만 나오므로 TA 잠금과 무관하게 열린다.
   await api("t-fc1", "POST", "/ta", { rows: [

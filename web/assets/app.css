@@ -434,6 +434,21 @@ a.slot-title:hover { text-decoration: underline; }
 .seg .seg-btn:last-child { border-radius: 0 4px 4px 0; }
 .seg .seg-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 .cal-layout { display: grid; grid-template-columns: 1fr 340px; gap: 12px; align-items: start; }
+.cal-side { display: grid; gap: 12px; min-width: 0; }
+/* 사람 고르기 칩 — 끈 사람은 흐리게, 점은 그대로 둬 누가 누군지 색으로 찾는다 */
+.pp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.pp-head strong { margin-right: auto; font-size: 14px; }
+.pp-head .btn { padding: 3px 10px; font-size: 13px; }
+.pp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--card, transparent); color: inherit; font: inherit; font-size: 14px; cursor: pointer; word-break: keep-all; }
+.pp-chip .pdot { margin-right: 0; }
+.pp-chip .pp-n { color: var(--ter); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pp-chip.off { opacity: .4; text-decoration: line-through; }
+/* 출근한 사람 — 칩 테두리에 초록 불 */
+.pp-chip.in { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green), 0 0 6px color-mix(in srgb, var(--green) 45%, transparent); }
+.pp-in { color: var(--green); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#m-people { margin-bottom: 10px; }
 /* 지점·팀 일정은 월~금에 몰린다. 토·일은 대개 개인 일정뿐이라 좁혀도 아쉽지 않다 —
    그만큼을 평일에 얹어 한 칸에 더 많은 내용이 들어간다 (2026-08-05 사용자). */
 .cal-grid { display: grid; grid-template-columns: repeat(5, 1fr) .62fr .62fr; }
@@ -1193,7 +1208,7 @@ a.slot-title:hover { text-decoration: underline; }
   border: 1px solid var(--line); border-right: 0; border-radius: 5px 0 0 5px;
   box-shadow: -1px 0 4px rgba(0,0,0,.08);
 }
-body.day-off #cal-day { display: none; }
+body.day-off .cal-side { display: none; }
 body.day-off .cal-layout { grid-template-columns: 1fr; }
 body.day-off #day-fold { right: 0; }
 @media (max-width: 1200px) { #day-fold { right: 330px; } }
