@@ -3946,10 +3946,12 @@
     if (!cell || !cell.dataset.date) return;
     // 이미 고른 날을 다시 누르면 펴고, 또 누르면 접는다. 다른 날이면 고르기만 한다
     // 칸 안의 일정 줄을 누르면 그 한 건을 고른다 — 여러 건 있는 날 하나만 Del로 지우게 (2026-09-28 사용자)
+    // 고른 날을 다시 누르면 줄 위든 빈 곳이든 편다 — 줄 누르기가 펴기를 먹으면 안 된다(2026-10-01 사용자).
+    // 펴진 칸 안에서 줄을 누르면 그 한 건만 고르고, 빈 곳을 누르면 접는다.
     var line = e.target.closest(".cal-ev[data-eid]");
-    if (line) selDate = cell.dataset.date;
-    else if (cell.dataset.date === selDate) openDate = openDate === selDate ? null : selDate;
-    else { selDate = cell.dataset.date; openDate = null; }
+    if (cell.dataset.date !== selDate) { selDate = cell.dataset.date; openDate = null; }
+    else if (openDate !== selDate) openDate = selDate;
+    else if (!line) openDate = null;
     // 날짜를 눌렀다는 건 그날 상세를 보겠다는 뜻이다 — 접어 뒀어도 편다 (2026-08-05 사용자)
     if (recall("일정칸접힘") === "1") { remember("일정칸접힘", "0"); applyFolds(); }
     renderCalGrid();
