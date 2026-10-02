@@ -1050,7 +1050,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <div class="stat rv"><span class="n" data-k="t94">900명+</span><span class="l" data-k="t95">연구회 당근 모임 멤버</span></div>
       <p class="meet-cap rv"><span class="pill" data-k="t96">연구회 모임 현장</span></p>
     </div>
-    <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="lecture" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
+    <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="board" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
   </div>
 </section>
 
@@ -1082,7 +1082,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <p class="small rv" style="margin-top:16px" data-k="t106">지금 보고 계신 이 화면도 같은 방식으로 만들었습니다.</p>
       <p class="small rv" style="margin-top:6px" data-k="t210">회사 도구도 함께 씁니다. 신한라이프 LICO(Life Copilot, 2026년 2월 오픈)는 생성형 AI가 고객 정보와 설계 패턴을 보고 가입설계를 추천합니다.</p>
     </div>
-    <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="ai" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
+    <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="report" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
   </div>
   <div class="wrap">
     <div class="progs">
@@ -1631,6 +1631,53 @@ SC.hold = s => {
   const cheer = G(s, ''); smil(cheer, '0;0;1;1;0', '6s', '0;.6;.62;.85;1'); [[26, 40], [44, 38], [60, 42]].forEach(([x, y], k) => sparkle(cheer, x, y, 'o', k * .2));
   bubble(s, 6, 30, 30, 11, ['같이 버텨요'], '', '', 22);
   txt(s, 60, 84, '팀원의 안 풀리는 달도 관리자의 일', 4.8, 'c');
+};
+
+/* 연구회 출석판: 모일 때마다 판에 한 칸이 차고, 자리에 사람이 한 명씩 는다 (2026-10-03 사용자) */
+SC.board = s => {
+  const T = '12s';
+  R(s, 0, 0, 120, 90, 'L'); wall(s, ['#DCE5FA', '#E5ECFB', '#EEF3FF'], 70); wood(s, 70, '#B89572', '#9A7856', '#D2B08A');
+  R(s, 8, 4, 104, 34, '#8A6A4A'); R(s, 10, 6, 100, 30, '#E9D7B5'); dith(s, 10, 6, 100, 30, '#D9C29A', .5);
+  txt(s, 60, 13, '모임 출석판', 5.4, 'k');
+  for (let i = 0; i < 12; i++) { const x = 13 + (i % 6) * 16, y = 17 + Math.floor(i / 6) * 9;
+    R(s, x, y, 14, 7, 'w', { stroke: PAL.u, 'stroke-width': .4 }); txt(s, x + 7, y + 5.2, (i + 1) + '회', 3.6, 'g');
+    const on = G(s, ''); R(on, x, y, 14, 7, 'o'); txt(on, x + 7, y + 5.2, (i + 1) + '회', 3.6, 'k');
+    const a = (i / 12 * .8).toFixed(3), b = (i / 12 * .8 + .02).toFixed(3); smil(on, '0;0;1;1;0', T, `0;${a};${b};0.95;1`);
+    R(s, x + 6, y - 1, 2, 1, 'r'); }
+  spr(s, fc('설명'), 12, 56, 'bob');
+  for (let i = 0; i < 6; i++) { const x = 36 + i * 13;
+    spr(s, ['mmmmmm', 'm....m', 'mmmmmm', 'm....m'], x, 70);
+    const g = G(s, ''); spr(g, P[i % 5], x - 1, 56); const a = ((i * 2 + 1) / 12 * .8).toFixed(3), b = ((i * 2 + 1) / 12 * .8 + .02).toFixed(3);
+    smil(g, '0;0;1;1;0', T, `0;${a};${b};0.95;1`); }
+  const st = G(s, ''); smil(st, '0;0;1;1;0', T, '0;.8;.82;.95;1'); [[30, 44], [70, 42], [108, 46]].forEach(([x, y], k) => sparkle(st, x, y, 'o', k * .2));
+  txt(s, 60, 86, '모일 때마다 한 칸씩, 자리가 찹니다', 4.6, 'n');
+};
+/* AI 리포트: 증권을 모아 → AI가 읽고 → 겹친 곳·빈 곳이 표시된 리포트 한 장 → 설계사가 건넨다 */
+SC.report = s => {
+  const T = '10s';
+  R(s, 0, 0, 120, 90, 'L'); wall(s, ['#DEE7FA', '#E7EEFC', '#F0F4FE'], 70); tiles(s, 70, '#D2DCF0', '#B9C7E6');
+  txt(s, 17, 22, '증권', 4.4, 'u');
+  for (let i = 0; i < 3; i++) { const g = G(s, ''), x = 6 + i * 3, y = 25 + i * 3;
+    R(g, x, y, 16, 19, 'w', { stroke: PAL.u, 'stroke-width': .5 }); R(g, x + 2, y + 3, 10, 1.5, ['c', 'd', 'b'][i]); R(g, x + 2, y + 7, 12, 1, 'g'); R(g, x + 2, y + 10, 8, 1, 'g');
+    smil(g, '1;1;0;0;1', T, `0;${(.12 + i * .04).toFixed(2)};${(.15 + i * .04).toFixed(2)};0.97;1`); }
+  R(s, 34, 10, 46, 32, 'k'); R(s, 36, 12, 42, 28, '#0B1530'); R(s, 52, 42, 10, 4, 'u'); R(s, 46, 46, 22, 2, 'u');
+  txt(s, 57, 20, 'AI 분석', 5, 'c');
+  R(s, 40, 26, 34, 4, '#1B2B5C'); const pb = R(s, 40, 26, 0, 4, 'o');
+  el('animate', { attributeName: 'width', values: '0;0;34;34;0', keyTimes: '0;.25;.45;.97;1', dur: T, repeatCount: 'indefinite' }, pb);
+  const reading = G(s, ''); smil(reading, '0;0;1;0;0', T, '0;.25;.27;.45;1'); txt(reading, 57, 36, '읽는 중', 4.2, 'G');
+  const found = G(s, ''); smil(found, '0;0;1;1;0', T, '0;.45;.47;.97;1'); txt(found, 57, 36, '겹친 곳 · 빈 곳', 4.2, 'o');
+  const rp = G(s, ''); smil(rp, '0;0;1;1;0', T, '0;.48;.5;.97;1');
+  R(rp, 86, 6, 28, 42, 'w', { stroke: PAL.u, 'stroke-width': .6 }); R(rp, 86, 6, 28, 6, 'b'); txt(rp, 100, 10.4, '보장분석', 4.2, 'w');
+  [[89, 'c', 8], [95, 'd', 12], [101, 'b', 6], [107, 'o', 10]].forEach(([x, c, h], k) => { const b = G(rp, ''); R(b, x, 28 - h, 4, h, c);
+    smil(b, '0;0;1;1;0', T, `0;${(.52 + k * .04).toFixed(2)};${(.54 + k * .04).toFixed(2)};0.97;1`); });
+  R(rp, 88, 28, 24, .6, 'g');
+  [[33, 'e', '보장'], [38, 'r', '겹침'], [43, 'o', '빈 곳']].forEach(([y, c, n], k) => { const g = G(rp, ''); R(g, 89, y - 2.6, 3, 3, c); txt(g, 94, y, n, 3.6, 'k', 'start');
+    smil(g, '0;0;1;1;0', T, `0;${(.66 + k * .05).toFixed(2)};${(.68 + k * .05).toFixed(2)};0.97;1`); });
+  spr(s, fc('서류'), 22, 58, 'bob'); spr(s, P[1], 96, 58);
+  const give = G(s, ''); smil(give, '0;0;1;1;0', T, '0;.84;.86;.97;1');
+  R(give, 80, 50, 9, 11, 'w', { stroke: PAL.u, 'stroke-width': .5 }); R(give, 81, 51, 7, 2, 'b'); R(give, 81, 54, 6, 1, 'g'); R(give, 81, 56, 5, 1, 'g');
+  [[92, 46], [112, 52]].forEach(([x, y], k) => sparkle(give, x, y, 'o', k * .3));
+  txt(s, 60, 86, '증권을 모아 → AI가 읽고 → 리포트 한 장', 4.6, 'n');
 };
 
 /* 장면 등장: 픽셀이 한 칸씩 걷히는 전환 */
