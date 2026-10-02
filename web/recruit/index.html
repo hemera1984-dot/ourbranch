@@ -714,6 +714,16 @@ body.intro-on .hub,body.intro-on .hub *,body.intro-on .top,body.intro-on .top *{
 .compact.ai-sec .split .frame{max-width:440px;justify-self:end}
 @media(min-width:901px) and (max-height:860px){.compact.ai-sec .split .frame{max-width:260px}.compact.ai-sec .pg-shot{aspect-ratio:16/6}}
 
+/* 우리 팀이 다른 점 — 네 칸. 누르면 그 이야기 장으로 간다 */
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.diff > *{display:block;text-align:left;font:inherit;color:inherit;background:#fff;border:2px solid var(--ink-navy);border-radius:4px;padding:12px 14px;box-shadow:4px 4px 0 var(--ink-navy)}
+.diff button{cursor:pointer;transition:transform .08s steps(1),box-shadow .08s steps(1)}
+.diff button:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink-navy)}
+.diff button b::after{content:' →';color:var(--acc-l)}
+.diff b{display:block;font-family:'Gmarket Sans',sans-serif;font-size:clamp(15px,1.3vw,18px);margin-bottom:5px;letter-spacing:-.02em}
+.diff span{display:block;font-size:13.5px;line-height:1.6;color:var(--ink-2)}
+@media(max-width:600px){.diff{grid-template-columns:1fr}}
+
 /* ── 2026-10-03 점검 고침 ── */
 /* 덱이 열려 있는 동안 허브는 멈춘다 · 안 보이는 미리보기 장면도 멈춘다 (폰 발열) */
 body.deck-open .hub,body.deck-open .hub *{animation-play-state:paused!important}
@@ -833,10 +843,27 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
   <div class="wrap split">
     <div>
       <p class="kick rv"><span class="pill" data-k="t23">신한라이프 FC</span></p>
-      <h1 class="h1 rv" data-k="t24">보험설계사라는 일,<br><span class="bl">같이 해보시겠어요?</span></h1>
-      <p class="lead rv" data-k="t25">약속을 드리려는 자리가 아닙니다. 이 일이 왜 해볼 만한지, 무엇이 어려운지, 그리고 저와 함께하면 무엇을 같이 할 수 있는지 있는 그대로 보여드리겠습니다.</p>
+      <h1 class="h1 rv" data-k="t24">보험설계사라는 일,<br><span class="bl">우리 팀에서</span> 해보시겠어요?</h1>
+      <p class="lead rv" data-k="t25">같은 회사, 같은 상품이라도 어느 팀에서 시작하느냐에 따라 일하는 방식이 달라집니다. 이 일이 어떤 일인지, 그리고 우리 팀은 무엇이 다른지 있는 그대로 보여드리겠습니다.</p>
     </div>
     <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="team" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
+  </div>
+</section>
+
+<!-- 우리 팀이 다른 점 — 첫 장 바로 뒤. 네 가지는 모두 실제로 있는 것만(연구회·전문 조직·직접 만든 프로그램·팀 앱) -->
+<section data-stop="team" class="compact lay-rev sec">
+  <div class="wrap split">
+    <div>
+      <p class="kick rv" data-k="t213">우리 팀이 다른 점</p>
+      <h2 class="h2 rv" data-k="t214">설계사는 같아도,<br><span class="bl">일하는 방식이 다릅니다.</span></h2>
+      <div class="diff rv">
+        <button type="button" data-go="lab" data-at="a-meet"><b data-k="t215">고객이 먼저 찾아옵니다</b><span data-k="t216">「상속·증여 연구회」 당근 모임에서 제도를 먼저 설명합니다. 멤버 900명+.</span></button>
+        <button type="button" data-go="lab" data-at="a-pro"><b data-k="t217">혼자 막히지 않습니다</b><span data-k="t218">세금, 등기, 부동산 질문은 세무사, 법무사, 감정평가사와 나눠 맡습니다.</span></button>
+        <button type="button" data-go="ai"><b data-k="t219">자료는 프로그램이 만듭니다</b><span data-k="t220">고객관리, 팀 관리, 보장분석 리포트까지 우리 팀이 직접 만든 프로그램을 같이 씁니다.</span></button>
+        <div><b data-k="t221">매일 같이 점검합니다</b><span data-k="t222">일정, 일일보고, 목표를 팀 앱 하나로 함께 봅니다. 혼자 버티게 두지 않습니다.</span></div>
+      </div>
+    </div>
+    <div class="frame rv"><div class="stage"><svg data-scene="special" viewBox="0 0 120 90"></svg></div></div>
   </div>
 </section>
 
@@ -1680,6 +1707,25 @@ SC.report = s => {
   txt(s, 60, 86, '증권을 모아 → AI가 읽고 → 리포트 한 장', 4.6, 'n');
 };
 
+/* 우리 팀이 다른 점: 팀이 무대에 서고, 머리 위 간판 넷(연구회·전문가·AI·팀 앱)이 하나씩 켜진다 */
+SC.special = s => {
+  const T = '8s';
+  R(s, 0, 0, 120, 90, 'N'); grad(s, 0, 0, 120, 66, ['#0A1D45', '#0F2A57', '#16397A', '#1E4A96']); stars(s, 8, 24);
+  R(s, 0, 66, 120, 24, '#16264D'); R(s, 0, 66, 120, 2, '#2A4590'); for (let x = 0; x < 120; x += 12) R(s, x, 70, 10, 1, '#23386A');
+  const sp = G(s, '', 'animation:spot 2.4s steps(4) infinite'); el('polygon', { points: '40,0 80,0 100,68 20,68', fill: PAL.c, opacity: .14 }, sp);
+  const signs = [['연구회', 'o'], ['전문가', 'c'], ['AI', 'e'], ['팀 앱', 'p']];
+  signs.forEach(([n, c], k) => { const x = 6 + k * 28;
+    R(s, x, 8, 24, 14, '#0B1530', { stroke: PAL.u, 'stroke-width': .6 }); txt(s, x + 12, 17, n, 5, 'u');
+    const on = G(s, ''); R(on, x, 8, 24, 14, c); txt(on, x + 12, 17, n, 5, 'k');
+    smil(on, '0;0;1;1;0', T, `0;${(.1 + k * .15).toFixed(2)};${(.12 + k * .15).toFixed(2)};0.95;1`);
+    R(s, x + 11, 22, 2, 6, 'U'); });
+  const team = G(s, 'bob');
+  spr(team, fc('엄지'), 52, 50);
+  [[22, 1], [36, 3], [72, 0], [86, 4]].forEach(([x, i]) => spr(team, fc('서기', LOOK[i], true), x, 52));
+  const st = G(s, ''); smil(st, '0;0;1;1;0', T, '0;.7;.72;.95;1'); [[10, 40], [60, 30], [110, 42]].forEach(([x, y], k) => sparkle(st, x, y, 'o', k * .2));
+  txt(s, 60, 84, '같은 설계사, 다른 팀', 5, 'c');
+};
+
 /* 장면 등장: 픽셀이 한 칸씩 걷히는 전환 */
 function wipe(svg){
   svg.querySelector('.wipe')?.remove();
@@ -1801,7 +1847,10 @@ const NOTES = {
 오늘은 약속을 드리는 자리가 아니라, 제가 걸어온 길과 같이 갈 수 있는 길을 보여드리는 자리입니다.
 네 갈래가 있습니다. 영업, 연구회, 관리자, AI. 궁금한 쪽부터 같이 보시죠.`, tip: `1:1: 상대가 먼저 고르게 하기 ("어디부터 궁금하세요?")
 간담회: 보통 영업 → 연구회 → AI → 관리자 순서` },
-  hero:  { t: '영업 · 시작', s: `보험설계사라는 일, 같이 해보시겠어요?
+  team:  { t: '영업 · 우리 팀이 다른 점', s: `설계사는 같아도 일하는 방식이 다릅니다.
+고객이 먼저 찾아오는 연구회, 혼자 막히지 않게 하는 전문 조직, 자료를 대신 만들어 주는 프로그램, 그리고 매일 같이 점검하는 팀 앱.
+궁금한 칸을 누르시면 그 이야기로 바로 가겠습니다.`, tip: `다른 팀·다른 회사를 깎아내리지 않기. 우리가 가진 것만 말하기` },
+  hero:  { t: '영업 · 시작', s: `보험설계사라는 일, 우리 팀에서 해보시겠어요?
 이 일이 왜 해볼 만한지, 무엇이 어려운지, 그리고 저와 함께하면 무엇을 같이 할 수 있는지 있는 그대로 말씀드리겠습니다.` },
   why:   { t: '영업 · 왜 설계사인가', s: `이 일은 한 가족의 내일을 지키는 일입니다.
 아플 때, 떠날 때, 물려줄 때 가족 곁에 있는 사람이 설계사입니다.
