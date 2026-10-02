@@ -709,7 +709,7 @@ body.intro-on .hub,body.intro-on .hub *,body.intro-on .top,body.intro-on .top *{
 .compact .pts li::before{top:12px}.compact .pts li::after{top:19px}
 .compact .pts b{font-size:clamp(16px,1.35vw,18px)}
 .compact .quiz{margin-top:14px}.compact .quiz .q{padding:6px 0}
-.compact .h2{font-size:clamp(28px,3.4vw,50px)}
+.compact .h2{font-size:clamp(28px,3vw,44px)}
 .compact.ai-sec .progs{margin-top:clamp(14px,2.4vh,28px)}
 .compact.ai-sec .split .frame{max-width:440px;justify-self:end}
 @media(min-width:901px) and (max-height:860px){.compact.ai-sec .split .frame{max-width:260px}.compact.ai-sec .pg-shot{aspect-ratio:16/6}}
@@ -723,6 +723,12 @@ body.intro-on .hub,body.intro-on .hub *,body.intro-on .top,body.intro-on .top *{
 .diff b{display:block;font-family:'Gmarket Sans',sans-serif;font-size:clamp(15px,1.3vw,18px);margin-bottom:5px;letter-spacing:-.02em}
 .diff span{display:block;font-size:13.5px;line-height:1.6;color:var(--ink-2)}
 @media(max-width:600px){.diff{grid-template-columns:1fr}}
+
+/* 「우리 팀에서는」 한 칸 — 설계사 일반 이야기 끝에 우리 팀 방식을 붙인다. 누르면 그 이야기 장으로 */
+.ours{display:block;width:100%;margin-top:16px;padding:12px 16px;text-align:left;font:inherit;font-size:clamp(14.5px,1.2vw,16px);line-height:1.65;color:var(--ink);background:#fff;border:2px solid var(--ink-navy);border-left:8px solid var(--acc-l);border-radius:4px;cursor:pointer;box-shadow:4px 4px 0 var(--ink-navy);transition:transform .08s steps(1),box-shadow .08s steps(1)}
+.ours:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink-navy)}
+.ours i{display:block;font-style:normal;font-family:'Gmarket Sans',sans-serif;font-size:13px;color:var(--acc-l);margin-bottom:3px}
+.ours i::after{content:' →'}
 
 /* ── 2026-10-03 점검 고침 ── */
 /* 덱이 열려 있는 동안 허브는 멈춘다 · 안 보이는 미리보기 장면도 멈춘다 (폰 발열) */
@@ -878,6 +884,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
         <li data-k="t29"><b>천장이 정해져 있지 않은 일</b>정해진 월급이 없는 대신, 움직인 만큼 돌아옵니다.</li>
         <li data-k="t30"><b>평생 쌓이는 전문성</b>보장, 질병, 세금, 상속까지. 공부할수록 깊어지고 나이 들수록 인정받습니다.</li>
       </ul>
+      <button type="button" class="ours rv" data-go="lab" data-at="a-meet" data-k="t223"><i>우리 팀에서는</i>공부가 곧 영업입니다. 연구회에서 상속·증여 제도를 설명하며 쌓은 전문성이, 고객이 먼저 찾아오는 이유가 됩니다.</button>
     </div>
     <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="umbrella" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
   </div>
@@ -895,6 +902,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
         <li data-k="t35"><b>보험금 청구</b>아플 때 무엇을 청구할 수 있는지 끝까지 챙깁니다.</li>
         <li data-k="t36"><b>상속·증여와 은퇴</b>자산을 어떻게 지키고 물려줄지 가족 단위로 설계합니다.</li>
       </ul>
+      <button type="button" class="ours rv" data-go="ai" data-k="t224"><i>우리 팀에서는</i>이 일을 혼자 하지 않습니다. 보장 분석은 우리 팀이 만든 AI 리포트가 돕고, 세금과 등기 질문은 전문가와 나눠 맡습니다.</button>
       <p class="small rv" style="margin-top:14px" data-k="t151">신한라이프는 한 가정과 한 명의 FC를 1:1로 맺어 평생 서비스하는 「생활보험주치의」 제도를 운영합니다.</p>
     </div>
     <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="job" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
@@ -1854,9 +1862,11 @@ const NOTES = {
 이 일이 왜 해볼 만한지, 무엇이 어려운지, 그리고 저와 함께하면 무엇을 같이 할 수 있는지 있는 그대로 말씀드리겠습니다.` },
   why:   { t: '영업 · 왜 설계사인가', s: `이 일은 한 가족의 내일을 지키는 일입니다.
 아플 때, 떠날 때, 물려줄 때 가족 곁에 있는 사람이 설계사입니다.
-정해진 월급이 없는 대신 천장도 없습니다. 그리고 공부할수록 깊어지는 평생 전문성이 쌓입니다.`, a40: `"가족 챙기는 감각이 그대로 쓰이는 일"`, a20: `"나이 들수록 인정받는 전문직"` },
+정해진 월급이 없는 대신 천장도 없습니다. 그리고 공부할수록 깊어지는 평생 전문성이 쌓입니다.
+우리 팀에서는 공부가 곧 영업입니다. 연구회에서 쌓은 전문성이 고객이 먼저 찾아오는 이유가 됩니다.`, a40: `"가족 챙기는 감각이 그대로 쓰이는 일"`, a20: `"나이 들수록 인정받는 전문직"` },
   job:   { t: '영업 · 하는 일', s: `설계사는 보험을 파는 사람이 아니라 설계하는 사람입니다.
-보장 분석, 질병과 약관 설명, 보험금 청구, 상속·증여와 은퇴까지. 옆 화면에서 하나씩 보여드리고 있습니다.` },
+보장 분석, 질병과 약관 설명, 보험금 청구, 상속·증여와 은퇴까지. 옆 화면에서 하나씩 보여드리고 있습니다.
+우리 팀에서는 이 일을 혼자 하지 않습니다. 보장 분석은 AI 리포트가 돕고, 세금과 등기 질문은 전문가와 나눠 맡습니다.` },
   hard:  { t: '영업 · 어려운 점', s: `솔직하게 말씀드리면 쉽지 않은 일입니다.
 가족과 지인 계약이 끝나면 만날 사람이 없어지고, 거절이 일상이 되고, 소득은 들쭉날쭉합니다. 공부도 계속해야 합니다.`, tip: `이 장을 건너뛰지 않기. 여기서 신뢰가 생김` },
   gap:   { t: '영업 · 현실', s: `돈을 많이 버는 설계사도 있습니다. 하지만 못 버는 설계사가 더 많습니다.
