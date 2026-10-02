@@ -315,6 +315,7 @@
           <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
           <button class="btn" id="m-cal-copy">지난달 가져오기</button>
           <button class="btn" id="m-cols">사람별</button>
+          <button class="btn tl-tog" type="button">시간순</button>
           <button class="btn scan-btn">수첩 스캔</button>
         </div>
         <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
@@ -3123,6 +3124,25 @@
         + "</div>";
     }).join("");
   }
+  // 시간순 — 개인·공적을 한 줄로 합쳐 시각 순서대로 (2026-09-29 최연 수정 요청: 「타임라인으로 나열」).
+  // 공적 일정은 파랑 바탕·굵게 + 「공적」 표. 켜고 끈 것은 이 브라우저에 기억한다.
+  var dayTL = (function () { try { return localStorage.getItem("ob_day_tl") === "1"; } catch (e) { return false; } })();
+  function dayTimelineHtml(evs) {
+    if (!evs.length) return '<div class="empty">이 날짜에 일정이 없습니다.</div>';
+    var list = evs.slice().sort(function (a, b) { var x = a.start || "", y = b.start || ""; return x < y ? -1 : x > y ? 1 : 0; });
+    return '<div class="tl">' + list.map(function (e) {
+      var off = isOfficial(e);
+      var who = e.member_email ? pdot(e.member_email) + esc(nameOf(e.member_email)) : "팀 공유";
+      return '<div class="tl-row' + (off ? " official" : "") + '"><span class="tl-t">' + esc(e.start ? e.start + (e.end ? "–" + e.end : "") : "종일") + "</span>"
+        + '<div class="tl-body"><span class="tl-who">' + who + (off ? '<span class="off-tag">공적</span>' : "") + "</span>" + slotHtml(e) + "</div></div>";
+    }).join("") + "</div>";
+  }
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".tl-tog")) return;
+    dayTL = !dayTL;
+    try { localStorage.setItem("ob_day_tl", dayTL ? "1" : "0"); } catch (err) { /* 무시 */ }
+    if (isMobile()) renderMobileDay(); else renderCalDay();
+  });
   // 오른쪽 목록도 개인 활동과 공적 일정으로 가른다 — 달력 칸과 같은 구분이다
   function daySplitHtml(evs, teamId) {
     var mineSide = evs.filter(function (e) { return !isOfficial(e); });
@@ -3563,8 +3583,9 @@
     $("dcol-wrap").hidden = !mColsOn;
     $("day-view").hidden = mColsOn;
     if (mColsOn) { dcDate = selDate; loadDayCols(); return; }
-    var h = dayGroupsHtml(dayItemsOf(selDate), myTeamId());
+    var h = dayTL ? dayTimelineHtml(dayItemsOf(selDate)) : dayGroupsHtml(dayItemsOf(selDate), myTeamId());
     $("day-view").innerHTML = (h || '<div class="empty">이 날짜에 일정이 없습니다.</div>') + ledgerBandHtml(selDate);
+    document.querySelectorAll(".tl-tog").forEach(function (b) { b.classList.toggle("active", dayTL); });
   }
   $("m-cols").addEventListener("click", function () {
     mColsOn = !mColsOn;
@@ -3586,7 +3607,7 @@
     s.innerHTML = '<div class="sheet-head"><strong>' + esc(dayLabelOf(ds)) + "</strong>"
       + '<button class="btn primary" id="sheet-add">일정 추가</button>'
       + '<button class="btn" id="sheet-close">닫기</button></div>'
-      + (dayGroupsHtml(dayItemsOf(ds), myTeamId()) || '<div class="empty">이 날짜에 일정이 없습니다.</div>')
+      + ((dayTL ? dayTimelineHtml(dayItemsOf(ds)) : dayGroupsHtml(dayItemsOf(ds), myTeamId())) || '<div class="empty">이 날짜에 일정이 없습니다.</div>')
       + ledgerBandHtml(ds);
     document.body.appendChild(back);
     document.body.appendChild(s);
@@ -3936,9 +3957,10 @@
       + (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + DOW_FULL[d.getDay()]
       + (hasOfficial && selDate >= fmtDate(new Date()) ? ' <span class="dday' + (selDate === fmtDate(new Date()) ? " today" : "") + '">' + ddayOf(selDate) + "</span>" : "")
       + "</strong>"
+      + '<button class="btn tl-tog' + (dayTL ? " active" : "") + '" type="button">시간순</button>'
       + '<button class="btn primary" id="cal-day-add">일정 추가</button></div>'
       + quickAddHtml()
-      + daySplitHtml(items, myTeamId())
+      + (dayTL ? dayTimelineHtml(items) : daySplitHtml(items, myTeamId()))
       + ledgerBandHtml(selDate);
   }
   $("cal-view").addEventListener("click", function (e) {

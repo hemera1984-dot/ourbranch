@@ -1236,3 +1236,29 @@ body.day-off #day-fold { right: 0; }
 /* 리쿠르팅 소개 — 앱 위를 통째로 덮고 전체 화면으로 띄운다 */
 .recruit-show { position: fixed; inset: 0; z-index: 1000; background: #081b3a; }
 .recruit-show iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+/* 공적 일정을 개인 일정과 한눈에 가른다 (2026-09-29 최연 수정 요청: 「부지점장님 개인일정이랑 공적일정이 헷갈린다」)
+   연한 파랑 바탕 + 파랑 굵은 글씨. 앱의 강조색(버건디)과 다른 색이라 「공적」으로만 읽힌다. 색줄은 쓰지 않는다 */
+:root { --off-fg: #1F5FD1; --off-bg: #EAF1FF; }
+:root[data-theme="dark"] { --off-fg: #8FB4FF; --off-bg: rgba(31, 95, 209, .22); }
+.cal-half.official .cal-ev { color: var(--off-fg); font-weight: 800; background: var(--off-bg); border-radius: 3px; padding: 0 3px; }
+.cal-half.official .cal-ev + .cal-ev { margin-top: 2px; }
+.day-band.official .day-band-label { color: var(--off-fg); }
+.day-band.official .slot { background: var(--off-bg); border-radius: 4px; padding: 4px 6px; }
+.day-band.official .slot + .slot { border-top: 0; margin-top: 4px; }
+.day-band.official .slot-title { color: var(--off-fg); font-weight: 800; }
+/* 시간순 보기 */
+.tl { padding: 6px 14px 10px; }
+.tl-row { display: grid; grid-template-columns: 84px 1fr; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.tl-row:first-child { border-top: 0; }
+.tl-t { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; color: var(--sub); padding-top: 4px; }
+.tl-body { min-width: 0; }
+.tl-who { display: flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--sub); }
+.tl .slot { padding: 2px 0; }
+.tl .slot-time { display: none; }
+.tl-row.official .tl-body { background: var(--off-bg); border-radius: 4px; padding: 4px 8px; }
+.tl-row.official .tl-t, .tl-row.official .slot-title { color: var(--off-fg); font-weight: 800; }
+.off-tag { font-size: 11px; font-weight: 800; color: #fff; background: var(--off-fg); border-radius: 3px; padding: 0 5px; margin-left: 4px; }
+.cal-day-head .tl-tog { margin-left: auto; }
+.cal-day-head .tl-tog + .btn { margin-left: 6px; }
+.tl-tog.active { background: var(--off-fg); border-color: var(--off-fg); color: #fff; }
