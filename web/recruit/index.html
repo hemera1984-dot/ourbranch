@@ -712,7 +712,7 @@ body.intro-on .hub,body.intro-on .hub *,body.intro-on .top,body.intro-on .top *{
 .compact .h2{font-size:clamp(28px,3vw,44px)}
 .compact.ai-sec .progs{margin-top:clamp(14px,2.4vh,28px)}
 .compact.ai-sec .split .frame{max-width:440px;justify-self:end}
-@media(min-width:901px) and (max-height:860px){.compact.ai-sec .split .frame{max-width:260px}.compact.ai-sec .pg-shot{aspect-ratio:16/6}}
+@media(min-width:901px) and (max-height:940px){.compact.ai-sec .split .frame{max-width:260px}.compact.ai-sec .pg-shot{aspect-ratio:16/4}}
 
 /* 우리 팀이 다른 점 — 네 칸. 누르면 그 이야기 장으로 간다 */
 .diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
@@ -1092,7 +1092,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <span class="weapon-n rv" data-k="t90">첫 번째 무기</span>
       <h2 class="h2 rv" data-k="t91">「상속·증여 연구회」</h2>
       <p class="lead rv" data-k="t92">우리 팀이 당근에서 직접 운영하는 모임이고, 우리 팀 영업의 정체성입니다. 보험 이야기를 먼저 꺼내지 않고 제도를 먼저 설명합니다. 그러면 궁금한 분들이 먼저 상담을 청합니다.</p>
-      <p class="rv" style="margin-top:14px" data-k="t93">팀원은 이 연구회에 함께 서면서, 고객이 찾아오는 영업을 옆에서 배우고 직접 해봅니다.</p>
+      <button type="button" class="ours rv" data-go="sales" data-at="year1" data-k="t93"><i>우리 팀원이 되면</i>연구회에 같이 섭니다. 처음에는 옆에서 보고, 익숙해지면 직접 제도를 설명하는 자리에 섭니다. 고객이 찾아오는 영업을 그렇게 배웁니다.</button>
       <div class="stat rv"><span class="n" data-k="t94">900명+</span><span class="l" data-k="t95">연구회 당근 모임 멤버</span></div>
       <p class="meet-cap rv"><span class="pill" data-k="t96">연구회 모임 현장</span></p>
     </div>
@@ -1107,6 +1107,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <h2 class="h2 rv" data-k="t98">함께 일하는 전문 조직</h2>
       <p class="lead rv" data-k="t99">고객의 질문은 보험에서 끝나지 않습니다. 세금, 등기, 부동산 가치가 함께 얽혀 나옵니다. 우리 팀은 전문가 조직과 함께 일하기 때문에, 팀원도 어려운 질문 앞에서 혼자 막히지 않습니다.</p>
       <p class="rv" style="margin-top:14px" data-k="t100">각자 자기 영역만 맡습니다. 세무는 세무사가, 등기는 법무사가, 부동산 평가는 감정평가사가, 보험 설계는 설계사가 합니다.</p>
+      <button type="button" class="ours rv" data-go="sales" data-at="team" data-k="t233"><i>우리 팀원이 되면</i>어려운 질문 앞에서 혼자 막히지 않습니다. 설계사는 보험을 맡고, 세금과 등기는 전문가에게 연결합니다.</button>
       <button class="back rv" data-go="hub" data-k="t22">← 다른 이야기 보기</button>
     </div>
     <div class="collage">
@@ -1124,9 +1125,8 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
     <div>
       <span class="weapon-n rv" data-k="t103">세 번째 무기</span>
       <h2 class="h2 rv" data-k="t104">AI 프로그램</h2>
-      <p class="lead rv" data-k="t105">우리 팀이 직접 만들어 쓰고 있는 프로그램들을 팀원 모두가 같이 씁니다. 자료 만드는 시간은 줄이고, 고객을 만나는 데 시간을 씁니다.</p>
-      <p class="small rv" style="margin-top:16px" data-k="t106">지금 보고 계신 이 화면도 같은 방식으로 만들었습니다.</p>
-      <p class="small rv" style="margin-top:6px" data-k="t210">회사 도구도 함께 씁니다. 신한라이프 LICO(Life Copilot, 2026년 2월 오픈)는 생성형 AI가 고객 정보와 설계 패턴을 보고 가입설계를 추천합니다.</p>
+      <p class="lead rv" data-k="t105">우리 팀이 직접 만들어 쓰는 프로그램입니다. 자료 만드는 시간은 줄이고, 고객을 만나는 데 시간을 씁니다.</p>
+      <button type="button" class="ours rv" data-go="sales" data-at="team" data-k="t234"><i>우리 팀원이 되면</i>세 프로그램을 첫날부터 같이 씁니다. 따로 준비하지 않아도 보장분석 리포트, 고객관리, 일일보고까지 바로 손에 쥡니다.</button>
     </div>
     <div class="frame rv"><div class="frame-glow"></div><div class="stage"><svg data-scene="report" viewBox="0 0 120 90"></svg></div><div class="frame-shine"></div></div>
   </div>
@@ -1136,7 +1136,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <article class="pg rv"><div class="pg-shot"><img loading="lazy" decoding="async" src="assets/ai-branch.jpg" alt="우리지점 프로젝트 화면" onerror="this.hidden=true;this.nextElementSibling.hidden=false" data-k="g112"><div class="pg-ph" hidden><svg viewBox="0 0 40 40"><rect x="5" y="22" width="7" height="12" rx="1.5" fill="#8FB0FF"/><rect x="16.5" y="14" width="7" height="20" rx="1.5" fill="#fff"/><rect x="28" y="8" width="7" height="26" rx="1.5" fill="#fff"/><circle cx="20" cy="7" r="3.2" fill="#F2C14E"/></svg><span data-k="t113">우리지점 프로젝트</span></div></div><div class="pg-tx"><b data-k="t114">우리지점 프로젝트</b><span class="pg-one" data-k="t115">팀원 관리 프로그램</span><p data-k="t116">조직도, 일정, 업적, 도입 현황까지. 관리자와 팀원이 함께 쓰며 팀을 관리합니다.</p></div></article>
       <article class="pg rv"><div class="pg-shot"><img loading="lazy" decoding="async" src="assets/ai-report.jpg" alt="보장분석 프로젝트 화면" onerror="this.hidden=true;this.nextElementSibling.hidden=false" data-k="g117"></div><div class="pg-tx"><b data-k="t118">보장분석 프로젝트</b><span class="pg-one" data-k="t119">AI 보장분석 프로그램</span><p data-k="t120">AI가 고객의 보험을 분석해, 한눈에 보는 리포트로 정리합니다.</p></div></article>
     </div>
-    <p class="small rv" style="margin-top:14px" data-k="t121">세 화면 모두 실제 프로그램 화면이며, 고객 정보는 가렸습니다.</p>
+    <p class="small rv" style="margin-top:14px" data-k="t121">세 화면 모두 실제 프로그램 화면이며, 고객 정보는 가렸습니다. 회사 도구도 함께 씁니다. 신한라이프 LICO(Life Copilot, 2026년 2월 오픈)는 생성형 AI가 고객 정보와 설계 패턴을 보고 가입설계를 추천합니다.</p>
     <button class="back rv" data-go="hub" data-k="t89">← 다른 이야기 보기</button>
   </div>
 </section>
@@ -1910,14 +1910,17 @@ const NOTES = {
 연구회, 전문 조직, AI는 제가 같이 해드릴 수 있습니다. 성실함, 공부, 끈기는 본인이 가져오셔야 합니다.` },
   'a-meet': { t: '연구회 · 「상속·증여 연구회」', s: `우리 팀이 당근에서 직접 운영하는 「상속·증여 연구회」입니다. 멤버가 900명이 넘고, 우리 팀 영업의 정체성입니다.
 보험 이야기를 먼저 꺼내지 않고 제도를 먼저 설명합니다. 그러면 궁금한 분들이 먼저 상담을 청합니다.
-팀원은 이 연구회에 함께 서면서 고객이 찾아오는 영업을 배웁니다.`, tip: `모임 사진을 가리키며 "부탁해서 모인 자리가 아닙니다"` },
+팀원은 이 연구회에 함께 서면서 고객이 찾아오는 영업을 배웁니다.
+우리 팀원이 되면 처음에는 옆에서 보고, 익숙해지면 직접 제도를 설명하는 자리에 섭니다.`, tip: `모임 사진을 가리키며 "부탁해서 모인 자리가 아닙니다"` },
   'a-pro':  { t: '연구회 · 전문 조직', s: `고객의 질문은 보험에서 끝나지 않습니다. 세금, 등기, 부동산 가치가 함께 얽혀 나옵니다.
 우리 팀은 전문 조직과 함께 일하기 때문에 팀원도 어려운 질문 앞에서 혼자 막히지 않습니다.
-세무는 세무사, 등기는 법무사, 부동산 평가는 감정평가사, 보험 설계는 설계사. 각자 자기 영역만 맡습니다.`, tip: `FC가 세무·등기·감정 판단을 하는 것처럼 말하지 않기\n아직 합류 전인 전문가는 '함께할 예정'으로 말하기` },
+세무는 세무사, 등기는 법무사, 부동산 평가는 감정평가사, 보험 설계는 설계사. 각자 자기 영역만 맡습니다.
+우리 팀원이 되면 어려운 질문 앞에서 혼자 막히지 않습니다. 설계사는 보험을, 세금과 등기는 전문가에게.`, tip: `FC가 세무·등기·감정 판단을 하는 것처럼 말하지 않기\n아직 합류 전인 전문가는 '함께할 예정'으로 말하기` },
   'a-ai':   { t: 'AI · 프로그램', s: `우리 팀이 직접 만들어 쓰는 프로그램 세 가지입니다.
 마이가디언은 고객관리와 설계사 전용 프로그램, 우리지점 프로젝트는 관리자와 팀원이 같이 쓰는 팀원 관리 프로그램,
 보장분석 프로젝트는 AI로 고객의 보험을 분석해 리포트로 만들어 줍니다. 오른쪽이 실제 리포트 화면입니다.
-팀원도 같이 씁니다. 자료 만드는 시간을 줄이고 고객을 만나는 데 씁니다.`, tip: `1:1: 개인정보 가린 보장분석 샘플 짧게 시연` },
+팀원도 같이 씁니다. 자료 만드는 시간을 줄이고 고객을 만나는 데 씁니다.
+우리 팀원이 되면 이 세 프로그램을 첫날부터 같이 씁니다.`, tip: `1:1: 개인정보 가린 보장분석 샘플 짧게 시연` },
   'm-what': { t: '관리자 · 하는 일', s: `관리자는 사람을 도입하고 조직을 키우는 사람입니다.
 내가 도입한 FC가 혼자 설 때까지 같이 가고, 그 FC가 다시 새 FC를 도입하면서 팀이 넓어집니다.
 우리 팀에서는 관리자가 혼자 키우지 않습니다. 연구회, 전문 조직, AI 프로그램, 팀 앱을 도입한 FC도 첫날부터 같이 씁니다.` },
