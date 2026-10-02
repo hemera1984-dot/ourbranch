@@ -16,7 +16,7 @@
   신한라이프 FC 리쿠르팅 소개 (간담회 · 1:1 면담용)
   우리지점 앱의 「리쿠르팅 소개」에서 연다. 보여주는 사람의 이름·직급·지점명은 로그인 정보에서 온다 (지점명을 코드에 박지 않는다).
   원칙: 약속이 아니라 비전. "저와 함께하면 이런 것을 같이 할 수 있다"
-  서체: Pretendard (시안 A) · 픽셀 모션 글자: Galmuri11 (SIL OFL, assets/fonts)
+  서체: Pretendard (시안 A) · 픽셀 모션 글자: 물마루 Mulmaru (SIL OFL, 배포판 그대로) · 없는 글자는 Galmuri11 (OFL, 잘라 씀)
   로고: assets/shinhanlife-logo.png 또는 .svg 를 넣으면 자동 표시 (공식 파일 사용)
   모임 사진: assets/meetup-photo.jpg 를 넣으면 연구회 구간에 표시
   발표: 간담회_발표.html / 1대1_면담.html 로 열기
@@ -24,6 +24,9 @@
 <style>
 @font-face{font-family:'Gmarket Sans';font-weight:700;font-display:swap;src:url(https://cdn.jsdelivr.net/gh/fonts-archive/GmarketSans/GmarketSansBold.woff2) format('woff2')}
 @font-face{font-family:'Galmuri11';src:url(assets/fonts/Galmuri11.woff2) format('woff2');font-display:swap}
+/* 도트 장면 글자는 물마루(OFL, Mushsooni) — 갈무리보다 획이 굵어 아무 크기에서도 또렷하다 (2026-10-03 사용자 허락).
+   예약 글꼴 이름이 있어 자르지 않고 배포판 그대로 쓴다. 없는 글자만 갈무리가 받친다. */
+@font-face{font-family:'Mulmaru';src:url(assets/fonts/Mulmaru.woff2) format('woff2');font-display:swap}
 :root{color-scheme:only light;
   --blue:#0046FF;--blue-2:#2F6BFF;--blue-soft:#8FB0FF;--navy:#081B3A;--navy-2:#0F2A57;
   --sky:#EEF3FF;--sky-2:#E3EBFF;--ink:#0E1726;--ink-2:#3F4A5C;--mute:#5E6779;--line:#E3E8F2;--white:#fff;
@@ -61,7 +64,7 @@ b{font-weight:700;color:var(--ink)} .navy b{color:#fff}
 .alt .stage{background:var(--white)}
 .navy .stage{background:var(--navy-2)}
 .stage svg{position:absolute;inset:0;width:100%;height:100%;shape-rendering:crispEdges}
-.pxt{font-family:'Galmuri11',monospace}
+.pxt{font-family:'Mulmaru','Galmuri11',monospace}
 
 /* 목록 */
 .pts{list-style:none;margin-top:28px}
@@ -1025,6 +1028,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
       <details><summary data-k="t198">고정 월급이 있나요?</summary><p data-k="t199">위촉직이라 고정 월급은 없습니다. 처음 1년은 회사의 신인 지원 제도가 있고, 금액과 조건은 상담에서 회사 기준으로 안내합니다.</p></details>
       <details><summary data-k="t200">지인에게 보험을 팔아야 하나요?</summary><p data-k="t201">우리 팀은 지인에게 부탁하는 대신 「상속·증여 연구회」 모임과 자료로 고객을 만납니다.</p></details>
       <details><summary data-k="t202">보험 경력이 없어도 되나요?</summary><p data-k="t203">됩니다. 자격시험부터 같이 준비하고, 처음 상담은 선배가 옆에서 같이 합니다.</p></details>
+      <details><summary data-k="t211">아이를 키우면서 할 수 있나요?</summary><p data-k="t212">할 수 있습니다. 고객 상담 일정은 본인이 정하기 때문에 아이 일정에 맞춰 활동 시간을 조절할 수 있습니다. 자세한 근무 방식은 상담에서 안내합니다.</p></details>
       <details><summary data-k="t204">그만두면 내 고객의 계약은 어떻게 되나요?</summary><p data-k="t205">계약은 고객과 회사 사이에 그대로 남습니다. 신한라이프 「생활보험주치의」 제도에 따라 회사가 새 담당 설계사를 정해 관리를 이어 갑니다.</p></details>
       <details><summary data-k="t206">실적 압박이 심한가요?</summary><p data-k="t207">수수료로 받는 일이라 활동이 줄면 수입도 줄어듭니다. 우리 팀은 목표를 같이 세우고 매일 일일보고로 함께 점검합니다.</p></details>
       <details><summary data-k="t208">오래 남는 사람은 얼마나 되나요?</summary><p data-k="t209">생명보험사 전속 설계사의 13회차 정착률은 38.19%입니다(2025년, 금융감독원 공시). 새로 등록한 설계사 열 명 가운데 1년 뒤에도 일하는 사람이 네 명이 안 된다는 뜻입니다. 그래서 첫 1년을 따로 짰습니다.</p></details>
