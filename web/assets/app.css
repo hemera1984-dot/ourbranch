@@ -540,6 +540,7 @@ a.slot-title:hover { text-decoration: underline; }
 .rep-goals { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 .rep-goals summary { cursor: pointer; font-size: 14px; font-variant-numeric: tabular-nums; }
 .rep-goals summary .rg-t { font-weight: 700; }
+.rep-goals summary .rg-team { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--sub); }
 .push-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 12px; padding: 8px 12px;
   border-radius: 6px; background: var(--canvas); font-size: 14px; }
 .push-bar span { flex: 1; min-width: 180px; }
@@ -1267,3 +1268,16 @@ body.day-off #day-fold { right: 0; }
 .cal-day-head .tl-tog { margin-left: auto; }
 .cal-day-head .tl-tog + .btn { margin-left: 6px; }
 .tl-tog.active { background: var(--off-fg); border-color: var(--off-fg); color: #fff; }
+
+/* 홈 맨 위 설치 띠 — 폰에서 설치 안 한 사람에게만 (2026-10-04 사용자) */
+.install-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.install-bar[hidden] { display: none; }
+.install-bar > div { flex: 1; min-width: 0; }
+.install-bar strong { display: block; font-size: 15px; }
+.install-bar span { display: block; margin-top: 2px; font-size: 13px; color: var(--sub); line-height: 1.45; }
+.install-bar .btn { min-height: 44px; padding: 0 16px; font-size: 15px; white-space: nowrap; }
+.install-x { width: 44px; height: 44px; margin: -6px -8px -6px -4px; border: 0; background: none; color: var(--ter); font-size: 22px; cursor: pointer; }
+.ins-steps { margin: 0; padding: 16px 20px 4px 40px; font-size: 15px; line-height: 1.6; }
+.ins-steps li { margin-bottom: 12px; }
+.ins-foot { margin: 0; padding: 0 20px 20px; font-size: 13px; color: var(--sub); line-height: 1.5; }

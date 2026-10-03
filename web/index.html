@@ -102,6 +102,12 @@
     </div>
 
     <section id="screen-home" hidden>
+      <!-- 폰에서 설치 안 한 사람에게만 — 단추 하나로 설치까지(2026-10-04 사용자) -->
+      <div class="install-bar" id="install-bar" hidden>
+        <div><strong>앱으로 설치하기</strong><span>홈 화면 아이콘 하나로 바로 열리고, 저녁 보고 알림도 받습니다.</span></div>
+        <button type="button" class="btn primary" id="install-go">앱 설치</button>
+        <button type="button" class="install-x" id="install-x" aria-label="닫기">×</button>
+      </div>
       <section class="hero">
         <div class="hero-copy">
           <p class="hero-date" id="home-date"></p>
@@ -423,7 +429,7 @@
           </div>
           <!-- 목표는 한 달에 한 번 정한다 — 매일 쓰는 칸을 밀어내지 않게 한 줄로 접는다(2026-09-28 폰 우선) -->
           <details class="rep-goals" id="rg-fold">
-            <summary><span class="rg-t">이번 달 목표</span> <span class="note" id="rg-sum"></span></summary>
+            <summary><span class="rg-t">이번 달 목표</span> <span class="note" id="rg-sum"></span><span class="rg-team" id="rg-team"></span></summary>
             <div class="rep-grid" style="margin-top:8px">
               <div class="rep-row"><span>목표 CANP</span><span class="rep-goal"><input class="input rg-in" id="rg-goal" inputmode="numeric" placeholder="예: 3,000,000"><span class="note" id="rg-goal-now"></span></span></div>
               <div class="rep-row"><span>목표 건수</span><span class="rep-goal"><input class="input rg-in" id="rg-cases" type="number" min="0" inputmode="numeric" placeholder="건"><span class="note" id="rg-cases-now"></span></span></div>
@@ -1751,6 +1757,7 @@
   }
   $("home-add").addEventListener("click", function () { openQuickAdd(loadHome); });
   function loadHome() {
+    renderInstallBar();
     var teamId = myTeamId();
     var todayStr = fmtDate(new Date());
     var thisMonth = todayStr.slice(0, 7);           // 홈은 언제나 이번 달 (월 이동과 무관)
@@ -2074,6 +2081,66 @@
   function appUrl() {
     return location.origin + location.pathname.replace(/[^/]*$/, "");
   }
+  // ── 설치 단추(홈 맨 위) ──
+  // 안드로이드 크롬·삼성 인터넷: 누르면 바로 설치 창(beforeinstallprompt).
+  // 아이폰은 웹이 설치 창을 못 띄운다 — 사파리 공유 단추 순서를 그림처럼 보여 준다.
+  // 카톡으로 받은 주소는 카톡 안 브라우저로 열린다. 거기선 설치가 안 되므로 바깥 브라우저로 넘긴다.
+  var UA = navigator.userAgent;
+  var isIOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var inKakao = /KAKAOTALK/i.test(UA), inApp = inKakao || /NAVER\(|Instagram|FBAN|FBAV|Line\//i.test(UA);
+  function renderInstallBar() {
+    var bar = $("install-bar");
+    var hideUntil = 0;
+    try { hideUntil = Number(localStorage.getItem("ob_install_x") || 0); } catch (e) { /* 무시 */ }
+    var phone = window.matchMedia("(pointer: coarse)").matches || isIOS || /Android/i.test(UA);
+    bar.hidden = isStandalone() || !phone || Date.now() < hideUntil;
+  }
+  function installSteps(title, steps, foot) {
+    var s = scanSheet('<div class="sheet-head"><strong>' + title + '</strong><button class="btn" id="ins-close">닫기</button></div>'
+      + '<ol class="ins-steps">' + steps.map(function (x) { return "<li>" + x + "</li>"; }).join("") + "</ol>"
+      + (foot ? '<p class="ins-foot">' + foot + "</p>" : ""));
+    s.querySelector("#ins-close").addEventListener("click", closeSheet);
+  }
+  function startInstall() {
+    if (inKakao) {
+      // 카톡 안 브라우저 → 기본 브라우저(안드로이드 크롬·아이폰 사파리)로 같은 주소를 연다
+      location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(appUrl());
+      return;
+    }
+    if (inApp) {
+      installSteps("브라우저에서 열어 주세요", [
+        "오른쪽 위(또는 아래) <b>점 세 개 · 공유</b> 단추를 누릅니다.",
+        "<b>" + (isIOS ? "Safari로 열기" : "다른 브라우저로 열기 · Chrome으로 열기") + "</b>를 고릅니다.",
+        "열린 화면에서 다시 <b>앱 설치</b>를 누릅니다."
+      ], "이 앱 안의 브라우저에서는 홈 화면에 추가가 되지 않습니다.");
+      return;
+    }
+    if (deferredInstall) {
+      deferredInstall.prompt();
+      deferredInstall.userChoice.then(function () { deferredInstall = null; renderInstallBar(); });
+      return;
+    }
+    if (isIOS) {
+      installSteps("아이폰에 설치", [
+        "화면 아래(아이패드는 위) <b>공유 단추</b>를 누릅니다. 네모에서 화살표가 위로 나온 모양입니다.",
+        "목록을 올려 <b>홈 화면에 추가</b>를 누릅니다.",
+        "오른쪽 위 <b>추가</b>를 누르면 홈 화면에 아이콘이 생깁니다."
+      ], "사파리에서만 됩니다. 크롬으로 열었다면 주소를 복사해 사파리에서 열어 주세요.");
+      return;
+    }
+    installSteps("안드로이드에 설치", [
+      "오른쪽 위 <b>점 세 개(⋮)</b>를 누릅니다. 삼성 인터넷은 아래 <b>≡</b>입니다.",
+      "<b>앱 설치</b> 또는 <b>홈 화면에 추가</b>를 누릅니다.",
+      "<b>설치</b>를 누르면 홈 화면에 아이콘이 생깁니다."
+    ], "목록에 없으면 이미 설치돼 있을 수 있습니다. 홈 화면에서 아이콘을 찾아 보세요.");
+  }
+  $("install-go").addEventListener("click", startInstall);
+  $("install-x").addEventListener("click", function () {
+    try { localStorage.setItem("ob_install_x", String(Date.now() + 7 * 86400e3)); } catch (e) { /* 무시 */ }
+    $("install-bar").hidden = true;
+  });
+  window.addEventListener("appinstalled", function () { deferredInstall = null; $("install-bar").hidden = true; });
+
   function renderInstall() {
     $("ins-url").value = appUrl();
     $("ins-quick-url").value = appUrl() + "?quick=add#sched";
@@ -4212,6 +4279,19 @@
         return x.recruiter_email === BOOT.me.email && String(x.joined_at || "").slice(0, 7) === m;
       }).length;
       repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp, nowCases: cases, nowIntro: intro, month: m };
+      // 팀 목표 = 우리 팀 개인 목표의 합, 팀 실적 = 개인 실적의 합(2026-10-04 사용자). 내 몫은 치는 대로 바뀌게 따로 뺀다.
+      var tid = BOOT.me.teamId, tm = { goal: 0, cases: 0, intro: 0, canp: 0, nowCases: 0, nowIntro: 0 };
+      data.goals.forEach(function (x) {
+        if (x.team_id !== tid || mineRow(x)) return;
+        tm.goal += goalNum(x.goal); tm.cases += Number(x.cases) || 0; tm.intro += Number(x.intro) || 0;
+      });
+      data.rows.forEach(function (r) {
+        if (r.team_id !== tid) return;
+        tm.canp += Number(r.canp) || 0;
+        if (r.contract_date || r.canp || r.premium) tm.nowCases++;
+      });
+      tm.nowIntro = BOOT.members.filter(function (x) { return x.team_id === tid && String(x.joined_at || "").slice(0, 7) === m; }).length;
+      repGoal.team = tid != null ? tm : null;
       [["rg-goal", g.goal || ""], ["rg-cases", g.cases || ""], ["rg-intro", g.intro || ""]].forEach(function (x) {
         var el = $(x[0]); el.value = x[1]; el.dataset.init = String(x[1]);
       });
@@ -4221,8 +4301,14 @@
     });
   }
   // 줄 요약·달성률은 repGoal에서 그린다 — 치는 동안에도 바로 바뀐다(2026-10-03 사용자)
+  function goalNum(v) { return Number(String(v || "").replace(/[^0-9]/g, "")) || 0; }
   function drawGoalSum() {
-    var g = repGoal, num = Number(String(g.goal || "").replace(/[^0-9]/g, ""));
+    var g = repGoal, num = goalNum(g.goal), t = g.team;
+    $("rg-team").textContent = t
+      ? "팀 목표 " + (t.goal + num ? fmtNum(t.goal + num) : "-") + " · " + ((t.cases + (Number(g.cases) || 0)) || "-") + "건 · " + ((t.intro + (Number(g.intro) || 0)) || "-") + "명"
+        + "  /  팀 실적 " + fmtNum(t.canp) + " · " + t.nowCases + "건 · " + t.nowIntro + "명"
+        + (t.goal + num ? " · " + Math.round(t.canp / (t.goal + num) * 100) + "%" : "")
+      : "";
     $("rg-goal-now").textContent = "현재 " + fmtNum(g.canp) + (num ? " · " + Math.round(g.canp / num * 100) + "%" : "");
     $("rg-cases-now").textContent = "현재 " + g.nowCases + "건";
     $("rg-intro-now").textContent = "현재 " + g.nowIntro + "명";
