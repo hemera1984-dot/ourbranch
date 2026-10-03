@@ -116,6 +116,11 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .grid tr.dirty td:first-child { box-shadow: inset 3px 0 0 var(--cyan); }
 .grid .num { text-align: right; font-variant-numeric: tabular-nums; }
 .grid tfoot td { padding: 7px 8px; font-weight: 800; background: var(--canvas); }
+/* 업적현황: 목표 표와 실적을 따로 (2026-10-03 사용자) */
+.perf-sub { font-size: 13px; font-weight: 700; color: var(--sub); margin: 14px 2px 8px; }
+.goal-grid td.ro { color: var(--ink); white-space: nowrap; }
+.goal-grid .goal-cell { width: 100%; border: 0; border-radius: 0; background: transparent; text-align: right; min-width: 90px; }
+.goal-grid .goal-cell:focus { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--blue-bg); }
 /* ── 표 가독성 (2026-09-11) — 다크모드는 토큰이 알아서 따라간다 ── */
 :root { --zebra: rgba(0, 0, 0, .025); }
 :root[data-theme="dark"] { --zebra: rgba(255, 255, 255, .035); }

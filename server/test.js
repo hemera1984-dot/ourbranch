@@ -240,6 +240,11 @@ async function main() {
   assert.equal(perf.rows.length, 2);
   assert.equal(perf.goals[0].goal, "1,000(100)");
   assert.equal((await (await api("t-fc2", "GET", "/perf?month=2026-08")).json()).rows.length, 0);
+  // 부지점장부터 다른 팀 업적도 본다(2026-10-03 사용자) — 팀원은 내 팀만, 쓰기는 그대로 내 팀만
+  assert.equal((await api("t-super", "POST", "/perf", { teamId: 2, month: "2026-08", rows: [{ member: "팀원2", memberEmail: "fc2@x.com", contract_date: "2026-08-04", canp: 10 }] })).status, 200);
+  assert.ok((await (await api("t-esl1", "GET", "/perf?month=2026-08")).json()).rows.some(r => r.team_id === 2));
+  assert.ok(!(await (await api("t-fc1", "GET", "/perf?month=2026-08")).json()).rows.some(r => r.team_id === 2));
+  assert.equal((await api("t-esl1", "POST", "/perf", { teamId: 2, month: "2026-08", rows: [{ member: "팀원2", memberEmail: "fc2@x.com", canp: 1 }] })).status, 403);
 
   // 10-1) 미션: 삭제는 관리자만.
   // 미션 상태(요청/진행중/완료) API는 걷어냈다 — 달성 여부는 task_done이 판정한다.

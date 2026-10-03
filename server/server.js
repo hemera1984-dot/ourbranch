@@ -1563,10 +1563,12 @@ route("DELETE", /^\/ta\/(\d+)$/, false, (req, res, user, m) => {
 route("GET", /^\/perf$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const month = q.get("month") || today().slice(0, 7);
+  // 부지점장부터 다른 팀 업적도 본다(2026-10-03 사용자). 팀원은 내 팀만. 쓰기는 그대로 canWriteTeam.
+  const see = t => canSeeTeam(user, t) || canSetGoal(user);
   const rows = db.prepare("SELECT * FROM perf WHERE month = ? ORDER BY member, contract_date, id").all(month)
-    .filter(r => canSeeTeam(user, r.team_id));
+    .filter(r => see(r.team_id));
   const goals = db.prepare("SELECT * FROM perf_goals WHERE month = ?").all(month)
-    .filter(g => canSeeTeam(user, g.team_id));
+    .filter(g => see(g.team_id));
   send(res, 200, { rows, goals });
 });
 

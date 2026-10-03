@@ -600,7 +600,7 @@
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
-      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 칸을 벗어나면 바로 저장되고 합계도 그때 바뀝니다. 목표 입력은 부지점장 몫입니다.</p>
+      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 위에 목표 표(개인 목표의 합이 팀 목표), 아래에 사람별 계약(합이 팀 실적)입니다. 부지점장부터 위 선택칸으로 다른 팀을 봅니다. 칸을 벗어나면 바로 저장되고 합계도 그때 바뀝니다. 남의 목표는 부지점장이 정하고, 내 목표는 일일보고에서도 넣습니다.</p>
       <div id="perf-body"></div>
     </section>
   </main>
@@ -1014,7 +1014,8 @@
 
   // ── 셸 ──
   // 일정 화면에서는 부지점장 이상도 다른 팀을 골라 본다(2026-09-28 사용자). 다른 화면은 자기 팀 그대로.
-  function pickTeams() { return BOOT.me.seesAll || (BOOT.me.canSetGoal && screen === "sched"); }
+  // 일정·업적은 부지점장부터 다른 팀을 골라 본다(일정 2026-09-28, 업적 2026-10-03 사용자)
+  function pickTeams() { return BOOT.me.seesAll || (BOOT.me.canSetGoal && (screen === "sched" || screen === "perf")); }
   function myTeamId() {
     if (!pickTeams()) return BOOT.me.teamId;
     var v = Number($("team-pick").value);
@@ -5213,13 +5214,19 @@
   ];
   function fmtNum(n) { return Number(n || 0).toLocaleString("ko-KR"); }
 
-  // 업적은 열람 범위의 모든 팀이 한 화면에 — 팀 합계 밑에 팀원별 블록 (지점장·총관리자는 전 팀)
+  // 업적은 한 번에 한 팀 — 팀원은 내 팀만, 부지점장부터 위 선택칸으로 다른 팀(2026-10-03 사용자).
+  // 남의 팀은 보기만 한다. 쓰기는 지점장·총관리자 아니면 내 팀만(서버 canWriteTeam과 같은 선).
   function loadPerf() {
     $("month-label").textContent = monthLabel();
+    // 치다 만 목표가 있으면 먼저 보낸다 — 팀·달을 바꾸면 칸이 다시 그려져 0.5초 기다리던 값이 사라진다
+    Object.keys(perfGoalTimer).forEach(function (i) { clearTimeout(perfGoalTimer[i]); perfSaveGoal(Number(i)); });
+    perfGoalTimer = {};
     api("/perf?month=" + month).then(function (data) {
       perfGrids = [];
       var body = $("perf-body");
-      var teams = BOOT.teams;
+      var tid = myTeamId();
+      var teams = BOOT.teams.filter(function (t) { return t.id === tid; });
+      var writable = BOOT.me.isBranchHead || tid === BOOT.me.teamId;
       if (!teams.length) {
         body.innerHTML = '<div class="card"><div class="empty">팀이 아직 없습니다. 조직도에서 먼저 등록합니다.</div></div>';
         return;
@@ -5231,7 +5238,9 @@
         var rows = data.rows.filter(function (r) { return r.team_id === t.id; });
         var goals = {};
         data.goals.filter(function (g) { return g.team_id === t.id; })
-          .forEach(function (g) { goals[g.member] = g; });
+          .forEach(function (g) { goals[g.member_email || ("이름:" + g.member)] = g; });
+        // 목표는 이메일로 찾는다 — 이름으로 찾으면 동명이인(김민수 셋)이 한 목표를 나눠 쓴다
+        var goalOf = function (pp) { return goals[pp.email || ("이름:" + pp.name)] || {}; };
         // 사람 목록은 이메일이 기준 — 동명이인이 한 줄로 합쳐지지 않게 한다
         var people = rosterOf(t.id).map(function (m) {
           return { email: m.email, name: m.name, label: memberLabel(m) };
@@ -5245,41 +5254,45 @@
         });
 
         // 팀 합계
-        var tPrem = 0, tCanp = 0, tIntro = 0;
+        var tPrem = 0, tCanp = 0;
         rows.forEach(function (r) { tPrem += Number(r.premium) || 0; tCanp += Number(r.canp) || 0; });
-        Object.keys(goals).forEach(function (k) { tIntro += Number(goals[k].intro) || 0; });
         html += '<div class="section" style="margin-top:26px"><div class="section-head"><div class="org-team-head">'
           + "<h2>" + esc(t.name) + "</h2>"
-          + '<span class="badge gray">' + rows.length + "건 · 월납 " + fmtNum(tPrem) + " · CANP " + fmtNum(tCanp)
-          + (tIntro ? " · 도입 " + tIntro + "명" : "") + "</span></div></div>";
+          + '<span class="badge gray" id="tb-' + t.id + '">실적 ' + rows.length + "건 · 월납 " + fmtNum(tPrem) + " · CANP " + fmtNum(tCanp) + "</span></div></div>";
 
         if (!people.length) {
           html += '<div class="card"><div class="empty">팀원 명단이 비어 있습니다.</div></div></div>';
           return;
         }
+        var goalRows = "", first = idx;
+        people.forEach(function (pp, k) {
+          var g = goalOf(pp), i = first + k;
+          // data-init에 처음 값을 담아두고, 저장할 때 바뀐 것만 보낸다.
+          // 전에는 빈 칸도 그대로 보내서 남의 목표가 조용히 지워졌다.
+          var cell = function (cls, v, ph, isNum) {
+            return BOOT.me.canSetGoal && writable
+              ? '<td><input class="input goal-cell ' + cls + '" data-i="' + i + '"' + (isNum ? ' type="number" min="0"' : "") + ' placeholder="' + ph + '" value="' + esc(v || "") + '" data-init="' + esc(v || "") + '"></td>'
+              : '<td class="num ro">' + (v ? esc(v) : "-") + "</td>";
+          };
+          goalRows += '<tr><td class="ro">' + esc(pp.label) + "</td>"
+            + cell("goal-input", g.goal, "0") + '<td class="ro num" id="goal-now-' + i + '"></td>'
+            + cell("cases-input", g.cases, "0", 1) + cell("intro-input", g.intro, "0", 1) + "</tr>";
+        });
+        html += '<h3 class="perf-sub">목표</h3><div class="card grid-wrap"><table class="grid goal-grid"><thead><tr><th>이름</th><th>목표 CANP</th><th>현재 CANP · 건수 · 달성</th><th>목표 건수</th><th>도입 목표</th></tr></thead><tbody>'
+          + goalRows + '</tbody><tfoot><tr id="tg-' + t.id + '"></tr></tfoot></table></div>'
+          + '<h3 class="perf-sub">실적</h3>';
         people.forEach(function (pp) {
           var n = pp.name;
-          var g = goals[n] || {};
           var i = idx++;
-          var canEdit = BOOT.me.isManager || pp.email === BOOT.me.email;
+          var canEdit = writable && (BOOT.me.isManager || pp.email === BOOT.me.email);
           html += '<div class="section"><div class="section-head">'
             + '<h2 style="font-size:15px">' + esc(pp.label)
-            + (g.goal ? ' <span class="badge blue">목표 ' + esc(g.goal) + "</span>" : "")
-            + (g.cases ? ' <span class="badge blue">' + g.cases + "건</span>" : "")
-            + (g.intro ? ' <span class="badge green">도입 ' + g.intro + "명</span>" : "")
             + '</h2><div class="toolbar">'
-            + (BOOT.me.canSetGoal
-              // data-init에 처음 값을 담아두고, 저장할 때 바뀐 것만 보낸다.
-              // 전에는 빈 칸도 그대로 보내서 남의 목표가 조용히 지워졌다.
-              ? '<input class="input goal-input" data-i="' + i + '" placeholder="목표 CANP" value="' + esc(g.goal || "") + '" data-init="' + esc(g.goal || "") + '" style="width:130px" title="이번 달 목표 CANP">'
-                + '<input class="input cases-input" data-i="' + i + '" type="number" min="0" placeholder="건수" value="' + (g.cases || "") + '" data-init="' + (g.cases || "") + '" style="width:70px" title="이번 달 목표 건수">'
-                + '<input class="input intro-input" data-i="' + i + '" type="number" min="0" placeholder="도입" value="' + (g.intro || "") + '" data-init="' + (g.intro || "") + '" style="width:70px" title="이번 달 도입 인원">'
-              : "")
             + (canEdit ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
             + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
             + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
           sections.push({
-            member: n, email: pp.email, canEdit: canEdit, teamId: t.id,
+            member: n, email: pp.email, canEdit: canEdit, teamId: t.id, goalText: goalOf(pp).goal || "", cases: goalOf(pp).cases || 0, intro: goalOf(pp).intro || 0,
             rows: rows.filter(function (r) {
               return pp.email ? r.member_email === pp.email : (r.member === n && !r.member_email);
             })
@@ -5300,7 +5313,7 @@
           onRowCommit: function (r) { perfCommitRow(perfGrids[i], r); },
           onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(function () { done(); updateSum(perfGrids[i]); }); }
         });
-        perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, grid: g, sumEl: $("perf-sum-" + i) });
+        perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, goalText: s.goalText, cases: s.cases, intro: s.intro, grid: g, sumEl: $("perf-sum-" + i), nowEl: $("goal-now-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
       });
     });
@@ -5314,13 +5327,52 @@
     var el = e.target;
     if (el.dataset && el.dataset.i != null && /goal-input|cases-input|intro-input/.test(el.className)) perfSaveGoal(Number(el.dataset.i));
   });
+  var perfGoalTimer = {};
+  $("perf-body").addEventListener("input", function (e) {
+    var el = e.target;
+    if (!(el.dataset && el.dataset.i != null && /goal-input|cases-input|intro-input/.test(el.className))) return;
+    var i = Number(el.dataset.i), pg = perfGrids[i];
+    if (pg) {
+      if (/goal-input/.test(el.className)) pg.goalText = el.value.trim();
+      if (/cases-input/.test(el.className)) pg.cases = Number(el.value) || 0;
+      if (/intro-input/.test(el.className)) pg.intro = Number(el.value) || 0;
+      updateSum(pg);
+    }
+    clearTimeout(perfGoalTimer[i]);
+    perfGoalTimer[i] = setTimeout(function () { delete perfGoalTimer[i]; perfSaveGoal(i); }, 500);
+  });
   function perfReady(r) { return r.contract_date || r.premium || r.canp; }
   function updateSum(pg, state) {
     var rs = pg.grid.rows().filter(perfReady);
     var prem = 0, canp = 0;
     rs.forEach(function (r) { prem += Number(r.premium) || 0; canp += Number(r.canp) || 0; });
     pg.sumEl.textContent = "합계 " + rs.length + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp) + (state ? " · " + state : "");
+    // 목표 표의 「현재」 칸 — 계약을 넣거나 목표를 고치면 같이 바뀐다
+    if (pg.nowEl) {
+      var goal = Number(String(pg.goalText || "").replace(/[^0-9]/g, ""));
+      pg.nowEl.textContent = fmtNum(canp) + " · " + rs.length + "건" + (goal ? " · " + Math.round(canp / goal * 100) + "%" : "");
+    }
     pg.sumEl.style.color = state && state.indexOf("실패") === 0 ? "var(--red)" : "";
+    drawTeamGoal(pg.teamId);
+  }
+  // 팀 목표 = 그 팀 개인 목표의 합. 실적도 그 팀 계약의 합. 치는 동안 바로 바뀐다.
+  function drawTeamGoal(teamId) {
+    var tr = $("tg-" + teamId);
+    if (!tr) return;
+    var g = 0, c = 0, n = 0, canp = 0, cnt = 0, prem = 0;
+    perfGrids.forEach(function (pg) {
+      if (pg.teamId !== teamId) return;
+      g += Number(String(pg.goalText || "").replace(/[^0-9]/g, "")) || 0; c += Number(pg.cases) || 0; n += Number(pg.intro) || 0;
+      pg.grid.rows().filter(perfReady).forEach(function (r) { canp += Number(r.canp) || 0; prem += Number(r.premium) || 0; cnt++; });
+    });
+    // 팀 실적 = 개인 실적의 합 (2026-10-03 사용자)
+    var tb = $("tb-" + teamId);
+    if (tb) tb.textContent = "실적 " + cnt + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp) + (g ? " / 팀 목표 " + fmtNum(g) + " · " + Math.round(canp / g * 100) + "%" : "");
+    tr.innerHTML = "<td>팀 목표</td>"
+      + '<td class="num">' + (g ? fmtNum(g) : "-") + "</td>"
+      + '<td class="num">' + fmtNum(canp) + " · " + cnt + "건" + (g ? " · " + Math.round(canp / g * 100) + "%" : "") + "</td>"
+      + '<td class="num">' + (c ? c + "건" : "-") + "</td>"
+      + '<td class="num">' + (n ? n + "명" : "-") + "</td>";
   }
   // TA 일지와 같은 길 — 칸을 벗어난 순간 저장. 저장 버튼을 찾아 맨 밑까지 내려가지 않는다
   // (2026-09-14 최연: 「입력하고 딴 데 갔다 오면 없어져 있어요」).
