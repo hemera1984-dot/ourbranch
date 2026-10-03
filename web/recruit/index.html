@@ -176,7 +176,7 @@ b{font-weight:700;color:var(--ink)} .navy b{color:#fff}
 .node .ic svg{width:40px;height:40px;filter:drop-shadow(0 2px 3px rgba(0,0,40,.35))}
 .node .tx{flex:1;min-width:0}
 .node b{color:#fff;display:block;font-size:clamp(20px,2vw,27px);font-weight:700;letter-spacing:-.035em;text-align:left;line-height:1.2}
-.node small{display:block;font-size:13.5px;color:rgba(214,225,250,.72);text-align:left;margin-top:4px}
+.node small{display:block;font-size:13.5px;color:rgba(214,225,250,.72);text-align:left;margin-top:4px;text-wrap:balance}
 .node .go{width:38px;height:38px;border-radius:50%;border:1.5px solid rgba(255,255,255,.28);display:grid;place-items:center;flex:none;transition:background .3s,border-color .3s}
 .node .go svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .3s,stroke .3s}
 .node:hover .go,.node.on .go{background:#fff;border-color:#fff}
@@ -598,7 +598,7 @@ body.fc:not(.pp-off) .deck{right:420px}
 @keyframes inLogo{to{opacity:1;filter:blur(0);transform:none}}
 @keyframes inSheen{to{transform:translateX(120%)}}
 .in-fc{overflow:hidden;margin-top:clamp(10px,1.6vh,18px)}
-.in-fc span{display:block;font-size:clamp(56px,7vw,96px);font-weight:800;letter-spacing:-.04em;line-height:1;color:#081B3A;transform:translateY(110%);animation:inUp .8s cubic-bezier(.2,.9,.2,1) .95s forwards,inOutUp .7s cubic-bezier(.7,0,.3,1) 2.25s forwards}
+.in-fc span{display:block;font-size:clamp(56px,7vw,96px);font-weight:800;letter-spacing:-.04em;line-height:1.15;color:#081B3A;transform:translateY(110%);animation:inUp .8s cubic-bezier(.2,.9,.2,1) .95s forwards,inOutUp .7s cubic-bezier(.7,0,.3,1) 2.25s forwards}
 @keyframes inUp{to{transform:none}}
 .in-sub{margin-top:12px;font-size:clamp(12px,1.2vw,16px);font-weight:600;color:#0046FF;letter-spacing:.7em;opacity:0;animation:inTrack 1.1s cubic-bezier(.2,.8,.2,1) 1.2s forwards,inOutUp .7s cubic-bezier(.7,0,.3,1) 2.3s forwards}
 @keyframes inTrack{to{letter-spacing:.16em;opacity:1}}
