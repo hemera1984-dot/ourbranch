@@ -4195,7 +4195,7 @@
   // 이번 달 목표·현재 실적 — 보고 문구에 자동으로 들어간다
   var repGoal = { goal: "", intro: 0, canp: 0 };
   // 목표 세 줄은 보고 칸 안에 둔다(2026-09-28 사용자: 「일일보고 내용에 있었으면」). 옆에 이번 달 현재 값.
-  // 목표를 쓰는 것은 부지점장 이상(2026-08-05 규칙) — 그 밖에는 값만 보인다.
+  // 내 목표는 내가 쓴다(2026-10-03 사용자). 남의 목표는 업적현황에서 부지점장 이상만.
   // 주인은 이메일로 가린다 — 이름으로 찾으면 동명이인의 목표가 섞인다.
   function mineRow(r) { return r.member_email ? r.member_email === BOOT.me.email : r.member === BOOT.me.name; }
   function loadReportGoal() {
@@ -4211,36 +4211,48 @@
         return x.recruiter_email === BOOT.me.email && String(x.joined_at || "").slice(0, 7) === m;
       }).length;
       repGoal = { goal: g.goal || "", cases: g.cases || 0, intro: g.intro || 0, canp: canp, nowCases: cases, nowIntro: intro, month: m };
-      var can = !!BOOT.me.canSetGoal;
       [["rg-goal", g.goal || ""], ["rg-cases", g.cases || ""], ["rg-intro", g.intro || ""]].forEach(function (x) {
-        var el = $(x[0]); el.value = x[1]; el.dataset.init = String(x[1]); el.readOnly = !can;
-        el.placeholder = can ? el.placeholder : "미설정";
-        el.title = can ? "" : "목표는 부지점장이 업적현황·일일보고에서 정합니다";
+        var el = $(x[0]); el.value = x[1]; el.dataset.init = String(x[1]);
       });
-      var num = Number(String(g.goal || "").replace(/[^0-9]/g, ""));
-      $("rg-goal-now").textContent = "현재 " + fmtNum(canp) + (num ? " · " + Math.round(canp / num * 100) + "%" : "");
-      $("rg-cases-now").textContent = "현재 " + cases + "건";
-      $("rg-intro-now").textContent = "현재 " + intro + "명";
       $("report-goal").textContent = "";
-      var none = !g.goal && !g.cases && !g.intro;
-      $("rg-sum").textContent = (none ? "미설정" : (g.goal ? fmtNum(num || g.goal) : "-") + " · " + (g.cases || "-") + "건 · " + (g.intro || "-") + "명")
-        + "  /  현재 " + fmtNum(canp) + " · " + cases + "건 · " + intro + "명";
-      $("rg-fold").open = can && none;       // 정할 사람이 아직 안 정했을 때만 펴 둔다
+      drawGoalSum();
+      $("rg-fold").open = !g.goal && !g.cases && !g.intro;   // 아직 안 정했을 때만 펴 둔다
     });
   }
-  // 목표는 칸을 벗어나면 바로 저장 — 업적현황의 목표 칸과 같은 자리(perf_goals)다
+  // 줄 요약·달성률은 repGoal에서 그린다 — 치는 동안에도 바로 바뀐다(2026-10-03 사용자)
+  function drawGoalSum() {
+    var g = repGoal, num = Number(String(g.goal || "").replace(/[^0-9]/g, ""));
+    $("rg-goal-now").textContent = "현재 " + fmtNum(g.canp) + (num ? " · " + Math.round(g.canp / num * 100) + "%" : "");
+    $("rg-cases-now").textContent = "현재 " + g.nowCases + "건";
+    $("rg-intro-now").textContent = "현재 " + g.nowIntro + "명";
+    var none = !g.goal && !g.cases && !g.intro;
+    $("rg-sum").textContent = (none ? "미설정" : (g.goal ? fmtNum(num || g.goal) : "-") + " · " + (g.cases || "-") + "건 · " + (g.intro || "-") + "명")
+      + "  /  현재 " + fmtNum(g.canp) + " · " + g.nowCases + "건 · " + g.nowIntro + "명";
+  }
+  // 목표는 치는 대로 저장한다(손을 멈추고 0.5초 뒤) — 칸을 벗어날 때까지 기다리지 않는다.
+  // 저장 뒤 목록을 다시 받지 않는다: 치고 있는 칸 값을 서버 값으로 덮으면 글자가 튄다.
+  var KEY_OF = { "rg-goal": "goal", "rg-cases": "cases", "rg-intro": "intro" }, goalTimer = {};
+  function saveGoal(el) {
+    clearTimeout(goalTimer[el.id]);
+    if (!repGoal.month) return;   // 목표를 아직 못 불러왔으면 어느 달인지 모른다
+    var k = KEY_OF[el.id], v = k === "goal" ? el.value.trim() : (Number(el.value) || 0);
+    if (String(v) === String(el.dataset.init || (k === "goal" ? "" : 0))) return;
+    var me = BOOT.members.filter(function (x) { return x.email === BOOT.me.email; })[0] || {};
+    var body = { member: BOOT.me.name, memberEmail: BOOT.me.email };
+    body[k] = v;
+    api("/perf/goals", { method: "POST", body: { teamId: me.team_id != null ? me.team_id : myTeamId(), month: repGoal.month, goals: [body] } })
+      .then(function () { el.dataset.init = String(v); })
+      .catch(function () { el.value = el.dataset.init || ""; repGoal[k] = el.dataset.init || (k === "goal" ? "" : 0); drawGoalSum(); });
+  }
   document.querySelectorAll(".rg-in").forEach(function (el) {
-    el.addEventListener("change", function () {
-      if (!BOOT.me.canSetGoal || el.readOnly || !repGoal.month) return;   // 목표를 아직 못 불러왔으면 어느 달인지 모른다
-      var me = BOOT.members.filter(function (x) { return x.email === BOOT.me.email; })[0] || {};
-      var body = { member: BOOT.me.name, memberEmail: BOOT.me.email };
-      if (el.id === "rg-goal") body.goal = el.value.trim();
-      if (el.id === "rg-cases") body.cases = Number(el.value) || 0;
-      if (el.id === "rg-intro") body.intro = Number(el.value) || 0;
-      api("/perf/goals", { method: "POST", body: { teamId: me.team_id != null ? me.team_id : myTeamId(), month: repGoal.month, goals: [body] } })
-        .then(function () { toast("목표를 저장했습니다"); loadReportGoal(); })
-        .catch(function () { el.value = el.dataset.init || ""; });
+    el.addEventListener("input", function () {
+      var k = KEY_OF[el.id];
+      repGoal[k] = k === "goal" ? el.value.trim() : (Number(el.value) || 0);
+      drawGoalSum();
+      clearTimeout(goalTimer[el.id]);
+      goalTimer[el.id] = setTimeout(function () { saveGoal(el); }, 500);
     });
+    el.addEventListener("change", function () { saveGoal(el); });
   });
 
   // 지난 보고 그대로 가져오기 — 매일 비슷한 일정을 다시 치지 않게.

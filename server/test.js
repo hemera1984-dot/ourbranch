@@ -845,6 +845,9 @@ async function main() {
   assert.equal(gCase.cases, 12);
   assert.equal(gCase.goal, "1,200(120)");
   assert.equal(gCase.intro, 4);
+  // 내 목표는 내가 정한다(2026-10-03 사용자) — 남의 것은 여전히 막힌다
+  { const r = await api("t-fc1", "POST", "/perf/goals", { month: "2026-08", goals: [{ member: "팀원1", memberEmail: "FC1@x.com", cases: 3 }] }); assert.equal(r.status, 200, await r.text()); }
+  assert.equal((await api("t-fc1", "POST", "/perf/goals", { month: "2026-08", goals: [{ member: "팀원1", memberEmail: "fc1@x.com" }, { member: "부", memberEmail: "esl1@x.com", cases: 1 }] })).status, 403);
 
   // 46) 권한 순서: 총관리자 > 지점장 > 수석 부지점장 > 부지점장 (2026-08-05 사용자)
   // 수석과 부지점장은 마이가디언 등급이 둘 다 ESL이라 등급으로만 비교하면 뚫린다.

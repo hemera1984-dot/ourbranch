@@ -1621,12 +1621,14 @@ route("DELETE", /^\/perf\/(\d+)$/, false, (req, res, user, m) => {
   send(res, 200, { ok: true });
 });
 
-route("POST", /^\/perf\/goals$/, true, async (req, res, user) => {
+route("POST", /^\/perf\/goals$/, false, async (req, res, user) => {
   const b = await readJson(req);                          // { teamId?, month, goals: [{member, goal}] }
   const teamId = b.teamId ?? user.teamId;
   if (teamId == null || !b.month || !Array.isArray(b.goals)) return send(res, 400, { error: "팀·월·목표가 없습니다" });
   if (!canWriteTeam(user, teamId)) return send(res, 403, { error: "권한 없음" });
-  if (!canSetGoal(user)) return send(res, 403, { error: "목표는 부지점장 이상만 정합니다" });
+  // 남의 목표는 부지점장 이상만. 내 목표는 내가 정한다(2026-10-03 사용자: 팀원이 일일보고에서 목표를 못 넣었다).
+  const mine = g => g.memberEmail && String(g.memberEmail).toLowerCase() === String(user.email).toLowerCase();
+  if (!(user.isManager && canSetGoal(user)) && !b.goals.every(mine)) return send(res, 403, { error: "남의 목표는 부지점장 이상만 정합니다" });
   // 목표의 주인은 이메일이다 — 같은 팀에 동명이인이 있어도 서로를 덮어쓰지 않는다.
   // 이메일이 없는 자리(명단 밖 이름)는 「이름:홍길동」을 열쇠로 쓴다.
   const keyOf = (email, name) => email || ("이름:" + name);
