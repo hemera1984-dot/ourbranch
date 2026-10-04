@@ -1217,10 +1217,13 @@ if (process.env.PUSH_TEST === "1")   // 시험에서 시각을 정해 한 번 �
 route("GET", /^\/attendance$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const date = q.get("date") || today();
+  // 팀이 없는 사람(지점장 등)의 보고는 본인과 지점 전체를 보는 사람만 — canSeeTeam(_, null)은 전원 통과라
+  // 지점장 보고가 지점 전원에게 열려 있었다(코드 점검 2026-10-04, 사용자: 막는다)
   const emails = new Set(
     db.prepare("SELECT email, team_id FROM members").all()
-      .filter(m => canSeeTeam(user, m.team_id)).map(m => m.email)
+      .filter(m => m.team_id == null ? (user.seesAll || m.email === user.email) : canSeeTeam(user, m.team_id)).map(m => m.email)
   );
+  emails.add(user.email);                                   // 명단 밖이어도 내 보고는 내가 본다
   const list = db.prepare("SELECT * FROM attendance WHERE date = ?").all(date)
     .filter(a => emails.has(a.email));
   send(res, 200, list);

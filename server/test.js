@@ -374,6 +374,11 @@ async function main() {
 
   // 14) 조직도 수정 권한 — 총관리자·지점장은 전 팀, 부지점장은 자기 팀만
   assert.equal((await api("t-super", "POST", "/admin/members", { email: "bm@x.com", name: "지점장", teamId: null, role: "지점장" })).status, 200);
+  // 팀이 없는 지점장의 보고는 팀원에게 안 보인다 — 본인·지점 전체를 보는 사람만(2026-10-04 사용자: 막는다)
+  await api("t-bm", "POST", "/attendance", { date: "2026-09-01", present: true, work: "지점 회의" });
+  assert.ok(!(await (await api("t-fc1", "GET", "/attendance?date=2026-09-01")).json()).some(a => a.email === "bm@x.com"));
+  assert.ok((await (await api("t-bm", "GET", "/attendance?date=2026-09-01")).json()).some(a => a.email === "bm@x.com"));
+  assert.ok((await (await api("t-super", "GET", "/attendance?date=2026-09-01")).json()).some(a => a.email === "bm@x.com"));
   // 14-1) 지점장은 팀 소속이 없어도 전 팀 구성원을 고칠 수 있다
   assert.equal((await api("t-bm", "POST", "/admin/members", { email: "fc2@x.com", name: "팀원2", teamId: 2, role: "부팀장" })).status, 200);
   let bootBm = await (await api("t-bm", "GET", "/bootstrap")).json();

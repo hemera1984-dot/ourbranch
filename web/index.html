@@ -787,7 +787,7 @@
   var REPLY_KINDS = OFFICIAL_KINDS.filter(function (k) { return k !== "마감"; }).concat(["회의"]);
   function takesReply(e) { return REPLY_KINDS.indexOf(e.kind) >= 0; }
 
-  // 예전에 저장된 구분(상담·강의·면접·GROW)도 색·형식은 그대로 읽는다.
+  // 예전에 저장된 구분(상담·강의·면접·회의)도 색·형식은 그대로 읽는다. GROW는 지금 목록에 있다(2026-10-04 사용자).
   // 목록에서만 뺐다 — 지난 기록을 깨뜨리지 않기 위해서다.
   var OLD_KINDS = ["상담", "강의", "면접", "회의"];
   function knownKind(k) { return KINDS.indexOf(k) >= 0 || OLD_KINDS.indexOf(k) >= 0; }
