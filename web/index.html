@@ -5795,9 +5795,13 @@
     setTimeout(function () { el.hidden = true; }, still ? 700 : 1350);
   })();
 
+  // 주소의 ?token= 은 개발 서버(dev.js) 전용 — 운영에서 받으면 토큰이 주소·방문 기록에 남고,
+  // 남의 토큰이 든 링크로 그 사람으로 로그인된다(코드 점검 2026-10-04, 사용자: 막는다). 운영은 구글 로그인만.
+  var devHost = /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/.test(location.hostname);
   var urlToken = new URLSearchParams(location.search).get("token");
   if (inviteCode) history.replaceState(null, "", location.pathname + location.hash);
-  if (urlToken) { history.replaceState(null, "", location.pathname + location.hash); tryEnter(urlToken); }
+  if (urlToken) history.replaceState(null, "", location.pathname + location.hash);   // 운영이어도 주소에서는 지운다
+  if (urlToken && devHost) tryEnter(urlToken);
   else if (localStorage.getItem("ob_token")) tryEnter(localStorage.getItem("ob_token"), true);
   else showGate();
 })();
