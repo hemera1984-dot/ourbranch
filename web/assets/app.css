@@ -1488,3 +1488,7 @@ html, body { overscroll-behavior-y: contain; }
 :root[data-theme="dark"] .seg .seg-btn.active.primary, :root[data-theme="dark"] .pickchip input:checked + span,
 :root[data-theme="dark"] .gchip.on, :root[data-theme="dark"] .chip-f.on { color: #24090f; }
 :root[data-theme="dark"] .fab { box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+
+/* 코덱스 교차검증 반영(2026-10-04) — 떠 있는 단추가 맨 아래 입력을 덮지 않게, 조직도 조작 크기 */
+@media (max-width: 900px) { #screen-home, #screen-sched .mobile-only { padding-bottom: 96px; } }
+@media (pointer: coarse) { .oc-under, .oc-off { width: 40px; height: 40px; line-height: 38px; font-size: var(--fs-b); } .oc-off { margin-left: 6px; } }

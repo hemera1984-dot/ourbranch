@@ -109,7 +109,7 @@
       <!-- 폰에서 설치 안 한 사람에게만 — 단추 하나로 설치까지(2026-10-04 사용자) -->
       <div class="install-bar" id="install-bar" hidden>
         <div><strong>앱으로 설치하기</strong><span>아이콘 한 번에 열리고 보고 알림을 받습니다.</span></div>
-        <button type="button" class="btn primary" id="install-go">앱 설치</button>
+        <button type="button" class="btn" id="install-go">앱 설치</button>
         <button type="button" class="install-x" id="install-x" aria-label="닫기">×</button>
       </div>
       <!-- 맨 위는 출석 체크 하나(디자인 2판 B2·D2) — 누르면 「출근함 09:12」로 바뀐다 -->
@@ -656,7 +656,7 @@
     if (b) applySize(b.dataset.size);
   });
   // 화면 머리는 제목 한 줄 — 설명은 제목 옆 「?」를 누르면 편다(디자인 2판 A4).
-  // 처음 몇 번은 펴 둔다: 화면마다 세 번 열 때까지(기기별 기억).
+  // 처음 한 번만 펴 둔다(기기별 기억) — 세 번이던 것을 코덱스 교차검증 뒤 줄였다(설명이 업무 정보와 다툰다).
   document.querySelectorAll("main section > h1").forEach(function (h) {
     var d = h.nextElementSibling;
     if (!d || !d.classList.contains("page-desc")) return;
@@ -666,7 +666,7 @@
     h.appendChild(b);
     var seen = 0;
     try { seen = Number(localStorage.getItem(key) || 0); localStorage.setItem(key, String(seen + 1)); } catch (e) {}
-    if (seen < 3) d.classList.add("show");
+    if (seen < 1) d.classList.add("show");
     b.addEventListener("click", function () { d.classList.toggle("show"); });
   });
   var taGrid = null, perfGrids = [], evGrid = null;
@@ -1098,6 +1098,8 @@
       }).length;
       var n = unread + undone;
       $("tab-dot").hidden = !(n > 0);
+      // 홈 화면 앱 아이콘 배지(아이폰 홈 화면 앱·알림 허용 시). 안 되는 기기는 조용히 넘긴다
+      try { if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); } catch (e) {}
       navBadge("board", "미션·공지", n, "안 읽은 공지 " + unread + "건 · 미달성 미션 " + undone + "건");
     });
     // 수정 요청 — 총관리자에게는 아직 안 본(접수) 건수, 나머지에겐 배지 없음
@@ -1899,7 +1901,7 @@
       var goalN = Number(String(myGoal.goal || "").replace(/[^0-9]/g, ""));
       tiles.push('<div class="tile' + (lead ? "" : " w2") + '"><p class="tile-label">이번 달 내 목표</p>'
         + (goalN
-          ? '<div class="tile-num">' + fmtMan(myCanp) + ' <small>/ ' + fmtMan(goalN) + " · " + Math.round(myCanp / goalN * 100) + "%</small></div>" + goalBar(myCanp, goalN)
+          ? '<div class="tile-num">' + fmtMan(myCanp) + ' <small>/ 목표 ' + fmtMan(goalN) + " · " + Math.round(myCanp / goalN * 100) + "%</small></div>" + goalBar(myCanp, goalN)
           : '<div class="tile-num">' + fmtMan(myCanp) + ' <small>CANP</small></div><p class="tile-sub"><a class="tile-more" href="#att">일일보고에서 목표 정하기</a></p>')
         + '<div class="kv"><span>계약</span><b>' + myCases + "<small>건</small>" + (myGoal.cases ? " / " + myGoal.cases + "<small>건</small>" : "") + "</b></div></div>");
       if (lead) {
@@ -1907,7 +1909,7 @@
         (res[4].goals || []).forEach(function (x) { if (x.team_id === teamId) tGoal += Number(String(x.goal || "").replace(/[^0-9]/g, "")) || 0; });
         perfRows.forEach(function (r) { tCanp += Number(r.canp) || 0; });
         tiles.push('<div class="tile"><p class="tile-label">팀 실적 / 팀 목표</p>'
-          + '<div class="tile-num">' + fmtMan(tCanp) + (tGoal ? ' <small>/ ' + fmtMan(tGoal) + " · " + Math.round(tCanp / tGoal * 100) + "%</small>" : "") + "</div>"
+          + '<div class="tile-num">' + fmtMan(tCanp) + (tGoal ? ' <small>/ 목표 ' + fmtMan(tGoal) + " · " + Math.round(tCanp / tGoal * 100) + "%</small>" : "") + "</div>"
           + (tGoal ? goalBar(tCanp, tGoal) : "") + '<p class="tile-sub"><a class="tile-more" href="#perf">업적현황</a></p></div>');
       }
       if (myTasks.length) todos.push({ t: "미달성 미션 " + myTasks.length + "건 보기", href: "#board" });
@@ -3232,6 +3234,7 @@
 
   // 하루 상세 목록 — 모바일 하루 보기와 달력 우측 패널이 같이 쓴다
   function dayGroupsHtml(evs, teamId, onlyWithItems) {
+    if (!evs.length) return "";   // 빈 날에 「일정 없음」 묶음을 줄줄이 늘어놓지 않는다 — 부르는 쪽이 한 줄로 알린다
     var groups = [{ em: "", name: "팀 공유", sub: "" }];
     rosterOf(teamId).forEach(function (m) { groups.push({ em: m.email, name: memberLabel(m), sub: roleTag(m.role) }); });
     evs.forEach(function (e) {
@@ -4010,8 +4013,8 @@
     var meOut = selDate === fmtDate(new Date()) && ppAtt.date === selDate && !att[BOOT.me.email] && list.some(function (m) { return m.email === BOOT.me.email; });
     box.innerHTML = '<div class="pp-head"><strong>사람 고르기</strong>'
       + '<span class="pp-in">출근 ' + inN + "/" + list.length + "</span>"
-      + (meOut ? '<button type="button" class="btn primary pp-check">출석 체크</button>' : "")
-      + '<button type="button" class="btn pp-all">모두</button><button type="button" class="btn pp-me">나만</button></div>'
+      + (meOut ? '<button type="button" class="btn pp-check">출석 체크</button>' : "")
+      + '<button type="button" class="btn text pp-all">모두</button><button type="button" class="btn text pp-me">나만</button></div>'
       + '<div class="pp-chips">' + list.map(function (m) {
           return '<button type="button" class="pp-chip' + (peopleOff[m.email] ? " off" : "") + (att[m.email] ? " in" : "") + '" data-em="' + esc(m.email) + '"'
             + (att[m.email] ? ' title="출근 ' + esc(att[m.email]) + '"' : "") + ">"
@@ -4434,7 +4437,7 @@
     var g = repGoal, num = goalNum(g.goal), t = g.team;
     function line(label, now, goal, unit) {
       return '<span class="rg-line"><span>' + label + '</span><b>' + (unit ? now + "<small>" + unit + "</small>" : fmtMan(now))
-        + (goal ? " / " + (unit ? goal + "<small>" + unit + "</small>" : fmtMan(goal)) : ' <small class="none">목표 아직 없음</small>') + "</b></span>";
+        + (goal ? " / 목표 " + (unit ? goal + "<small>" + unit + "</small>" : fmtMan(goal)) : ' <small class="none">목표 아직 없음</small>') + "</b></span>";
     }
     $("rg-goal-now").textContent = "현재 " + fmtMan(g.canp) + (num ? " · " + Math.round(g.canp / num * 100) + "%" : "");
     $("rg-cases-now").textContent = "현재 " + g.nowCases + "건";
@@ -5006,7 +5009,7 @@
         + " · 달성 " + pr.num + "/" + pr.denom + (doneNames ? " (" + esc(doneNames) + ")" : "")
         + (t.content ? " · " + esc(t.content) : "")
         + (t.due ? ' · <span style="color:' + (overdue ? "var(--red)" : "inherit") + '">기한 ' + esc(t.due) + (overdue ? " 경과" : "") + "</span>" : "") + "</span>"
-        + (isMyTask(t) ? '<button class="btn' + (myDone(t) ? "" : " primary") + ' task-done" data-id="' + t.id + '">' + (myDone(t) ? "달성 취소" : "달성") + "</button>" : "")
+        + (isMyTask(t) ? '<button class="btn' + (myDone(t) ? " text" : "") + ' task-done" data-id="' + t.id + '">' + (myDone(t) ? "달성 취소" : "달성") + "</button>" : "")
         + (BOOT.me.isManager ? '<button class="btn task-del" data-id="' + t.id + '">삭제</button>' : "")
         + "</div>";
     }).join("") + "</div>";
@@ -5608,7 +5611,7 @@
     if (pg.nowEl) {
       var goal = Number(String(pg.goalText || "").replace(/[^0-9]/g, ""));
       pg.nowEl.textContent = pg.barEl
-        ? fmtMan(canp) + (goal ? " / " + fmtMan(goal) : " · 목표 없음")
+        ? fmtMan(canp) + (goal ? " / 목표 " + fmtMan(goal) : " · 목표 없음")
         : fmtNum(canp) + " · " + rs.length + "건" + (goal ? " · " + Math.round(canp / goal * 100) + "%" : "");
     }
     if (pg.barEl) {
@@ -5636,7 +5639,7 @@
     if (tb) tb.textContent = "실적 " + cnt + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp) + (g ? " / 팀 목표 " + fmtNum(g) + " · " + Math.round(canp / g * 100) + "%" : "");
     if (tr.tagName !== "TR") {
       tr.innerHTML = '<p class="tile-label">팀 실적 / 팀 목표</p><div class="tile-num">' + fmtMan(canp)
-        + (g ? ' <small>/ ' + fmtMan(g) + " · " + Math.round(canp / g * 100) + "%</small>" : "") + "</div>"
+        + (g ? ' <small>/ 목표 ' + fmtMan(g) + " · " + Math.round(canp / g * 100) + "%</small>" : "") + "</div>"
         + (g ? goalBar(canp, g) : "")
         + '<div class="kv"><span>계약</span><b>' + cnt + "<small>건</small>" + (c ? " / " + c + "<small>건</small>" : "") + "</b></div>"
         + '<div class="kv"><span>도입 목표</span><b>' + (n ? n + "<small>명</small>" : "아직 없음") + "</b></div>";
