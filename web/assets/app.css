@@ -1529,3 +1529,26 @@ html, body { overscroll-behavior-y: contain; }
 #wl-controls { display: inline-flex; align-items: center; gap: 10px; flex: 1; }
 #wl-controls[hidden] { display: none; }
 @media (max-width: 1280px) { .wl { gap: 6px; } .wl-col { padding: 8px 6px; } }
+
+/* ── 메뉴 아이콘 + 노트북 아이콘 막대(64px) ── */
+.nav a { display: flex; align-items: center; gap: 10px; }
+.nav-ic { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
+.nav a.active .nav-ic { opacity: 1; stroke-width: 2.3; }
+.brand-mark { display: none; }
+@media (min-width: 901px) {
+  body.rail .sidebar { width: 64px; }
+  body.rail .main { margin-left: 64px; }
+  body.rail #side-handle { left: 64px; }
+  body.rail .brand { display: flex; justify-content: center; padding: 14px 0; }
+  body.rail .brand-name, body.rail .brand-caption { display: none; }
+  body.rail .brand-mark { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px;
+    background: rgba(255, 255, 255, .12); color: #fff; font-weight: 800; font-size: var(--fs-l); }
+  body.rail .nav-group-label { height: 1px; margin: 8px 16px; padding: 0; font-size: 0; background: rgba(255, 255, 255, .12); }
+  body.rail .nav-group-label:first-child { display: none; }
+  body.rail .nav a { position: relative; justify-content: center; padding: 11px 0; border-left-width: 3px; }
+  body.rail .nav-t { display: none; }
+  body.rail .nav-ic { width: 22px; height: 22px; }
+  body.rail .nav-badge { position: absolute; top: 5px; right: 10px; margin: 0; min-width: 16px; padding: 0 4px; font-size: 10px; line-height: 16px; }
+  body.rail .side-user { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { body.rail .sidebar, body.rail .main { transition: none; } }

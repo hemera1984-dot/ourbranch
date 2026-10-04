@@ -51,28 +51,29 @@
 
 <div id="app" class="shell" hidden>
   <aside class="sidebar">
-    <a class="brand" href="#home" id="brand"><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></a>
+    <a class="brand" href="#home" id="brand"><span class="brand-mark" id="brand-mark" aria-hidden="true"></span><span class="brand-name" id="brand-name">지점</span><span class="brand-caption">지점 팀 관리</span></a>
     <nav class="nav" id="nav">
+      <!-- 아이콘: Lucide (ISC, lucide.dev) -->
       <p class="nav-group-label">업무</p>
-      <a href="#home" data-screen="home">홈</a>
-      <a href="#org" data-screen="org">조직도</a>
-      <a href="#sched" data-screen="sched">일정</a>
-      <a href="#att" data-screen="att">일일보고</a>
-      <a href="#board" data-screen="board">미션·공지</a>
-      <a href="#perf" data-screen="perf">업적현황</a>
-      <a href="#ledger" data-screen="ledger">가계부</a>
+      <a href="#home" data-screen="home" title="홈"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nav-t">홈</span></a>
+      <a href="#org" data-screen="org" title="조직도"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="nav-t">조직도</span></a>
+      <a href="#sched" data-screen="sched" title="일정"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span class="nav-t">일정</span></a>
+      <a href="#att" data-screen="att" title="일일보고"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg><span class="nav-t">일일보고</span></a>
+      <a href="#board" data-screen="board" title="미션·공지"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span class="nav-t">미션·공지</span></a>
+      <a href="#perf" data-screen="perf" title="업적현황"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg><span class="nav-t">업적현황</span></a>
+      <a href="#ledger" data-screen="ledger" title="가계부"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg><span class="nav-t">가계부</span></a>
       <p class="nav-group-label">리쿠르팅</p>
-      <a href="#ta" data-screen="ta">TA 일지</a>
-      <a href="#recruit" data-screen="recruit">도입 현황</a>
-      <a href="#" data-open="recruit-intro">리쿠르팅 소개</a>
+      <a href="#ta" data-screen="ta" title="TA 일지"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg><span class="nav-t">TA 일지</span></a>
+      <a href="#recruit" data-screen="recruit" title="도입 현황"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg><span class="nav-t">도입 현황</span></a>
+      <a href="#" data-open="recruit-intro" title="리쿠르팅 소개"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></svg><span class="nav-t">리쿠르팅 소개</span></a>
       <p class="nav-group-label">자료</p>
-      <a href="#docs" data-screen="docs">서류함</a>
+      <a href="#docs" data-screen="docs" title="서류함"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span class="nav-t">서류함</span></a>
       <p class="nav-group-label">내 계정</p>
-      <a href="#me" data-screen="me">내 정보</a>
-      <a href="#req" data-screen="req">수정 요청</a>
+      <a href="#me" data-screen="me" title="내 정보"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-t">내 정보</span></a>
+      <a href="#req" data-screen="req" title="수정 요청"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-t">수정 요청</span></a>
       <p class="nav-group-label">관리</p>
-      <a href="#invite" data-screen="invite">초대·승인</a>
-      <a href="#install" data-screen="install">앱 설치</a>
+      <a href="#invite" data-screen="invite" title="초대·승인"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><span class="nav-t">초대·승인</span></a>
+      <a href="#install" data-screen="install" title="앱 설치"><svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg><span class="nav-t">앱 설치</span></a>
     </nav>
     <div class="side-user"><strong id="me-name"></strong><span id="me-role"></span>
       <button type="button" class="theme-toggle" id="theme-toggle">다크모드</button>
@@ -1078,6 +1079,7 @@
     applyFolds();
     document.title = BOOT.branchName || "지점";
     $("brand-name").textContent = BOOT.branchName || "지점";
+    $("brand-mark").textContent = (BOOT.branchName || "지점").charAt(0);
     $("me-name").textContent = BOOT.me.name;
     // 직급이 먼저다. 총관리자는 직급이 아니라 권한이라 뒤에 덧붙인다
     $("me-role").textContent = (myGrade() || "") + (BOOT.me.isSuper ? " · 총관리자" : "");
@@ -1246,7 +1248,9 @@
   function navBadge(screenName, label, n, title) {
     var link = document.querySelector('#nav a[data-screen="' + screenName + '"]');
     if (!link) return;
-    link.textContent = label;
+    var t = link.querySelector(".nav-t");
+    if (t) t.textContent = label; else link.textContent = label;
+    var old = link.querySelector(".nav-badge"); if (old) old.remove();
     if (n > 0) {
       var b = document.createElement("span");
       b.className = "nav-badge";
@@ -1416,13 +1420,20 @@
   // 겹치기 때문에 달력·조직도 폭이 늘었다 줄었다 하지 않는다 (2026-08-04 사용자).
   // 양옆 칸은 손잡이를 눌러 「완전히」 접는다 — 조직도·달력을 화면 폭 끝까지 쓰려고 만든 것이라
   // 얇은 줄을 남기면 뜻이 없다(2026-08-05 사용자). 접은 상태는 기억한다.
+  // 메뉴 모양 — 「rail」(아이콘 막대 64px) / 「full」. 정한 적 없으면 화면 폭으로: 1500px 아래 노트북은 막대
+  // (2026-10-04 사용자: 노트북에서 달력이 안 보인다 → 1번 메뉴 접기). 예전의 「완전히 접기」(menu-off)는 막대가 대신한다.
+  function railOn() {
+    var pick = recall("메뉴모양");
+    return pick ? pick === "rail" : window.innerWidth < 1500;
+  }
   function applyFolds() {
-    var side = recall("메뉴접힘") === "1";
+    var rail = railOn();
     var day = recall("일정칸접힘") === "1";
-    document.body.classList.toggle("menu-off", side);
+    document.body.classList.remove("menu-off");
+    document.body.classList.toggle("rail", rail);
     document.body.classList.toggle("day-off", day);
-    $("side-handle").textContent = side ? "▶" : "◀";
-    $("side-handle").title = side ? "메뉴 펴기" : "메뉴 접기";
+    $("side-handle").textContent = rail ? "▶" : "◀";
+    $("side-handle").title = rail ? "메뉴 펴기" : "메뉴 접기";
     $("day-fold").textContent = day ? "◀" : "▶";
     $("day-fold").title = day ? "오른쪽 칸 펴기" : "오른쪽 칸 접기";
   }
@@ -1430,7 +1441,8 @@
     remember(key, recall(key) === "1" ? "0" : "1");   // "0"도 저장된다(문자열은 참)
     applyFolds();
   }
-  $("side-handle").addEventListener("click", function () { toggleFold("메뉴접힘"); });
+  $("side-handle").addEventListener("click", function () { remember("메뉴모양", railOn() ? "full" : "rail"); applyFolds(); });
+  window.addEventListener("resize", function () { if (!recall("메뉴모양")) applyFolds(); });
   $("day-fold").addEventListener("click", function () { toggleFold("일정칸접힘"); });
 
   // 사이드바 지점명 = 홈 (로고를 누르면 첫 화면으로 — 익숙한 동작)
