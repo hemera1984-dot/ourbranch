@@ -2,13 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="text-scale" content="scale">
 <title>하랑지점</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/subsets/Paperlogy-dynamic-subset.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <link rel="stylesheet" href="assets/app.css">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#481820">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1f2123" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,6 +19,7 @@
 </head>
 <body>
 
+<div class="net-bar" id="net-bar" hidden>인터넷 연결이 끊겼습니다. 연결되면 다시 받아옵니다.</div>
 <div class="app-splash" id="app-splash" hidden>
   <div class="splash-center">
     <span class="splash-mark"><img src="assets/icon-512.png" alt=""><span class="splash-shine"></span></span>
@@ -79,11 +82,12 @@
   <!-- 폰 하단 탭 — 자주 쓰는 넷만. 나머지는 「더보기」.
        상단 가로 스크롤 메뉴는 항목이 11개라 폰에서 오른쪽 절반이 보이지 않았다. -->
   <nav class="tabbar" id="tabbar" hidden>
-    <a href="#home" data-screen="home"><span>홈</span></a>
-    <a href="#sched" data-screen="sched"><span>일정</span></a>
-    <a href="#att" data-screen="att"><span>일일보고</span></a>
-    <a href="#board" data-screen="board"><span>미션·공지</span><i class="tab-dot" id="tab-dot" hidden></i></a>
-    <button type="button" id="tab-more"><span>더보기</span></button>
+    <!-- 아이콘: Lucide (ISC, lucide.dev) -->
+    <a href="#home" data-screen="home"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>홈</span></a>
+    <a href="#sched" data-screen="sched"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span>일정</span></a>
+    <a href="#att" data-screen="att"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg><span>일일보고</span></a>
+    <a href="#board" data-screen="board"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg><span>공지</span><i class="tab-dot" id="tab-dot" hidden></i></a>
+    <button type="button" id="tab-more"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg><span>더보기</span></button>
   </nav>
 
   <div id="undo-bar" class="undo-bar" hidden></div>
@@ -94,31 +98,30 @@
     <div id="soon-bar" class="soon-bar" hidden></div>
     <div class="toolbar" id="ctx-bar" style="margin-bottom:14px">
       <select id="team-pick" class="input" hidden></select>
-      <span id="month-nav" hidden>
-        <button class="btn" id="month-prev">이전 달</button>
-        <strong id="month-label" style="font-variant-numeric:tabular-nums;margin:0 6px"></strong>
-        <button class="btn" id="month-next">다음 달</button>
+      <span id="month-nav" class="month-nav" hidden>
+        <button type="button" class="db-ar" id="month-prev" aria-label="이전 달">‹</button>
+        <strong id="month-label"></strong>
+        <button type="button" class="db-ar" id="month-next" aria-label="다음 달">›</button>
       </span>
     </div>
 
     <section id="screen-home" hidden>
       <!-- 폰에서 설치 안 한 사람에게만 — 단추 하나로 설치까지(2026-10-04 사용자) -->
       <div class="install-bar" id="install-bar" hidden>
-        <div><strong>앱으로 설치하기</strong><span>홈 화면 아이콘 하나로 바로 열리고, 저녁 보고 알림도 받습니다.</span></div>
+        <div><strong>앱으로 설치하기</strong><span>아이콘 한 번에 열리고 보고 알림을 받습니다.</span></div>
         <button type="button" class="btn primary" id="install-go">앱 설치</button>
         <button type="button" class="install-x" id="install-x" aria-label="닫기">×</button>
       </div>
+      <!-- 맨 위는 출석 체크 하나(디자인 2판 B2·D2) — 누르면 「출근함 09:12」로 바뀐다 -->
       <section class="hero">
         <div class="hero-copy">
           <p class="hero-date" id="home-date"></p>
           <h1 class="hero-greet" id="home-greet"></h1>
-          <p class="hero-sub">오늘 해야 할 것과 팀 소식을 한 판에 모았습니다.</p>
-          <button type="button" class="btn primary mobile-only" id="home-add" style="margin-top:10px;padding:11px 18px;font-size:15px">+ 일정 적기</button>
-          <button type="button" class="btn mobile-only scan-btn" style="margin-top:10px;padding:11px 18px;font-size:15px">수첩 스캔</button>
         </div>
-        <div class="hero-metrics" id="home-metrics"></div>
+        <div class="hero-act" id="home-check"></div>
       </section>
       <div class="bento" id="home-bento"></div>
+      <button type="button" class="btn primary fab mobile-only" id="home-add">+ 일정 적기</button>
     </section>
 
     <section id="screen-org" hidden>
@@ -161,6 +164,11 @@
           <div id="me-place" class="me-fixed"></div>
           <span class="note">팀·직급은 부지점장·지점장이 조직도에서 정합니다. 바뀌어야 하면 말씀해 주세요.</span>
         </div>
+        <div class="me-field">
+          <label>글자 크기</label>
+          <div class="seg" id="me-size"><button type="button" class="btn seg-btn" data-size="">보통</button><button type="button" class="btn seg-btn" data-size="lg">크게</button></div>
+          <span class="note">이 기기에서만 바뀝니다. 누르면 바로 적용됩니다.</span>
+        </div>
         <div class="toolbar" style="margin-top:12px">
           <button class="btn primary" id="me-save">저장</button>
           <span class="note" id="me-msg"></span>
@@ -178,7 +186,7 @@
 
       <div class="card card-pad" style="margin-bottom:14px">
         <div class="toolbar">
-          <strong style="font-size:15px">초대</strong>
+          <strong style="font-size:var(--fs-b)">초대</strong>
           <select id="inv-team" class="input" hidden></select>
           <button class="btn primary" id="inv-make">초대 문구 만들기</button>
           <span class="note">누구나 초대할 수 있습니다. 직급은 승인할 때 정합니다.</span>
@@ -309,31 +317,40 @@
 
     <section id="screen-sched" hidden>
       <p class="eyebrow">일정</p>
-      <h1 class="desktop-only">주간 확인표</h1>
-      <h1 class="mobile-only">오늘 일정</h1>
+      <h1>일정</h1>
       <div id="ev-changes" class="ev-changes" hidden></div>
 
       <div class="mobile-only">
-        <div class="toolbar" style="margin-bottom:10px">
-          <button class="btn" id="m-cal-prev">이전 달</button>
-          <button class="btn" id="m-cal-today">오늘</button>
-          <button class="btn" id="m-cal-next">다음 달</button>
-          <strong id="m-cal-label" style="font-variant-numeric:tabular-nums"></strong>
-          <button class="btn" id="m-cal-copy">지난달 가져오기</button>
-          <button class="btn" id="m-cols">사람별</button>
+        <!-- 범위 하나 + 「⋯」(디자인 2판 B4). 단추 열네 개가 달력보다 먼저 나오던 것을 접었다 -->
+        <div class="m-top">
+          <div class="seg" id="m-scope-seg">
+            <button class="btn seg-btn" data-scope="esl" hidden>부지점장</button>
+            <button class="btn seg-btn" data-scope="team">팀 전체</button>
+            <button class="btn seg-btn" data-scope="mine">내 일정</button>
+          </div>
+          <button type="button" class="btn m-more" id="m-more" aria-expanded="false" aria-label="도구 더 보기">⋯</button>
+        </div>
+        <div class="m-tools" id="m-tools" hidden>
+          <button class="btn" id="m-cols">사람별 보기</button>
           <button class="btn tl-tog" type="button">시간순</button>
+          <button class="btn" id="m-cal-copy">지난달 가져오기</button>
           <button class="btn scan-btn">수첩 스캔</button>
         </div>
-        <div class="seg" id="m-scope-seg" style="margin-bottom:10px">
-          <button class="btn seg-btn" data-scope="esl" hidden>부지점장</button>
-          <button class="btn seg-btn" data-scope="team">팀 전체</button>
-          <button class="btn seg-btn" data-scope="mine">내 일정</button>
-        </div>
         <div class="people-pick" id="m-people" hidden></div>
-        <div class="card cal-mini" style="margin-bottom:10px"><div id="m-cal-view"></div></div>
+        <div class="card m-cal">
+          <div class="m-cal-head">
+            <button type="button" class="db-ar" id="m-cal-prev" aria-label="앞으로">‹</button>
+            <strong id="m-cal-label"></strong>
+            <button type="button" class="db-ar" id="m-cal-next" aria-label="뒤로">›</button>
+            <button type="button" class="btn text" id="m-cal-today">오늘</button>
+            <button type="button" class="btn text m-mode" id="m-mode"></button>
+          </div>
+          <div class="wk-strip" id="m-week"></div>
+          <div class="cal-mini" id="m-month"><div id="m-cal-view"></div></div>
+        </div>
         <strong id="day-label" style="display:block;margin:0 0 6px;font-variant-numeric:tabular-nums"></strong>
         <div class="card" id="day-view"></div>
-        <button class="btn primary fab" id="day-add" type="button">일정 추가</button>
+        <button class="btn primary fab" id="day-add" type="button">+ 일정 적기</button>
       </div>
 
       <div id="dcol-wrap" hidden><div class="card" style="overflow-x:auto"><div id="dcol-view"></div></div></div>
@@ -351,24 +368,18 @@
             <button class="btn seg-btn" data-scope="team">팀 전체</button>
             <button class="btn seg-btn" data-scope="mine">내 일정</button>
           </span>
-          <button class="btn" id="cal-prev">이전 달</button>
-          <button class="btn" id="cal-today">이번 달</button>
-          <button class="btn" id="cal-next">다음 달</button>
-          <strong id="cal-label" style="font-variant-numeric:tabular-nums"></strong>
-          <button class="btn" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
-          <button class="btn scan-btn">수첩 스캔</button>
+          <span class="month-nav"><button type="button" class="db-ar" id="cal-prev" aria-label="이전 달">‹</button><strong id="cal-label"></strong><button type="button" class="db-ar" id="cal-next" aria-label="다음 달">›</button></span>
+          <button class="btn text" id="cal-today">이번 달</button>
+          <span class="tb-right"><button class="btn text" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
+          <button class="btn text scan-btn">수첩 스캔</button></span>
         </span>
         <span id="week-controls" hidden>
-          <button class="btn" id="week-prev">이전 주</button>
-          <button class="btn" id="week-today">이번 주</button>
-          <button class="btn" id="week-next">다음 주</button>
-          <strong id="week-label" style="font-variant-numeric:tabular-nums"></strong>
+          <span class="month-nav"><button type="button" class="db-ar" id="week-prev" aria-label="이전 주">‹</button><strong id="week-label"></strong><button type="button" class="db-ar" id="week-next" aria-label="다음 주">›</button></span>
+          <button class="btn text" id="week-today">이번 주</button>
         </span>
         <span id="dc-controls" hidden>
-          <button class="btn" id="dc-prev">이전 날</button>
-          <button class="btn" id="dc-today">오늘</button>
-          <button class="btn" id="dc-next">다음 날</button>
-          <strong id="dc-label" style="font-variant-numeric:tabular-nums"></strong>
+          <span class="month-nav"><button type="button" class="db-ar" id="dc-prev" aria-label="이전 날">‹</button><strong id="dc-label"></strong><button type="button" class="db-ar" id="dc-next" aria-label="다음 날">›</button></span>
+          <button class="btn text" id="dc-today">오늘</button>
           <span class="note">사람이 열, 시간이 세로 — 빈 칸이 그 사람이 비는 시간입니다. 빈 칸을 누르면 그 시간에 일정을 넣습니다.</span>
         </span>
       </div>
@@ -401,27 +412,26 @@
       <p class="eyebrow">하루 상태</p>
       <h1>일일보고</h1>
       <p class="page-desc">한 번 적으면 출석·스케줄에 함께 반영되고, 부지점장이 팀 현황에서 바로 봅니다.</p>
-      <div class="toolbar" style="margin-bottom:10px">
-        <button class="btn" id="att-prev">이전 날</button>
-        <button class="btn" id="att-today">오늘</button>
-        <button class="btn" id="att-tomorrow">내일</button>
-        <button class="btn" id="att-next">다음 날</button>
-        <strong id="att-label" style="font-variant-numeric:tabular-nums"></strong>
-        <span class="note" id="att-summary"></span>
+      <!-- 날짜 이동 단추 넷 → ◀ 날짜 ▶ 띠 하나 + 오늘·내일(디자인 2판 B3) -->
+      <div class="datebar">
+        <button type="button" class="db-ar" id="att-prev" aria-label="이전 날">‹</button>
+        <div class="db-mid"><strong id="att-label"></strong><span class="note" id="att-summary"></span></div>
+        <button type="button" class="db-ar" id="att-next" aria-label="다음 날">›</button>
       </div>
+      <div class="seg db-quick"><button type="button" class="btn seg-btn" id="att-today">오늘</button><button type="button" class="btn seg-btn" id="att-tomorrow">내일</button></div>
 
       <p class="note" id="att-ahead" hidden style="margin:-4px 0 10px">
         저녁이라 <strong>다음 날 보고</strong> 화면으로 열렸습니다. 오늘 현황은 위 「오늘」을 누르세요.</p>
 
       <div class="card card-pad" id="report-box" style="margin-bottom:14px">
         <div class="push-bar" id="push-bar" hidden></div>
-        <div class="toolbar" style="margin-bottom:10px">
-          <strong style="font-size:15px">내 보고</strong>
+        <div class="toolbar" style="margin-bottom:12px">
+          <strong style="font-size:var(--fs-l)">내 보고</strong>
           <span class="note" id="report-goal"></span>
         </div>
         <div class="rep-grid">
           <div class="rep-row"><span>출근 상태</span>
-            <span class="toolbar">
+            <span class="toolbar rep-present">
               <label class="pickchip"><input type="radio" name="rep-present" id="rep-yes" value="1"><span>출근</span></label>
               <label class="pickchip"><input type="radio" name="rep-present" id="rep-no" value="0"><span>미출근</span></label>
               <input class="input" id="rep-reason" placeholder="미출근 사유 (선택)" style="flex:1;min-width:120px">
@@ -429,7 +439,7 @@
           </div>
           <!-- 목표는 한 달에 한 번 정한다 — 매일 쓰는 칸을 밀어내지 않게 한 줄로 접는다(2026-09-28 폰 우선) -->
           <details class="rep-goals" id="rg-fold">
-            <summary><span class="rg-t">이번 달 목표</span> <span class="note" id="rg-sum"></span><span class="rg-team" id="rg-team"></span></summary>
+            <summary><span class="rg-head"><span class="rg-t">이번 달 목표</span><span class="rg-edit">고치기</span></span><span id="rg-sum"></span><span id="rg-team"></span></summary>
             <div class="rep-grid" style="margin-top:8px">
               <div class="rep-row"><span>목표 CANP</span><span class="rep-goal"><input class="input rg-in" id="rg-goal" inputmode="numeric" placeholder="예: 3,000,000"><span class="note" id="rg-goal-now"></span></span></div>
               <div class="rep-row"><span>목표 건수</span><span class="rep-goal"><input class="input rg-in" id="rg-cases" type="number" min="0" inputmode="numeric" placeholder="건"><span class="note" id="rg-cases-now"></span></span></div>
@@ -510,7 +520,7 @@
         후보자 실명·연락처가 들어가는 화면이라 6개월이 지난 기록은 자동으로 지워집니다.</p>
 
       <div class="card card-pad" id="ta-lock" hidden style="max-width:420px">
-        <strong style="font-size:15px">지점 공용 비밀번호</strong>
+        <strong style="font-size:var(--fs-b)">지점 공용 비밀번호</strong>
         <p class="note" id="ta-lock-desc" style="margin:4px 0 10px"></p>
         <div class="toolbar">
           <input class="input" type="password" id="ta-pw" placeholder="비밀번호" style="flex:1;min-width:140px">
@@ -606,7 +616,7 @@
     <section id="screen-perf" hidden>
       <p class="eyebrow">실적</p>
       <h1>업적현황</h1>
-      <p class="page-desc">조직도 명단의 팀원이 그대로 나열됩니다. 위에 목표 표(개인 목표의 합이 팀 목표), 아래에 사람별 계약(합이 팀 실적)입니다. 부지점장부터 위 선택칸으로 다른 팀을 봅니다. 칸을 벗어나면 바로 저장되고 합계도 그때 바뀝니다. 남의 목표는 부지점장이 정하고, 내 목표는 일일보고에서도 넣습니다.</p>
+      <p class="page-desc">위는 팀 합계(개인 목표·실적의 합), 아래는 사람마다 실적과 목표입니다. 칸을 벗어나면 바로 저장됩니다. 남의 목표는 부지점장이 정하고, 내 목표는 일일보고에서도 넣습니다.</p>
       <div id="perf-body"></div>
     </section>
   </main>
@@ -634,6 +644,31 @@
   applyTheme((function () {
     try { return localStorage.getItem("ob_theme") || "light"; } catch (e) { return "light"; }
   })());
+  // 글자 크기 — 기기마다 기억(2026-10-04 디자인 2판 A10). CSS가 --fs-k 하나로 전부 키운다.
+  function applySize(v) {
+    if (v) document.documentElement.dataset.size = v; else delete document.documentElement.dataset.size;
+    document.querySelectorAll("#me-size .seg-btn").forEach(function (b) { b.classList.toggle("active", b.dataset.size === (v || "")); });
+    try { localStorage.setItem("ob_size", v || ""); } catch (e) {}
+  }
+  applySize((function () { try { return localStorage.getItem("ob_size") || ""; } catch (e) { return ""; } })());
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("#me-size .seg-btn");
+    if (b) applySize(b.dataset.size);
+  });
+  // 화면 머리는 제목 한 줄 — 설명은 제목 옆 「?」를 누르면 편다(디자인 2판 A4).
+  // 처음 몇 번은 펴 둔다: 화면마다 세 번 열 때까지(기기별 기억).
+  document.querySelectorAll("main section > h1").forEach(function (h) {
+    var d = h.nextElementSibling;
+    if (!d || !d.classList.contains("page-desc")) return;
+    var sec = h.closest("section"), key = "ob_desc_" + (sec ? sec.id : "");
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "desc-tog"; b.textContent = "?"; b.setAttribute("aria-label", "이 화면 설명");
+    h.appendChild(b);
+    var seen = 0;
+    try { seen = Number(localStorage.getItem(key) || 0); localStorage.setItem(key, String(seen + 1)); } catch (e) {}
+    if (seen < 3) d.classList.add("show");
+    b.addEventListener("click", function () { d.classList.toggle("show"); });
+  });
   var taGrid = null, perfGrids = [], evGrid = null;
   // 직급 — 위에서 아래가 곧 권한 순서다 (2026-08-05 사용자 확정).
   // 총관리자 > 지점장 > 수석 부지점장 > 부지점장 > 팀장 > 부팀장 > 팀원.
@@ -1792,7 +1827,6 @@
       var taRows = res[3].filter(function (r) { return r.team_id === teamId; });
       var myTa = taRows.filter(function (r) { return r.author === BOOT.me.name; });
       var perfRows = res[4].rows.filter(function (r) { return r.team_id === teamId; });
-      var myPerf = perfRows.filter(function (r) { return r.member === BOOT.me.name; });
 
       function evLine(e) {
         return '<div class="tile-row">'
@@ -1808,23 +1842,25 @@
       var attList = res[5];
       var myAtt = attList.filter(function (a) { return a.email === BOOT.me.email; })[0];
       var rosterEmails = rosterOf(teamId).map(function (m) { return m.email; });
+      // 출석 체크 — 홈 맨 위 한 자리(전에는 두 군데였다). 했으면 시각을 보여 주는 상태가 된다
+      $("home-check").innerHTML = myAtt && myAtt.present
+        ? '<div class="checked-in"><span>출근함</span><b>' + esc((myAtt.checked_at || "").slice(11, 16)) + "</b></div>"
+        : '<button type="button" class="btn primary att-check big">출석 체크하기</button>';
       // 오늘 할 일 — 아침에 3초로 끝내는 체크리스트 (안 한 것만 남는다)
       var todos = [];
-      if (!(myAtt && myAtt.present))
-        todos.push({ t: "출석 체크", a: "att-check", cls: "att-check" });
       if (!(myAtt && myAtt.id != null))
-        todos.push({ t: "일일보고 작성", href: "#att" });
+        todos.push({ t: "일일보고 쓰기", href: "#att" });
       var unread = notices.filter(function (n) {
         return !(n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
       });
-      if (unread.length) todos.push({ t: "안 읽은 공지 " + unread.length + "건", href: "#board" });
+      if (unread.length) todos.push({ t: "안 읽은 공지 " + unread.length + "건 보기", href: "#board" });
 
       // 백업이 조용히 멈춰 있는 것을 모르는 게 가장 위험하다. 문제일 때만 뜬다.
       if (BOOT.me.isBranchHead) {
         api("/admin/backup").then(function (bk) {
           if (bk["정상"]) return;
           var box = document.createElement("div");
-          box.className = "tile w2";
+          box.className = "tile w4";
           box.innerHTML = '<p class="tile-label" style="color:var(--red)">백업 확인 필요</p>'
             + '<p class="tile-sub">' + esc(bk["사유"] || ("마지막 백업이 " + bk["지난시간"] + "시간 전입니다"))
             + " — 서버를 확인해 주세요.</p>";
@@ -1832,39 +1868,58 @@
         }).catch(function () { /* 조회 실패는 조용히 넘긴다 */ });
       }
 
-      // 배너 지표 — 홈 타일을 보기 전에 먼저 눈에 들어와야 할 두 가지
-      var bd0 = upcomingBirthdays(14);
-      var metrics = [{ k: "안 읽은 공지", v: String(unread.length) }];
-      if (bd0.length && bd0[0].days === 0) metrics.push({ k: "오늘 생일", v: bd0[0].days === 0 ? bd0.filter(function (b) { return b.days === 0; }).length + "명" : "" });
-      else if (bd0.length) metrics.push({ k: "다음 생일", v: "D-" + bd0[0].days });
-      $("home-metrics").innerHTML = metrics.map(function (m) {
-        return '<div class="metric"><span class="metric-label">' + esc(m.k) + "</span>"
-          + '<strong class="metric-value">' + esc(m.v) + "</strong></div>";
-      }).join("");
-      if (myTasks.length) todos.push({ t: "미달성 미션 " + myTasks.length + "건", href: "#board" });
+      // 우리 팀 오늘(부지점장 이상) — 첫 목록은 순위가 아니라 「보고 빠진 사람」(디자인 2판 D1, AgencyZoom 관리자 화면)
+      // 보고 날짜는 일일보고 화면과 같다: 18시부터는 내일 것.
+      var lead = BOOT.me.canSetGoal && teamId != null;
+      if (lead) {
+        var due = rosterOf(teamId).filter(function (m) { return m.role !== "부지점장" && m.role !== "지점장"; });
+        var tIn = due.filter(function (m) { return attList.some(function (a) { return a.email === m.email && a.present; }); }).length;
+        var eve = d.getHours() >= 18;
+        var repDate = eve ? fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) : todayStr;
+        tiles.push('<div class="tile w2" id="home-team"><p class="tile-label">우리 팀 오늘</p>'
+          + '<div class="kv"><span>출근</span><b>' + tIn + '<small>명</small> / ' + due.length + '<small>명</small></b></div>'
+          + '<div class="kv"><span>' + (eve ? "내일 보고" : "오늘 보고") + '</span><b id="home-rep-n">…</b></div>'
+          + '<div id="home-miss"></div></div>');
+        (repDate === todayStr ? Promise.resolve(attList) : soft(api("/attendance?date=" + repDate), [])).then(function (list) {
+          var miss = due.filter(function (m) { return !list.some(function (a) { return a.email === m.email && a.id != null; }); });
+          var n = $("home-rep-n"); if (!n) return;
+          n.innerHTML = (due.length - miss.length) + "<small>명</small> / " + due.length + "<small>명</small>";
+          $("home-miss").innerHTML = miss.length
+            ? '<p class="kv-cap">아직 안 낸 사람</p><div class="name-chips">' + miss.map(function (m) {
+                return '<a class="name-chip" href="#att">' + pdot(m.email) + esc(labelByEmail(m.email) || m.name) + "</a>";
+              }).join("") + "</div>"
+            : '<p class="kv-cap ok">모두 냈습니다</p>';
+        });
+      }
+      // 내 목표 — 큰 숫자 하나 + 막대(디자인 2판 A6). 목표·실적은 이메일로 가린다(동명이인)
+      var mineP = function (r) { return r.member_email ? r.member_email === BOOT.me.email : r.member === BOOT.me.name; };
+      var myGoal = (res[4].goals || []).filter(mineP)[0] || {};
+      var myCanp = 0, myCases = 0;
+      res[4].rows.filter(mineP).forEach(function (r) { myCanp += Number(r.canp) || 0; if (r.contract_date || r.canp || r.premium) myCases++; });
+      var goalN = Number(String(myGoal.goal || "").replace(/[^0-9]/g, ""));
+      tiles.push('<div class="tile' + (lead ? "" : " w2") + '"><p class="tile-label">이번 달 내 목표</p>'
+        + (goalN
+          ? '<div class="tile-num">' + fmtMan(myCanp) + ' <small>/ ' + fmtMan(goalN) + " · " + Math.round(myCanp / goalN * 100) + "%</small></div>" + goalBar(myCanp, goalN)
+          : '<div class="tile-num">' + fmtMan(myCanp) + ' <small>CANP</small></div><p class="tile-sub"><a class="tile-more" href="#att">일일보고에서 목표 정하기</a></p>')
+        + '<div class="kv"><span>계약</span><b>' + myCases + "<small>건</small>" + (myGoal.cases ? " / " + myGoal.cases + "<small>건</small>" : "") + "</b></div></div>");
+      if (lead) {
+        var tGoal = 0, tCanp = 0;
+        (res[4].goals || []).forEach(function (x) { if (x.team_id === teamId) tGoal += Number(String(x.goal || "").replace(/[^0-9]/g, "")) || 0; });
+        perfRows.forEach(function (r) { tCanp += Number(r.canp) || 0; });
+        tiles.push('<div class="tile"><p class="tile-label">팀 실적 / 팀 목표</p>'
+          + '<div class="tile-num">' + fmtMan(tCanp) + (tGoal ? ' <small>/ ' + fmtMan(tGoal) + " · " + Math.round(tCanp / tGoal * 100) + "%</small>" : "") + "</div>"
+          + (tGoal ? goalBar(tCanp, tGoal) : "") + '<p class="tile-sub"><a class="tile-more" href="#perf">업적현황</a></p></div>');
+      }
+      if (myTasks.length) todos.push({ t: "미달성 미션 " + myTasks.length + "건 보기", href: "#board" });
       tiles.push('<div class="tile w2"><p class="tile-label">오늘 할 일</p>'
         + (todos.length
-          ? todos.map(function (x) {
-            return '<div class="tile-row"><span class="todo-dot"></span>'
-              + (x.cls
-                ? '<button class="btn primary ' + x.cls + '" style="padding:2px 10px;font-size:12px">' + esc(x.t) + "</button>"
-                : '<a class="slot-title tile-more" href="' + x.href + '">' + esc(x.t) + "</a>") + "</div>";
-          }).join("")
+          ? todos.map(function (x) { return '<a class="go-row tile-more" href="' + x.href + '"><span class="todo-dot"></span>' + esc(x.t) + '<span class="go-ar" aria-hidden="true">›</span></a>'; }).join("")
           : '<p class="tile-sub" style="color:var(--green)">오늘 할 일을 모두 마쳤습니다.</p>')
         + "</div>");
-      // 출석 — 아침의 첫 행동. 체크 전이면 버튼, 후면 시각과 팀 현황
-      var attCount = attList.filter(function (a) { return a.present && rosterEmails.indexOf(a.email) >= 0; }).length;
-      tiles.push('<div class="tile"><p class="tile-label">오늘 출석</p>'
-        + (myAtt && myAtt.present
-          ? '<div class="tile-num" style="color:var(--green)">' + esc((myAtt.checked_at || "").slice(11, 16)) + "</div>"
-            + '<p class="tile-sub">팀 출석 ' + attCount + "/" + rosterEmails.length + "명</p>"
-          : '<button class="btn primary att-check" style="margin:4px 0 6px">출석 체크</button>'
-            + '<p class="tile-sub">팀 출석 ' + attCount + "/" + rosterEmails.length + "명</p>")
-        + '<p style="margin:6px 0 0"><a class="tile-more" href="#att">일일보고 쓰기</a></p></div>');
       // 내 오늘 일정 — 항상 놓는다 (비어 있어도 오늘을 확인하는 자리)
-      tiles.push('<div class="tile w2"><p class="tile-label">내 오늘 일정</p>'
+      tiles.push('<div class="tile w2"><p class="tile-label">내 오늘 일정 ' + (mine.length ? mine.length + "건" : "") + "</p>"
         + (mine.length ? mine.map(evLine).join("") : '<p class="tile-sub">오늘 일정이 없습니다.</p>')
-        + '<p style="margin:8px 0 0"><a class="tile-more" href="#sched">주간 확인표에서 입력</a></p></div>');
+        + '<p style="margin:10px 0 0"><a class="tile-more" href="#sched">일정 화면으로</a></p></div>');
       // 다가오는 공적 일정 — 시험·교육까지 며칠 남았나 (2026-09-18 사용자, 타임트리 D-day)
       var soon = res[6].filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null || BOOT.me.recruits.indexOf(e.member_email) >= 0;
@@ -1911,7 +1966,7 @@
             var readByMe = (n.reads || []).some(function (r) { return r.email === BOOT.me.email; });
             return '<div class="tile-row"><span class="badge ' + (n.team_id == null ? "blue" : "gray") + '">' + (n.team_id == null ? "지점" : "팀") + "</span>"
               + '<span class="slot-title">' + esc(n.title) + '</span><span class="slot-place">' + esc((n.created || "").slice(5, 10)) + "</span>"
-              + '<button class="btn' + (readByMe ? "" : " primary") + ' notice-read" data-id="' + n.id + '" style="padding:2px 10px;font-size:12px;margin-left:auto">' + (readByMe ? "확인함" : "확인") + "</button></div>";
+              + '<button class="btn' + (readByMe ? "" : " primary") + ' notice-read" data-id="' + n.id + '" style="padding:2px 10px;font-size:var(--fs-xs);margin-left:auto">' + (readByMe ? "확인함" : "확인") + "</button></div>";
           }).join("")
           + '<p style="margin:8px 0 0"><a class="tile-more" href="#board">공지 전체</a></p></div>');
       // 지점 생일 — 챙기려면 미리 알아야 한다. 2주 앞까지, 가까운 순.
@@ -1928,19 +1983,19 @@
       if (myTa.length || taRows.length)
         tiles.push('<div class="tile"><p class="tile-label">이번 달 TA</p><div class="tile-num">' + myTa.length + "</div>"
           + '<p class="tile-sub">내 활동 · 팀 전체 ' + taRows.length + "건</p></div>");
-      if (myPerf.length) {
-        var canp = 0; myPerf.forEach(function (r) { canp += Number(r.canp) || 0; });
-        tiles.push('<div class="tile"><p class="tile-label">이번 달 내 업적</p><div class="tile-num">' + myPerf.length + "건</div>"
-          + '<p class="tile-sub">CANP ' + Number(canp).toLocaleString("ko-KR") + "</p></div>");
-      }
-      if (BOOT.me.isManager && perfRows.length) {
-        var tCanp = 0; perfRows.forEach(function (r) { tCanp += Number(r.canp) || 0; });
-        tiles.push('<div class="tile"><p class="tile-label">이번 달 팀 업적</p><div class="tile-num">' + perfRows.length + "건</div>"
-          + '<p class="tile-sub">CANP ' + Number(tCanp).toLocaleString("ko-KR") + "</p></div>");
-      }
       $("home-bento").innerHTML = tiles.join("");
     });
   }
+  // 출석 체크 — 잘못 눌렀으면 되돌린다(디자인 2판 D2). 위치 확인은 하지 않는다(자가 체크).
+  $("home-check").addEventListener("click", function (e) {
+    var b = e.target.closest(".att-check");
+    if (!b) return;
+    b.disabled = true; b.textContent = "체크 중…";
+    api("/attendance", { method: "POST", body: { present: true } }).then(function () {
+      loadHome();
+      showUndo("출석 체크했습니다", function () { api("/attendance", { method: "POST", body: { present: false } }).then(loadHome); });
+    }).catch(function () { b.disabled = false; b.textContent = "출석 체크하기"; toast("체크하지 못했습니다. 다시 눌러 주세요."); });
+  });
   $("home-bento").addEventListener("click", function (e) {
     if (e.target.closest(".att-check")) {
       api("/attendance", { method: "POST", body: { present: true } }).then(loadHome);
@@ -2467,25 +2522,25 @@
       + '<div class="pop-row"><select class="input" id="mp-team"></select></div>'
       + '<div class="pop-row"><input type="month" class="input" id="mp-joined" title="위촉 년월"'
       + ' value="' + esc((m && m.joined_at ? m.joined_at.slice(0, 7) : "")) + '">'
-      + '<span class="note" style="font-size:11px">위촉 년월 (차월 자동)</span></div>'
+      + '<span class="note" style="font-size:var(--fs-cap)">위촉 년월 (차월 자동)</span></div>'
       + (m && !isUnlinked(m)
-        ? '<div class="pop-row"><span class="note" style="font-size:11px">계정 ' + esc(m.email) + " (로그인 가능)</span></div>"
+        ? '<div class="pop-row"><span class="note" style="font-size:var(--fs-cap)">계정 ' + esc(m.email) + " (로그인 가능)</span></div>"
         : isNew
-          ? '<div class="pop-row"><span class="note" style="font-size:11px">먼저 자리를 만들고, 계정은 그다음에 붙입니다.</span></div>'
+          ? '<div class="pop-row"><span class="note" style="font-size:var(--fs-cap)">먼저 자리를 만들고, 계정은 그다음에 붙입니다.</span></div>'
           // 미연결 자리 — 이미 로그인한 계정을 바로 붙일 수 있게 한다.
           // (초대 문구는 새로 들어오는 사람의 길이고, 이건 이미 계정이 있는 사람의 길)
           : '<div class="pop-row"><select class="input" id="mp-link"></select></div>'
-            + '<div class="pop-row"><span class="note" style="font-size:11px">계정 미연결 — 로그인한 사람을 고르면 이 자리가 그 사람 것이 됩니다.</span></div>')
+            + '<div class="pop-row"><span class="note" style="font-size:var(--fs-cap)">계정 미연결 — 로그인한 사람을 고르면 이 자리가 그 사람 것이 됩니다.</span></div>')
       + '<div class="pop-row"><select class="input" id="mp-recruiter"></select></div>'
       + (BOOT.me.isSuper && !isNew
         ? '<div class="pop-row" style="gap:12px">'
-          + '<label style="cursor:pointer;font-size:13px"><input type="checkbox" id="mp-mgr"'
+          + '<label style="cursor:pointer;font-size:var(--fs-s)"><input type="checkbox" id="mp-mgr"'
           + (m.is_manager ? " checked" : "") + '> 관리자</label>'
-          + '<label style="cursor:pointer;font-size:13px"><input type="checkbox" id="mp-all"'
+          + '<label style="cursor:pointer;font-size:var(--fs-s)"><input type="checkbox" id="mp-all"'
           + (m.can_view_all ? " checked" : "") + '> 전체열람</label></div>'
         : "")
       + (isNew ? "" :
-        '<div class="pop-row"><span class="note" style="font-size:11px;flex:1">순서</span>'
+        '<div class="pop-row"><span class="note" style="font-size:var(--fs-cap);flex:1">순서</span>'
         + '<button class="btn" id="mp-up">위로</button><button class="btn" id="mp-down">아래로</button></div>')
       + '<div class="pop-row"><button class="btn primary" id="mp-save">저장</button>'
       + (isNew ? "" : '<button class="btn" id="mp-del">명단에서 내리기</button>')
@@ -2755,7 +2810,7 @@
     var list = BOOT.pending || [];
     if (!BOOT.me.canApprove || !list.length) { box.hidden = true; return; }
     box.hidden = false;
-    box.innerHTML = '<div class="card-pad" style="padding-bottom:6px"><strong style="font-size:15px">승인 대기 '
+    box.innerHTML = '<div class="card-pad" style="padding-bottom:6px"><strong style="font-size:var(--fs-b)">승인 대기 '
       + list.length + '명</strong> <span class="note">팀·직급은 초대에 적힌 값이 기본입니다. 바꿔서 승인해도 됩니다. '
       + '조직도에 같은 이름의 빈 자리가 있으면 그 자리를 이어받게 고르세요.</span></div>'
       + list.map(function (p) {
@@ -3015,7 +3070,7 @@
     bar.innerHTML = "<span>" + esc(text) + "</span>";
     bar.hidden = false;
     if (undoTimer) clearTimeout(undoTimer);
-    undoTimer = setTimeout(function () { bar.hidden = true; }, 3000);
+    undoTimer = setTimeout(function () { bar.hidden = true; }, 4000);
   }
 
   var lastUndo = null;   // Ctrl+Z가 부르는 마지막 되돌리기 — 띠가 사라져도 다음 일을 하기 전까지 남는다
@@ -3129,7 +3184,7 @@
       var isOwner = e.member_email === BOOT.me.email;
       lecture = '<span class="slot-place">신청 ' + att.length + "명"
         + (isOwner && att.length ? " (" + esc(att.map(function (a) { return a.name; }).join(", ")) + ")" : "") + "</span>"
-        + (!isOwner ? '<button class="btn att-btn' + (meIn ? "" : " primary") + '" data-eid="' + e.id + '" style="padding:1px 8px;font-size:12px">' + (meIn ? "신청 취소" : "신청") + "</button>" : "");
+        + (!isOwner ? '<button class="btn att-btn' + (meIn ? "" : " primary") + '" data-eid="' + e.id + '" style="padding:1px 8px;font-size:var(--fs-xs)">' + (meIn ? "신청 취소" : "신청") + "</button>" : "");
     }
     // 참석 응답 — 팀 공유 일정은 누구나, 특정인 몫이면 그 사람만 누른다.
     // 부지점장에겐 누가 뭐라 했는지 이름까지 (2026-09-18 사용자, 톡캘린더).
@@ -3616,9 +3671,12 @@
   // ── 모바일 — 소형 월간 달력 + 선택한 날 상세 + 큰 추가 버튼 ──
   function loadDay() {
     initScope();
-    $("m-cal-label").textContent = calBase.getFullYear() + "년 " + (calBase.getMonth() + 1) + "월";
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
+    var wk = weekOf(selDate);
+    if (wk[0] < from) from = wk[0];
+    if (wk[6] > to) to = wk[6];
+    mRange = [from, to];
     var teamId = myTeamId();
     Promise.all([api("/events?from=" + from + "&to=" + to), api("/ledger?from=" + from + "&to=" + to).catch(function () { return []; })]).then(function (rs) {
       var evs = rs[0]; calLedger = rs[1];
@@ -3644,8 +3702,50 @@
   }
   // 폰에서도 사람별 열 보기 (2026-09-18 사용자). 목록 자리에 열 표가 대신 선다 — 옆으로 넘겨 본다.
   var mColsOn = (function () { try { return localStorage.getItem("ob_m_cols") === "1"; } catch (e) { return false; } })();
+  // ── 이번 주 띠(폰 기본) ↔ 월 달력 ──
+  var mWeek = (function () { try { return localStorage.getItem("ob_m_week") !== "0"; } catch (e) { return true; } })();
+  var mRange = ["", ""];
+  function weekOf(ds) {
+    var d = new Date(ds + "T00:00:00"), k = (d.getDay() + 6) % 7, out = [];
+    for (var i = 0; i < 7; i++) out.push(fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - k + i)));
+    return out;
+  }
+  function renderWeekStrip() {
+    var wk = weekOf(selDate), today = fmtDate(new Date()), DW = ["월", "화", "수", "목", "금", "토", "일"];
+    $("m-week").hidden = !mWeek; $("m-month").hidden = mWeek;
+    $("m-mode").textContent = mWeek ? "월 달력" : "주 보기";
+    var a = new Date(wk[0] + "T00:00:00"), z = new Date(wk[6] + "T00:00:00");
+    $("m-cal-label").textContent = mWeek
+      ? (a.getMonth() + 1) + "월 " + a.getDate() + "일 – " + (z.getMonth() !== a.getMonth() ? (z.getMonth() + 1) + "월 " : "") + z.getDate() + "일"
+      : calBase.getFullYear() + "년 " + (calBase.getMonth() + 1) + "월";
+    if (!mWeek) return;
+    $("m-week").innerHTML = wk.map(function (ds, i) {
+      var n = dayItemsOf(ds).length;
+      return '<button type="button" class="wk-d' + (ds === selDate ? " sel" : "") + (ds === today ? " today" : "") + (i > 4 ? " we" : "") + '" data-date="' + ds + '">'
+        + "<small>" + DW[i] + "</small><b>" + Number(ds.slice(8)) + "</b><i" + (n ? "" : ' class="none"') + "></i></button>";
+    }).join("");
+  }
+  function mMoveTo(ds) {
+    selDate = ds;
+    var d = new Date(ds + "T00:00:00");
+    if (ds < mRange[0] || ds > mRange[1]) { calBase = new Date(d.getFullYear(), d.getMonth(), 1); loadDay(); return; }
+    if (d.getMonth() !== calBase.getMonth()) calBase = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderCalGrid("m-cal-view", true); renderMobileDay();
+  }
+  $("m-week").addEventListener("click", function (e) {
+    var b = e.target.closest(".wk-d"); if (b) mMoveTo(b.dataset.date);
+  });
+  $("m-mode").addEventListener("click", function () {
+    mWeek = !mWeek;
+    try { localStorage.setItem("ob_m_week", mWeek ? "1" : "0"); } catch (x) {}
+    renderCalGrid("m-cal-view", true); renderMobileDay();
+  });
+  $("m-more").addEventListener("click", function () {
+    var t = $("m-tools"); t.hidden = !t.hidden; this.setAttribute("aria-expanded", String(!t.hidden));
+  });
   function renderMobileDay() {
     renderPeoplePick();
+    renderWeekStrip();
     $("day-label").textContent = dayLabelOf(selDate);
     $("m-cols").classList.toggle("active", mColsOn);
     $("dcol-wrap").hidden = !mColsOn;
@@ -3665,6 +3765,25 @@
   function closeSheet() {
     document.querySelectorAll(".sheet, .sheet-back").forEach(function (el) { el.remove(); });
   }
+  // 시트는 아래로 밀어 닫는다(디자인 2판 B8) — 맨 위까지 올라가 있을 때만, 90px 넘게 끌면
+  (function () {
+    var y0 = null, sh = null;
+    document.addEventListener("touchstart", function (e) {
+      sh = e.target.closest(".sheet");
+      y0 = sh && sh.scrollTop <= 0 ? e.touches[0].clientY : null;
+    }, { passive: true });
+    document.addEventListener("touchmove", function (e) {
+      if (y0 == null || !sh) return;
+      var dy = e.touches[0].clientY - y0;
+      sh.style.transform = dy > 0 ? "translateY(" + dy + "px)" : "";
+    }, { passive: true });
+    document.addEventListener("touchend", function (e) {
+      if (y0 == null || !sh) return;
+      var dy = e.changedTouches[0].clientY - y0;
+      if (dy > 90) closeSheet(); else sh.style.transform = "";
+      y0 = null; sh = null;
+    });
+  })();
   function openDaySheet(ds) {
     closeSheet();
     var back = document.createElement("div");
@@ -3694,10 +3813,15 @@
     selDate = cell.dataset.date;
     renderCalGrid("m-cal-view", true);
     renderMobileDay();
-    if (!mColsOn) openDaySheet(selDate);
+    // 월 달력에서 고른 날은 아래 목록에 바로 뜬다 — 시트를 따로 띄우지 않는다
+    var dv = $("day-label"); if (dv && dv.scrollIntoView) dv.scrollIntoView({ block: "start", behavior: "smooth" });
   });
-  $("m-cal-prev").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() - 1, 1); loadDay(); });
-  $("m-cal-next").addEventListener("click", function () { calBase = new Date(calBase.getFullYear(), calBase.getMonth() + 1, 1); loadDay(); });
+  function mStep(k) {
+    if (mWeek) { var d = new Date(selDate + "T00:00:00"); mMoveTo(fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7 * k))); return; }
+    calBase = new Date(calBase.getFullYear(), calBase.getMonth() + k, 1); loadDay();
+  }
+  $("m-cal-prev").addEventListener("click", function () { mStep(-1); });
+  $("m-cal-next").addEventListener("click", function () { mStep(1); });
   $("m-cal-today").addEventListener("click", function () { calBase = new Date(); selDate = fmtDate(new Date()); loadDay(); });
   $("day-add").addEventListener("click", function () {
     openPop(null, { em: BOOT.me.email, date: selDate, pickMember: true, onDone: loadDay });
@@ -4168,6 +4292,8 @@
     var todayStr = fmtDate(new Date());
     var tomorrow = fmtDate(new Date(Date.now() + 86400e3));
     var when = ds === todayStr ? " (오늘)" : ds === tomorrow ? " (내일)" : "";
+    $("att-today").classList.toggle("active", ds === todayStr);
+    $("att-tomorrow").classList.toggle("active", ds === tomorrow);
     $("att-label").textContent = (attBase.getMonth() + 1) + "월 " + attBase.getDate() + "일 "
       + DOW_FULL[attBase.getDay()] + when;
     // 어느 날 현황을 보고 있는지 표에도 적는다 — 저녁에 열면 내일 화면이라
@@ -4225,23 +4351,25 @@
     var bar = $("push-bar");
     var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
     var home = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+    var xed = false;
+    try { xed = localStorage.getItem("ob_push_x") === "1"; } catch (e) {}
     if (!pushOk()) {
-      bar.hidden = !(ios && !home);             // 아이폰 사파리 창 — 설치하면 된다는 것만 알린다
-      bar.innerHTML = "<span>아이폰은 사파리 공유 단추 → 「홈 화면에 추가」로 설치한 앱에서 저녁 알림을 켤 수 있습니다.</span>";
+      bar.hidden = true;                        // 아이폰 사파리 창은 홈의 「앱 설치」 띠가 안내한다
       return;
     }
-    bar.hidden = false;
     if (Notification.permission === "denied") {
-      bar.innerHTML = "<span>알림이 막혀 있습니다. 폰 설정 → 알림에서 이 앱을 허용해 주세요.</span>";
+      bar.hidden = xed;
+      bar.innerHTML = '<span>알림이 막혀 있습니다. 폰 설정 → 알림에서 이 앱을 허용해 주세요.</span><button type="button" class="btn text" id="push-x">닫기</button>';
       return;
     }
     swReg.pushManager.getSubscription().then(function (s) {
-      bar.innerHTML = s && Notification.permission === "granted"
-        ? '<span>저녁 6시·8시 일일보고 알림 켜짐</span><button type="button" class="btn" id="push-test">시험 알림</button>'
-        : '<span>저녁 6시·8시에 내일 일일보고 알림을 받습니다</span><button type="button" class="btn primary" id="push-on">알림 켜기</button>';
+      var on = s && Notification.permission === "granted";
+      bar.hidden = on;
+      if (!on) bar.innerHTML = '<span>저녁 6시·8시에 내일 일일보고 알림을 받습니다</span><button type="button" class="btn primary" id="push-on">알림 켜기</button>';
     });
   }
   $("push-bar").addEventListener("click", function (e) {
+    if (e.target.id === "push-x") { try { localStorage.setItem("ob_push_x", "1"); } catch (x) {} $("push-bar").hidden = true; return; }
     if (e.target.id === "push-on") {
       e.target.disabled = true;
       Promise.resolve(Notification.requestPermission()).then(function (p) {
@@ -4304,17 +4432,17 @@
   function goalNum(v) { return Number(String(v || "").replace(/[^0-9]/g, "")) || 0; }
   function drawGoalSum() {
     var g = repGoal, num = goalNum(g.goal), t = g.team;
-    $("rg-team").textContent = t
-      ? "팀 목표 " + (t.goal + num ? fmtNum(t.goal + num) : "-") + " · " + ((t.cases + (Number(g.cases) || 0)) || "-") + "건 · " + ((t.intro + (Number(g.intro) || 0)) || "-") + "명"
-        + "  /  팀 실적 " + fmtNum(t.canp) + " · " + t.nowCases + "건 · " + t.nowIntro + "명"
-        + (t.goal + num ? " · " + Math.round(t.canp / (t.goal + num) * 100) + "%" : "")
-      : "";
-    $("rg-goal-now").textContent = "현재 " + fmtNum(g.canp) + (num ? " · " + Math.round(g.canp / num * 100) + "%" : "");
+    function line(label, now, goal, unit) {
+      return '<span class="rg-line"><span>' + label + '</span><b>' + (unit ? now + "<small>" + unit + "</small>" : fmtMan(now))
+        + (goal ? " / " + (unit ? goal + "<small>" + unit + "</small>" : fmtMan(goal)) : ' <small class="none">목표 아직 없음</small>') + "</b></span>";
+    }
+    $("rg-goal-now").textContent = "현재 " + fmtMan(g.canp) + (num ? " · " + Math.round(g.canp / num * 100) + "%" : "");
     $("rg-cases-now").textContent = "현재 " + g.nowCases + "건";
     $("rg-intro-now").textContent = "현재 " + g.nowIntro + "명";
-    var none = !g.goal && !g.cases && !g.intro;
-    $("rg-sum").textContent = (none ? "미설정" : (g.goal ? fmtNum(num || g.goal) : "-") + " · " + (g.cases || "-") + "건 · " + (g.intro || "-") + "명")
-      + "  /  현재 " + fmtNum(g.canp) + " · " + g.nowCases + "건 · " + g.nowIntro + "명";
+    $("rg-sum").innerHTML = line("내 CANP", g.canp, num) + (num ? goalBar(g.canp, num) : "")
+      + line("계약", g.nowCases || 0, Number(g.cases) || 0, "건") + line("도입", g.nowIntro || 0, Number(g.intro) || 0, "명");
+    var tg = t ? t.goal + num : 0;
+    $("rg-team").innerHTML = t ? line("팀 CANP", t.canp, tg) + (tg ? goalBar(t.canp, tg) : "") : "";
   }
   // 목표는 치는 대로 저장한다(손을 멈추고 0.5초 뒤) — 칸을 벗어날 때까지 기다리지 않는다.
   // 저장 뒤 목록을 다시 받지 않는다: 치고 있는 칸 값을 서버 값으로 덮으면 글자가 튄다.
@@ -4456,7 +4584,7 @@
           : (a.id != null ? '<span class="badge gray">미출근' + (a.reason ? " · " + esc(a.reason) : "") + "</span>"
             : '<span class="cell-empty">' + (due.indexOf(m) >= 0 ? "미보고" : "—") + "</span>");
         h.push("<tr>"
-          + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:12px">' + esc(roleTag(m.role)) + "</span></td>"
+          + '<td class="ro"><strong>' + esc(memberLabel(m)) + '</strong> <span style="color:var(--ter);font-size:var(--fs-xs)">' + esc(roleTag(m.role)) + "</span></td>"
           + '<td class="ro">' + state + "</td>"
           + '<td class="ro">' + esc(a.work || "") + "</td>"
           + '<td class="ro">' + esc(a.lunch || "") + "</td>"
@@ -4617,7 +4745,7 @@
       + ' value="' + esc(t ? t.name : "") + '"></div>'
       + '<div class="pop-row"><input type="date" class="input" id="tp-on"'
       + ' value="' + esc(t ? t.done_on : "") + '">'
-      + '<span class="note" style="font-size:11px">이수일 (모르면 비워 둡니다)</span></div>'
+      + '<span class="note" style="font-size:var(--fs-cap)">이수일 (모르면 비워 둡니다)</span></div>'
       + '<div class="pop-row"><button class="btn primary" id="tp-ok">저장</button>'
       + (t ? '<button class="btn" id="tp-rm">지우기</button>' : "")
       + '<button class="btn" id="tp-x">닫기</button></div>';
@@ -4801,7 +4929,7 @@
     var p = document.createElement("div");
     p.className = "pop";
     p.innerHTML = '<div class="pop-title">' + esc(who) + " — 어떤 서류인가요?</div>"
-      + '<div class="pop-row"><span class="note" style="font-size:12px">' + esc(o.file.name)
+      + '<div class="pop-row"><span class="note" style="font-size:var(--fs-xs)">' + esc(o.file.name)
       + " · " + Math.max(1, Math.round(o.file.size / 1024)) + "KB</span></div>"
       + '<div class="pop-row" style="flex-wrap:wrap;gap:4px">'
       + kinds.map(function (k) {
@@ -5186,7 +5314,7 @@
     if (!box.hidden) { box.hidden = true; return; }
     api("/ta/access").then(function (rows) {
       box.hidden = false;
-      box.innerHTML = '<strong style="font-size:15px">열람 기록 ' + rows.length + "건</strong>"
+      box.innerHTML = '<strong style="font-size:var(--fs-b)">열람 기록 ' + rows.length + "건</strong>"
         + '<p class="note" style="margin:4px 0 10px">비밀번호를 넣어 일지를 연 기록입니다. 6개월치만 남습니다.</p>'
         + (rows.length
           ? rows.slice(0, 50).map(function (r) {
@@ -5203,7 +5331,7 @@
     if (!box.hidden) { box.hidden = true; return; }
     api("/ta?flagged=1").then(function (rows) {
       box.hidden = false;
-      box.innerHTML = '<strong style="font-size:15px">주의 명단 ' + rows.length + "건</strong>"
+      box.innerHTML = '<strong style="font-size:var(--fs-b)">주의 명단 ' + rows.length + "건</strong>"
         + '<p class="note" style="margin:4px 0 10px">지점 전체 기록에서 「주의」로 표시된 것입니다. 전화 전에 이름·번호를 확인하세요.</p>'
         + (rows.length
           ? '<div class="grid-wrap"><table class="grid"><thead><tr><th>날짜</th><th>이름</th><th>안심번호</th><th>실제번호</th><th>주의</th><th>특이사항</th><th>담당자</th></tr></thead><tbody>'
@@ -5279,8 +5407,14 @@
   }
   function taWatchStop() { if (taPoll) { clearInterval(taPoll); taPoll = null; } }
   // 화면을 다시 보면 곧바로 맞춘다 — 5초를 기다리게 하지 않는다
+  window.addEventListener("offline", function () { $("net-bar").hidden = false; });
+  window.addEventListener("online", function () { $("net-bar").hidden = true; if (BOOT) loadScreen(screen); });
+  var hiddenAt = 0;
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) return;
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    var away = hiddenAt && Date.now() - hiddenAt > 60e3;
+    if (away && (screen === "home" || screen === "sched") && !document.querySelector(".pop, .sheet")
+        && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || "")) loadScreen(screen);
     taCheck();
     // 조직도도 남이 고친다 — 화면을 다시 보면 맞춘다
     if (screen === "org" && !document.querySelector(".pop")) refreshBoot().then(renderOrg);
@@ -5299,6 +5433,17 @@
     { key: "note", label: "비고", width: 160 }
   ];
   function fmtNum(n) { return Number(n || 0).toLocaleString("ko-KR"); }
+  function fmtMan(n) {
+    n = Math.round(Number(n) || 0);
+    if (Math.abs(n) < 10000) return fmtNum(n);
+    var eok = Math.floor(n / 1e8), man = Math.floor((n % 1e8) / 1e4);
+    return (eok ? eok + "억" + (man ? " " : "") : "") + (man ? fmtNum(man) + "만" : "");
+  }
+  // 목표 대비 막대 한 줄 — 다 채우면 초록(디자인 2판 A6)
+  function goalBar(now, goal) {
+    var p = goal ? Math.min(100, Math.round(now / goal * 100)) : 0;
+    return '<div class="gbar' + (goal && now >= goal ? " full" : "") + '"><i style="width:' + p + '%"></i></div>';
+  }
 
   // 업적은 한 번에 한 팀 — 팀원은 내 팀만, 부지점장부터 위 선택칸으로 다른 팀(2026-10-03 사용자).
   // 남의 팀은 보기만 한다. 쓰기는 지점장·총관리자 아니면 내 팀만(서버 canWriteTeam과 같은 선).
@@ -5351,6 +5496,32 @@
           return;
         }
         var goalRows = "", first = idx;
+        if (isMobile()) {
+          // 폰: 맨 위 팀 합계 큰 숫자, 아래 사람마다 한 칸. 순서는 조직도 그대로(실적 순위로 줄 세우지 않는다)
+          html += '<div class="card card-pad pteam" id="tg-' + t.id + '"></div>';
+          people.forEach(function (pp) {
+            var n = pp.name, i = idx++, g = goalOf(pp);
+            var canEdit = writable && (BOOT.me.isManager || pp.email === BOOT.me.email);
+            var canGoal = BOOT.me.canSetGoal && writable;
+            var gin = function (cls, v, label, isNum) {
+              return '<label class="pc-in"><span>' + label + '</span><input class="input ' + cls + '" data-i="' + i + '"' + (isNum ? ' type="number" min="0"' : "")
+                + ' inputmode="numeric" value="' + esc(v || "") + '" data-init="' + esc(v || "") + '"></label>';
+            };
+            html += '<div class="card pcard"><div class="pc-head"><b>' + esc(pp.label) + '</b><span class="pc-now" id="goal-now-' + i + '"></span></div>'
+              + '<div class="gbar" id="pbar-' + i + '"><i></i></div>'
+              + '<details class="pc-more"><summary id="perf-sum-' + i + '"></summary>'
+              + (canGoal ? '<div class="pc-goals">' + gin("goal-input", g.goal, "목표 CANP") + gin("cases-input", g.cases, "목표 건수", 1) + gin("intro-input", g.intro, "도입 목표", 1) + "</div>" : "")
+              + '<div id="perf-grid-' + i + '"></div>'
+              + (canEdit ? '<button class="btn add-row" data-i="' + i + '" style="width:100%;margin-top:8px">계약 추가</button>' : "")
+              + "</details></div>";
+            sections.push({
+              member: n, email: pp.email, canEdit: canEdit, teamId: t.id, goalText: g.goal || "", cases: g.cases || 0, intro: g.intro || 0,
+              rows: rows.filter(function (r) { return pp.email ? r.member_email === pp.email : (r.member === n && !r.member_email); })
+            });
+          });
+          html += "</div>";
+          return;
+        }
         people.forEach(function (pp, k) {
           var g = goalOf(pp), i = first + k;
           // data-init에 처음 값을 담아두고, 저장할 때 바뀐 것만 보낸다.
@@ -5372,11 +5543,11 @@
           var i = idx++;
           var canEdit = writable && (BOOT.me.isManager || pp.email === BOOT.me.email);
           html += '<div class="section"><div class="section-head">'
-            + '<h2 style="font-size:15px">' + esc(pp.label)
+            + '<h2 style="font-size:var(--fs-b)">' + esc(pp.label)
             + '</h2><div class="toolbar">'
             + (canEdit ? '<button class="btn add-row" data-i="' + i + '">계약 추가</button>' : "")
             + '</div></div><div class="card" id="perf-grid-' + i + '"></div>'
-            + '<p class="note" style="color:var(--sub);font-size:12px;margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
+            + '<p class="note" style="color:var(--sub);font-size:var(--fs-xs);margin:6px 2px" id="perf-sum-' + i + '"></p></div>';
           sections.push({
             member: n, email: pp.email, canEdit: canEdit, teamId: t.id, goalText: goalOf(pp).goal || "", cases: goalOf(pp).cases || 0, intro: goalOf(pp).intro || 0,
             rows: rows.filter(function (r) {
@@ -5399,7 +5570,7 @@
           onRowCommit: function (r) { perfCommitRow(perfGrids[i], r); },
           onDeleteRow: function (r, done) { api("/perf/" + r._id, { method: "DELETE" }).then(function () { done(); updateSum(perfGrids[i]); }); }
         });
-        perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, goalText: s.goalText, cases: s.cases, intro: s.intro, grid: g, sumEl: $("perf-sum-" + i), nowEl: $("goal-now-" + i) });
+        perfGrids.push({ member: s.member, email: s.email, teamId: s.teamId, goalText: s.goalText, cases: s.cases, intro: s.intro, grid: g, sumEl: $("perf-sum-" + i), nowEl: $("goal-now-" + i), barEl: $("pbar-" + i) });
         updateSum(perfGrids[perfGrids.length - 1]);
       });
     });
@@ -5436,7 +5607,16 @@
     // 목표 표의 「현재」 칸 — 계약을 넣거나 목표를 고치면 같이 바뀐다
     if (pg.nowEl) {
       var goal = Number(String(pg.goalText || "").replace(/[^0-9]/g, ""));
-      pg.nowEl.textContent = fmtNum(canp) + " · " + rs.length + "건" + (goal ? " · " + Math.round(canp / goal * 100) + "%" : "");
+      pg.nowEl.textContent = pg.barEl
+        ? fmtMan(canp) + (goal ? " / " + fmtMan(goal) : " · 목표 없음")
+        : fmtNum(canp) + " · " + rs.length + "건" + (goal ? " · " + Math.round(canp / goal * 100) + "%" : "");
+    }
+    if (pg.barEl) {
+      var gl = Number(String(pg.goalText || "").replace(/[^0-9]/g, ""));
+      pg.barEl.hidden = !gl;
+      pg.barEl.className = "gbar" + (gl && canp >= gl ? " full" : "");
+      pg.barEl.firstChild.style.width = (gl ? Math.min(100, Math.round(canp / gl * 100)) : 0) + "%";
+      pg.sumEl.textContent = "계약 " + rs.length + "건 · 월납 " + fmtMan(prem) + (state ? " · " + state : "") + " ▾";
     }
     pg.sumEl.style.color = state && state.indexOf("실패") === 0 ? "var(--red)" : "";
     drawTeamGoal(pg.teamId);
@@ -5454,6 +5634,14 @@
     // 팀 실적 = 개인 실적의 합 (2026-10-03 사용자)
     var tb = $("tb-" + teamId);
     if (tb) tb.textContent = "실적 " + cnt + "건 · 월납 " + fmtNum(prem) + " · CANP " + fmtNum(canp) + (g ? " / 팀 목표 " + fmtNum(g) + " · " + Math.round(canp / g * 100) + "%" : "");
+    if (tr.tagName !== "TR") {
+      tr.innerHTML = '<p class="tile-label">팀 실적 / 팀 목표</p><div class="tile-num">' + fmtMan(canp)
+        + (g ? ' <small>/ ' + fmtMan(g) + " · " + Math.round(canp / g * 100) + "%</small>" : "") + "</div>"
+        + (g ? goalBar(canp, g) : "")
+        + '<div class="kv"><span>계약</span><b>' + cnt + "<small>건</small>" + (c ? " / " + c + "<small>건</small>" : "") + "</b></div>"
+        + '<div class="kv"><span>도입 목표</span><b>' + (n ? n + "<small>명</small>" : "아직 없음") + "</b></div>";
+      return;
+    }
     tr.innerHTML = "<td>팀 목표</td>"
       + '<td class="num">' + (g ? fmtNum(g) : "-") + "</td>"
       + '<td class="num">' + fmtNum(canp) + " · " + cnt + "건" + (g ? " · " + Math.round(canp / g * 100) + "%" : "") + "</td>"
