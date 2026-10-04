@@ -194,7 +194,6 @@ table.grid { border-collapse: collapse; width: 100%; background: var(--surface);
 .org-team-head { display: flex; align-items: center; gap: 8px; }
 .org-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--line); }
 .org-row:first-child { border-top: 0; }
-.org-row.depth-1 { padding-left: 36px; }
 .org-row .name { font-weight: 600; min-width: 90px; }
 .org-row .meta { color: var(--sub); font-size: var(--fs-xs); flex: 1; }
 .org-row .btn { padding: 3px 9px; font-size: var(--fs-xs); }
@@ -462,10 +461,6 @@ a.slot-title:hover { text-decoration: underline; }
 }
 
 /* ── 목록 (명단) ── */
-.roster-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line); }
-.roster-row:first-child { border-top: 0; }
-.roster-row .name { font-weight: 600; min-width: 90px; }
-.roster-row .meta { color: var(--sub); font-size: var(--fs-xs); flex: 1; }
 
 /* ── 월간 달력 + 우측 하루 상세 ── */
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-md); background: var(--seg-bg); }
@@ -799,7 +794,6 @@ a.slot-title:hover { text-decoration: underline; }
 .chip-f.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .ta-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-s); color: var(--sub); cursor: pointer; }
 @media (pointer: coarse) { .chip-f { padding: 10px 14px; } .ta-toggle input { width: 20px; height: 20px; } }
-@media (pointer: coarse) { .row-add { padding: 14px; font-size: var(--fs-b); } }
 .oc-chip.oc-add-direct { color: var(--blue); border-style: dashed; cursor: pointer; }
 
 /* 사이드바 그룹 라벨 */
@@ -867,8 +861,6 @@ a.slot-title:hover { text-decoration: underline; }
 @media (max-width: 900px) { .ins-grid { grid-template-columns: 1fr; } }
 
 /* 빠른 입력(찍기) 모드 */
-#stamp-bar .kpicks, #m-stamp-kinds { gap: 5px; }
-.cal-cell.stampable { cursor: copy; }
 
 /* 내 정보 — 입력칸은 넉넉하게, 라벨은 본문 크기로 (가독성 원칙) */
 .me-field { margin-bottom: 14px; }
@@ -959,8 +951,6 @@ a.slot-title:hover { text-decoration: underline; }
 .hero-copy { min-width: 0; }
 .hero-date { margin: 0 0 6px; color: var(--blue); font-size: var(--fs-s); font-weight: 700; }
 .hero-greet { margin: 0; font-size: var(--fs-h); font-weight: 800; letter-spacing: -.035em; line-height: 1.22; }
-.hero-sub { margin: 8px 0 0; color: var(--sub); font-size: var(--fs-b); }
-.hero-metrics { display: flex; gap: 10px; }
 .metric {
   min-width: 128px; height: 76px; padding: 12px 14px;
   display: flex; flex-direction: column; justify-content: center; gap: 5px;
@@ -972,7 +962,6 @@ a.slot-title:hover { text-decoration: underline; }
 @media (max-width: 900px) {
   .hero { height: 156px; padding: 18px 20px; gap: 18px; }
   .hero-greet { font-size: var(--fs-h); }
-  .hero-metrics { flex-direction: column; }
   .metric {
     min-width: 118px; height: 34px; padding: 6px 12px;
     flex-direction: row; align-items: center; justify-content: space-between; gap: 10px;
@@ -985,8 +974,6 @@ a.slot-title:hover { text-decoration: underline; }
     grid-template-columns: 1fr; gap: 10px;
   }
   .hero-greet { font-size: var(--fs-l); }
-  .hero-sub { font-size: var(--fs-s); }
-  .hero-metrics { flex-direction: row; }
   .metric { flex: 1; min-width: 0; }
   .metric-label { overflow: hidden; text-overflow: ellipsis; }
 }
@@ -1266,9 +1253,6 @@ a.slot-title:hover { text-decoration: underline; }
   .main { margin-left: 216px; transition: margin-left .18s ease; }
   #side-handle { left: 216px; }
 
-  body.menu-off .sidebar { width: 0; border-top-width: 0; }
-  body.menu-off .main { margin-left: 0; }
-  body.menu-off #side-handle { left: 0; }
 }
 
 /* 일정 오른쪽 칸 — 손잡이는 왼쪽 것과 짝이 되게 화면 오른쪽 끝에 붙는다.
@@ -1552,3 +1536,9 @@ html, body { overscroll-behavior-y: contain; }
   body.rail .side-user { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { body.rail .sidebar, body.rail .main { transition: none; } }
+
+/* 곧 시작 띠 — 진한 막대 대신 옅은 버건디 면(2판의 밝은 화면에서 혼자 무거웠다) */
+.soon-bar { background: var(--blue-bg); color: var(--ink); border-radius: var(--r-md); padding: 10px 14px; font-size: var(--fs-s); }
+.soon-bar .soon-in { color: var(--blue); font-weight: 800; }
+.soon-bar .soon-x { border-color: var(--line-input); color: var(--sub); border-radius: var(--r-sm); }
+.soon-bar .soon-x:hover { color: var(--ink); }

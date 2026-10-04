@@ -860,6 +860,10 @@ async function main() {
     { email: "차월@x.com", role: "수석 부지점장" })).status, 403);
   assert.equal((await api("t-super", "POST", "/admin/members",
     { email: "차월@x.com", role: "수석 부지점장" })).status, 200);
+  // 나보다 높은 사람(수석)은 부지점장이 내리지 못한다 — 새로 줄 직급만 보면 뚫렸다(서버 점검 2026-10-04)
+  assert.equal((await api("t-esl1", "POST", "/admin/members",
+    { email: "차월@x.com", role: "부지점장" })).status, 403);
+  await api("t-super", "POST", "/admin/members", { email: "차월@x.com", role: "부지점장" });
   // 같은 줄(부지점장 → 부지점장)은 그대로 된다
   assert.equal((await api("t-esl1", "POST", "/admin/members",
     { email: "차월@x.com", role: "부지점장" })).status, 200);
@@ -972,7 +976,13 @@ async function main() {
   // 51-3) 승인 경로가 직급 상승 차단을 우회하던 문제 — 부지점장이 지점장을 만들 수 있었다
   await api("t-up", "POST", "/join", { name: "승급시도" });
   assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "up@x.com", teamId: 1, role: "지점장" })).status, 403);
+  // 계정이 붙은 실제 팀원 자리는 이어받지 못한다 — 그 사람의 기록이 새 계정으로 넘어가고 명단에서 지워졌다(서버 점검 2026-10-04)
+  assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "up@x.com", mergeFrom: "fc1@x.com" })).status, 400);
+  assert.ok((await (await api("t-esl1", "GET", "/bootstrap")).json()).members.some(m => m.email === "fc1@x.com"), "원래 팀원은 그대로 있다");
   assert.equal((await api("t-esl1", "POST", "/pending/approve", { email: "up@x.com", teamId: 1, role: "팀원" })).status, 200);
+  // 출근·보고 날짜 형식, 깨진 본문은 서버 오류(500)가 아니라 400
+  assert.equal((await api("t-fc1", "POST", "/attendance", { date: "2026-13-45", present: true })).status, 400);
+  assert.equal((await fetch(BASE + "/attendance", { method: "POST", headers: { Authorization: "Bearer t-fc1", "Content-Type": "application/json" }, body: "{깨짐" })).status, 400);
 
   // 51-4) 헤더만 PDF라고 써 보내면 거절한다 (내용 앞머리를 본다)
   assert.equal((await docPut("t-fc1", "?scope=member&name=가짜.pdf", Buffer.from("<html>hi</html>"))).status, 400);

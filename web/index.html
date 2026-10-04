@@ -340,9 +340,9 @@
         <div class="people-pick" id="m-people" hidden></div>
         <div class="card m-cal">
           <div class="m-cal-head">
-            <button type="button" class="db-ar" id="m-cal-prev" aria-label="앞으로">‹</button>
+            <button type="button" class="db-ar" id="m-cal-prev" aria-label="이전">‹</button>
             <strong id="m-cal-label"></strong>
-            <button type="button" class="db-ar" id="m-cal-next" aria-label="뒤로">›</button>
+            <button type="button" class="db-ar" id="m-cal-next" aria-label="다음">›</button>
             <button type="button" class="btn text" id="m-cal-today">오늘</button>
             <button type="button" class="btn text m-mode" id="m-mode"></button>
           </div>
@@ -641,7 +641,7 @@
   var API = window.OB_API || (/insurguard\.life$/.test(location.hostname)
     ? "https://api.insurguard.life/branch" : "");
 
-  var token = null, BOOT = null, bootAt = 0, month = new Date().toISOString().slice(0, 7);
+  var token = null, BOOT = null, bootAt = 0, month = fmtDate(new Date()).slice(0, 7);   // KST — UTC로 세면 매달 1일 0~9시에 지난달이 열렸다
   var SCREENS = ["home", "org", "me", "invite", "install", "sched", "att", "board", "ta", "perf", "recruit", "docs", "req", "ledger"];
   var screen = (location.hash || "#home").slice(1);
   if (SCREENS.indexOf(screen) < 0) screen = "home";
@@ -901,6 +901,9 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
 
+  // 화면별 요청 번호 — 마지막 요청의 응답만 그린다
+  var reqSeq = {};
+  function latest(key) { var n = (reqSeq[key] || 0) + 1; reqSeq[key] = n; return function () { return reqSeq[key] === n; }; }
   function api(path, opts) {
     opts = opts || {};
     return fetch(API + path, {
@@ -913,7 +916,7 @@
         if (!r.ok) {
           var e = new Error(j.error || r.status);
           e.needJoin = !!j.needJoin;
-          if (!e.needJoin) alert(j.error || "요청 실패");   // 승인 대기는 안내 화면으로 처리
+          if (!e.needJoin && !opts.quiet) alert(j.error || "요청 실패");   // 승인 대기는 안내 화면, 조용한 호출은 부르는 쪽이 처리
           throw e;
         }
         return j;
@@ -1429,7 +1432,6 @@
   function applyFolds() {
     var rail = railOn();
     var day = recall("일정칸접힘") === "1";
-    document.body.classList.remove("menu-off");
     document.body.classList.toggle("rail", rail);
     document.body.classList.toggle("day-off", day);
     $("side-handle").textContent = rail ? "▶" : "◀";
@@ -1527,6 +1529,8 @@
     var c = colorOf(email);
     return c < 0 ? "" : '<span class="pdot pc-' + c + '"></span>';
   }
+  // 팀을 이끄는 직급 — 수석 부지점장도 부지점장과 같은 줄이다(보고를 받는 쪽, 「부지점장」 보기)
+  function isLeadRole(r) { return r === "부지점장" || r === "수석 부지점장"; }
   function emailOf(name) {
     var m = BOOT.members.filter(function (x) { return x.name === name; })[0];
     if (m) return m.email;
@@ -1789,7 +1793,9 @@
   function loadLedger() {
     $("month-label").textContent = monthLabel();
     $("lg-title").textContent = monthLabel() + " 기록";
+    var fresh = latest("ledger");
     api("/ledger?month=" + month).then(function (rows) {
+      if (!fresh()) return;
       rows = rows.map(function (r) { r._id = r.id; return r; })
         .sort(function (a, b) { return a.date === b.date ? a.id - b.id : (a.date < b.date ? 1 : -1); });
       lgGrid = makeGrid($("lg-grid"), {
@@ -1831,13 +1837,13 @@
     // 하나가 실패해도 홈이 백지가 되지 않게 — 빈 값으로 대체하고 나머지를 그린다
     function soft(p, fallback) { return p.catch(function () { return fallback; }); }
     Promise.all([
-      soft(api("/events?from=" + todayStr + "&to=" + todayStr), []),
-      soft(api("/tasks"), []), soft(api("/notices"), []),
-      soft(api("/ta?month=" + thisMonth), []),
-      soft(api("/perf?month=" + thisMonth), { rows: [], goals: [] }),
-      soft(api("/attendance?date=" + todayStr), []),
-      soft(api("/events?from=" + todayStr + "&to=" + fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14))), []),
-      soft(api("/ledger?month=" + thisMonth), [])
+      soft(api("/events?from=" + todayStr + "&to=" + todayStr, { quiet: true }), []),
+      soft(api("/tasks", { quiet: true }), []), soft(api("/notices", { quiet: true }), []),
+      soft(api("/ta?month=" + thisMonth, { quiet: true }), []),
+      soft(api("/perf?month=" + thisMonth, { quiet: true }), { rows: [], goals: [] }),
+      soft(api("/attendance?date=" + todayStr, { quiet: true }), []),
+      soft(api("/events?from=" + todayStr + "&to=" + fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 14)), { quiet: true }), []),
+      soft(api("/ledger?month=" + thisMonth, { quiet: true }), [])
     ]).then(function (res) {
       var evs = res[0].filter(function (e) {
         return (e.team_id === teamId || e.team_id == null || BOOT.me.recruits.indexOf(e.member_email) >= 0) && e.status !== "취소";
@@ -1850,7 +1856,7 @@
       var myTasks = tasks.filter(function (t) { return isMyTask(t) && !myDone(t); });
       var notices = res[2].filter(function (n) { return n.team_id == null || n.team_id === teamId; });
       var taRows = res[3].filter(function (r) { return r.team_id === teamId; });
-      var myTa = taRows.filter(function (r) { return r.author === BOOT.me.name; });
+      var myTa = taRows.filter(taIsMine);
       var perfRows = res[4].rows.filter(function (r) { return r.team_id === teamId; });
 
       function evLine(e) {
@@ -1866,7 +1872,6 @@
       // 출석 정보는 아래 두 타일이 모두 쓴다 — 선언이 뒤에 있으면 항상 undefined가 된다
       var attList = res[5];
       var myAtt = attList.filter(function (a) { return a.email === BOOT.me.email; })[0];
-      var rosterEmails = rosterOf(teamId).map(function (m) { return m.email; });
       // 출석 체크 — 홈 맨 위 한 자리(전에는 두 군데였다). 했으면 시각을 보여 주는 상태가 된다
       $("home-check").innerHTML = myAtt && myAtt.present
         ? '<div class="checked-in"><span>출근함</span><b>' + esc((myAtt.checked_at || "").slice(11, 16)) + "</b></div>"
@@ -1882,7 +1887,7 @@
 
       // 백업이 조용히 멈춰 있는 것을 모르는 게 가장 위험하다. 문제일 때만 뜬다.
       if (BOOT.me.isBranchHead) {
-        api("/admin/backup").then(function (bk) {
+        api("/admin/backup", { quiet: true }).then(function (bk) {
           if (bk["정상"]) return;
           var box = document.createElement("div");
           box.className = "tile w4";
@@ -1897,7 +1902,7 @@
       // 보고 날짜는 일일보고 화면과 같다: 18시부터는 내일 것.
       var lead = BOOT.me.canSetGoal && teamId != null;
       if (lead) {
-        var due = rosterOf(teamId).filter(function (m) { return m.role !== "부지점장" && m.role !== "지점장"; });
+        var due = rosterOf(teamId).filter(function (m) { return !isLeadRole(m.role) && m.role !== "지점장"; });
         var tIn = due.filter(function (m) { return attList.some(function (a) { return a.email === m.email && a.present; }); }).length;
         var eve = d.getHours() >= 18;
         var repDate = eve ? fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) : todayStr;
@@ -1905,7 +1910,7 @@
           + '<div class="kv"><span>출근</span><b>' + tIn + '<small>명</small> / ' + due.length + '<small>명</small></b></div>'
           + '<div class="kv"><span>' + (eve ? "내일 보고" : "오늘 보고") + '</span><b id="home-rep-n">…</b></div>'
           + '<div id="home-miss"></div></div>');
-        (repDate === todayStr ? Promise.resolve(attList) : soft(api("/attendance?date=" + repDate), [])).then(function (list) {
+        (repDate === todayStr ? Promise.resolve(attList) : soft(api("/attendance?date=" + repDate, { quiet: true }), [])).then(function (list) {
           var miss = due.filter(function (m) { return !list.some(function (a) { return a.email === m.email && a.id != null; }); });
           var n = $("home-rep-n"); if (!n) return;
           n.innerHTML = (due.length - miss.length) + "<small>명</small> / " + due.length + "<small>명</small>";
@@ -2022,10 +2027,6 @@
     }).catch(function () { b.disabled = false; b.textContent = "출석 체크하기"; toast("체크하지 못했습니다. 다시 눌러 주세요."); });
   });
   $("home-bento").addEventListener("click", function (e) {
-    if (e.target.closest(".att-check")) {
-      api("/attendance", { method: "POST", body: { present: true } }).then(loadHome);
-      return;
-    }
     var rd = e.target.closest(".notice-read");
     if (rd) { api("/notices/" + rd.dataset.id + "/read", { method: "POST" }).then(loadHome); return; }
     var a = e.target.closest("a.tile-more");
@@ -2361,7 +2362,7 @@
   // 팀 꼭대기 — 수석 부지점장이 있으면 그 사람, 없으면 부지점장
   function teamLead(list) {
     return list.filter(function (m) { return m.role === "수석 부지점장"; })[0]
-      || list.filter(function (m) { return m.role === "부지점장"; })[0];
+      || list.filter(function (m) { return isLeadRole(m.role); })[0];
   }
 
   function lineageHtml(list, teamId, mg) {
@@ -2941,7 +2942,6 @@
   // ── 일정 (주간 확인표 + 입력) ──
   function isMobile() { return window.matchMedia("(max-width: 900px)").matches; }
   var weekOffset = 0;
-  var dayBase = new Date();
   var DAY_NAMES = ["월", "화", "수", "목", "금"];
   var DOW_FULL = ["일", "월", "화", "수", "목", "금", "토"];
   function mondayOf(d) {
@@ -3021,8 +3021,8 @@
         cols: EV_COLS,
         year: days[0].getFullYear(),
         rows: rows,
-        fixed: { member: BOOT.me.name, date: fmtDate(new Date()), kind: "외근" },
-        canEditRow: function (r) { return r.member ? canWriteAs(r.member) : BOOT.me.canSetGoal; },
+        fixed: { member: labelByEmail(BOOT.me.email) || BOOT.me.name, date: fmtDate(new Date()), kind: "외근" },
+        canEditRow: function (r) { return r.member ? (BOOT.me.canSetGoal || emailsOf(r.member)[0] === BOOT.me.email) : BOOT.me.canSetGoal; },
         onDeleteRow: function (r, done) {
           var ev0 = evsById[r._id];
           if (ev0) { removeEvent(ev0, loadWeek); done(); return; }
@@ -3121,6 +3121,9 @@
   // 붙여넣기·지우기 모두 되돌리기 띠 + Ctrl+Z로 되돌린다. 폰은 키보드가 없어 달지 않는다.
   var calClip = [];
   function calKeysOn(e) {
+    // 한 건 고른 Del은 위 처리기가 이미 맡았다 — 그 처리기가 고른 것을 비운 뒤라 여기서 「고른 것 없음」으로 보고
+    // 그날 일정을 통째로 지우던 버그(웹 점검 2026-10-04)
+    if (e.defaultPrevented) return false;
     if (screen !== "sched" || schedView !== "cal" || isMobile()) return false;
     var t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return false;
@@ -3168,10 +3171,12 @@
       e.preventDefault();
       if (!mine.length) { toast("이 날짜에 지울 수 있는 일정이 없습니다"); return; }
       var backs = mine.map(function (ev) { return evBody(ev); });
-      Promise.allSettled(mine.map(function (ev) { return api("/events/" + ev.id, { method: "DELETE" }); })).then(function () {
+      Promise.allSettled(mine.map(function (ev) { return api("/events/" + ev.id, { method: "DELETE" }); })).then(function (rs) {
         loadCal();
-        showUndo("일정 " + mine.length + "건을 지웠습니다", function () {
-          Promise.allSettled(backs.map(function (b) { return api("/events", { method: "POST", body: b }); })).then(loadCal);
+        var gone = backs.filter(function (b, k) { return rs[k].status === "fulfilled"; });
+        if (!gone.length) return;
+        showUndo("일정 " + gone.length + "건을 지웠습니다", function () {
+          Promise.allSettled(gone.map(function (b) { return api("/events", { method: "POST", body: b }); })).then(loadCal);
         });
       });
     }
@@ -3704,7 +3709,9 @@
     if (wk[6] > to) to = wk[6];
     mRange = [from, to];
     var teamId = myTeamId();
+    var fresh = latest("sched");
     Promise.all([api("/events?from=" + from + "&to=" + to), api("/ledger?from=" + from + "&to=" + to).catch(function () { return []; })]).then(function (rs) {
+      if (!fresh()) return;
       var evs = rs[0]; calLedger = rs[1];
       calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null
@@ -3811,29 +3818,6 @@
       y0 = null; sh = null;
     });
   })();
-  function openDaySheet(ds) {
-    closeSheet();
-    var back = document.createElement("div");
-    back.className = "sheet-back";
-    back.addEventListener("click", closeSheet);
-    var s = document.createElement("div");
-    s.className = "sheet";
-    s.innerHTML = '<div class="sheet-head"><strong>' + esc(dayLabelOf(ds)) + "</strong>"
-      + '<button class="btn primary" id="sheet-add">일정 추가</button>'
-      + '<button class="btn" id="sheet-close">닫기</button></div>'
-      + ((dayTL ? dayTimelineHtml(dayItemsOf(ds)) : dayGroupsHtml(dayItemsOf(ds), myTeamId())) || '<div class="empty">이 날짜에 일정이 없습니다.</div>')
-      + ledgerBandHtml(ds);
-    document.body.appendChild(back);
-    document.body.appendChild(s);
-    s.querySelector("#sheet-close").addEventListener("click", closeSheet);
-    s.querySelector("#sheet-add").addEventListener("click", function () {
-      closeSheet();
-      openPop(null, { em: BOOT.me.email, date: ds, pickMember: true, onDone: loadDay });
-    });
-    s.addEventListener("click", function (e) {
-      dayListClick(e, function () { closeSheet(); loadDay(); });
-    });
-  }
   $("m-cal-view").addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-cell");
     if (!cell || !cell.dataset.date) return;
@@ -4010,7 +3994,7 @@
       return e.member_email === BOOT.me.email || !e.member_email || isOfficial(e);
     if (e.member_email && peopleOff[e.member_email]) return false;   // 사람 고르기 칩에서 끈 사람
     if (calScope === "esl")
-      return !e.member_email || e.team_id == null || roleOf(e.member_email) === "부지점장";  // 부지점장 기록 + 공통·지점 단위
+      return !e.member_email || e.team_id == null || isLeadRole(roleOf(e.member_email));  // 부지점장 기록 + 공통·지점 단위
     return true;   // team = 팀 전체
   }
   // ── 사람 고르기 칩 (2026-09-28 사용자: 팀원이 다 적으면 달력이 빽빽하다) ──
@@ -4023,7 +4007,7 @@
   var ppAtt = { date: null, list: [] };
   function renderPeoplePick() {
     var box = $(isMobile() ? "m-people" : schedView === "wl" ? "wl-people" : "people-pick");
-    var list = calScope === "mine" ? [] : rosterOf(myTeamId()).filter(function (m) { return calScope !== "esl" || m.role === "부지점장"; });
+    var list = calScope === "mine" ? [] : rosterOf(myTeamId()).filter(function (m) { return calScope !== "esl" || isLeadRole(m.role); });
     box.hidden = !list.length;
     if (!list.length) return;
     if (ppAtt.date !== selDate) {
@@ -4080,7 +4064,9 @@
     var ds = wlDays(), teamId = myTeamId();
     var a = new Date(ds[0] + "T00:00:00"), z = new Date(ds[6] + "T00:00:00");
     $("wl-label").textContent = (a.getMonth() + 1) + "월 " + a.getDate() + "일 – " + (z.getMonth() !== a.getMonth() ? (z.getMonth() + 1) + "월 " : "") + z.getDate() + "일";
+    var fresh = latest("sched");
     api("/events?from=" + ds[0] + "&to=" + ds[6]).then(function (evs) {
+      if (!fresh()) return;
       calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
         return visible && e.status !== "취소";
@@ -4143,7 +4129,9 @@
     $("cal-copy-month").hidden = false;
     var from = fmtDate(new Date(y, mo, 1)), to = fmtDate(new Date(y, mo + 1, 0));
     var teamId = myTeamId();
+    var fresh = latest("sched");
     Promise.all([api("/events?from=" + from + "&to=" + to), api("/ledger?from=" + from + "&to=" + to).catch(function () { return []; })]).then(function (rs) {
+      if (!fresh()) return;
       var evs = rs[0]; calLedger = rs[1];
       calEvs = evs.filter(function (e) {
         var visible = e.team_id === teamId || e.team_id == null
@@ -4340,7 +4328,7 @@
     var jobs = [];
     function resolve(r) {
       if (!r.member) return { memberEmail: null };            // 팀 공유
-      var email = emailOf(r.member) || emailsOf(r.member)[0];
+      var email = emailsOf(r.member)[0] || emailOf(r.member);   // 라벨이 먼저 — 이름으로 찾으면 첫 동명이인에게 들어간다
       if (!email) { alert("명단에 없는 이름입니다: " + r.member); return null; }
       return { memberEmail: email };
     }
@@ -4450,8 +4438,6 @@
   }
   function renderPushBar() {
     var bar = $("push-bar");
-    var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
-    var home = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
     var xed = false;
     try { xed = localStorage.getItem("ob_push_x") === "1"; } catch (e) {}
     if (!pushOk()) {
@@ -4479,7 +4465,12 @@
           return swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(k.key) });
         }).then(function (s) {
           return api("/push/subscribe", { method: "POST", body: { endpoint: s.endpoint } });
-        }).then(function () { toast("알림을 켰습니다. 「시험 알림」으로 확인해 보세요."); renderPushBar(); });
+        }).then(function () {
+          renderPushBar();
+          return api("/push/test", { method: "POST", quiet: true }).then(function (r) {
+            toast(r.sent ? "알림을 켰습니다. 확인용 알림을 하나 보냈습니다." : "알림을 켰습니다.");
+          });
+        });
       }).catch(function () { toast("알림을 켜지 못했습니다. 잠시 뒤 다시 눌러 주세요."); renderPushBar(); });
     }
     if (e.target.id === "push-test") {
@@ -4652,7 +4643,9 @@
 
   function loadAttTable(ds, teamId) {
     var todayStr = fmtDate(new Date());
+    var fresh = latest("attTable");
     api("/attendance?date=" + ds).then(function (list) {
+      if (!fresh()) return;
       var byEmail = {};
       list.forEach(function (a) { byEmail[a.email] = a; });
       var roster = rosterOf(teamId);
@@ -4661,7 +4654,7 @@
         roster = roster.concat([{ email: BOOT.me.email, name: BOOT.me.name, role: "명단 외" }]);
       // 보고는 팀원이 부지점장에게 하는 것이다 — 받는 사람은 스스로에게 보고하지 않는다
       // (2026-08-05 사용자). 줄은 그대로 두되 집계·재촉 명단에서만 뺀다.
-      var due = roster.filter(function (m) { return m.role !== "부지점장" && m.role !== "지점장"; });
+      var due = roster.filter(function (m) { return !isLeadRole(m.role) && m.role !== "지점장"; });
       var checked = due.filter(function (m) { return byEmail[m.email] && byEmail[m.email].present; }).length;
       var missing = due.filter(function (m) { return !(byEmail[m.email] && byEmail[m.email].id != null); });
       var reported = due.length - missing.length;
@@ -4671,7 +4664,7 @@
       var mb = $("att-missing");
       if (missing.length && BOOT.me.isManager) {
         mb.hidden = false;
-        mb.innerHTML = '<div class="card card-pad" style="border-left:3px solid var(--red)">'
+        mb.innerHTML = '<div class="card card-pad">'
           + '<strong style="color:var(--red)">미보고 ' + missing.length + '명</strong> '
           + '<span class="meta">' + missing.map(function (m) { return esc(m.name); }).join(", ") + "</span></div>";
       } else mb.hidden = true;
@@ -5553,7 +5546,9 @@
     // 치다 만 목표가 있으면 먼저 보낸다 — 팀·달을 바꾸면 칸이 다시 그려져 0.5초 기다리던 값이 사라진다
     Object.keys(perfGoalTimer).forEach(function (i) { clearTimeout(perfGoalTimer[i]); perfSaveGoal(Number(i)); });
     perfGoalTimer = {};
+    var fresh = latest("perf");
     api("/perf?month=" + month).then(function (data) {
+      if (!fresh()) return;
       perfGrids = [];
       var body = $("perf-body");
       var tid = myTeamId();
@@ -5629,7 +5624,7 @@
           // 전에는 빈 칸도 그대로 보내서 남의 목표가 조용히 지워졌다.
           var cell = function (cls, v, ph, isNum) {
             return BOOT.me.canSetGoal && writable
-              ? '<td><input class="input goal-cell ' + cls + '" data-i="' + i + '"' + (isNum ? ' type="number" min="0"' : "") + ' placeholder="' + ph + '" value="' + esc(v || "") + '" data-init="' + esc(v || "") + '"></td>'
+              ? '<td><input class="input goal-cell ' + cls + '" data-i="' + i + '"' + (isNum ? ' type="number" min="0"' : ' inputmode="numeric"') + ' placeholder="' + ph + '" value="' + esc(!isNum && /^\d+$/.test(String(v || "")) ? fmtNum(v) : (v || "")) + '" data-init="' + esc(!isNum && /^\d+$/.test(String(v || "")) ? fmtNum(v) : (v || "")) + '"></td>'
               : '<td class="num ro">' + (v ? esc(v) : "-") + "</td>";
           };
           goalRows += '<tr><td class="ro">' + esc(pp.label) + "</td>"

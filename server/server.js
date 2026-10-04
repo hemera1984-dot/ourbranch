@@ -54,12 +54,15 @@ function send(res, status, body) {
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
-    let data = "";
+    const chunks = []; let size = 0;
     req.on("data", c => {
-      data += c;
-      if (data.length > 1e6) { req.destroy(); reject(new Error("too large")); }   // 끊고 나서 대기하지 않는다
+      size += c.length; chunks.push(c);
+      if (size > 1e6) { req.destroy(); reject(Object.assign(new Error("too large"), { status: 413 })); }   // 끊고 나서 대기하지 않는다
     });
-    req.on("end", () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error("bad json")); } });
+    req.on("end", () => {
+      const data = Buffer.concat(chunks).toString("utf8");   // 한 번에 해독 — 글자가 덩어리 사이에서 갈려도 안 깨진다
+      try { resolve(data ? JSON.parse(data) : {}); } catch { reject(Object.assign(new Error("bad json"), { status: 400 })); }
+    });
     req.on("error", reject);
   });
 }
@@ -188,7 +191,10 @@ function canManageMember(user, targetEmail) {
   if (user.isSuper) return true;
   const t = getMember(db, targetEmail);
   if (!t) return user.teamId != null;                  // 신규 등록은 자기 팀으로 들어간다
-  return canWriteTeam(user, t.team_id);
+  if (!canWriteTeam(user, t.team_id)) return false;
+  // 나보다 높은 사람은 못 고친다 — 새로 줄 직급(canAssignRole)만 보면 지금 직급이 높은 사람을 내릴 수 있었다(서버 점검 2026-10-04)
+  if (t.email !== user.email && t.role && ROLE_ORDER.includes(t.role) && !canAssignRole(user, t.role)) return false;
+  return true;
 }
 
 // 일정 열람 — 주인이 있는 일정에는 canSeeTeam을 그대로 쓰지 않는다.
@@ -919,6 +925,8 @@ function logEvent(user, action, e, count) {
 route("GET", /^\/events$/, false, (req, res, user) => {
   const q = new URL(req.url, "http://x").searchParams;
   const from = q.get("from") || today(), to = q.get("to") || today();
+  if (!isDate(from) || !isDate(to)) return send(res, 400, { error: "기간 형식이 올바르지 않습니다" });
+  if ((new Date(to) - new Date(from)) / 86400e3 > 190) return send(res, 400, { error: "한 번에 반년까지 조회합니다" });
   const att = db.prepare("SELECT email, name, reply FROM event_attendees WHERE event_id = ? ORDER BY created");
   const notes = db.prepare("SELECT id, email, name, text, created FROM event_notes WHERE event_id = ? ORDER BY id");
   const list = db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start").all(from, to)
@@ -1047,7 +1055,8 @@ route("POST", /^\/events$/, false, async (req, res, user) => {
     ? Math.min(Math.max(Math.floor(Number(rep.count)) || 1, 1), 52) : 1;
 
   const ins = db.prepare("INSERT INTO events (team_id, member_email, date, start, end, kind, title, place, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-  const detail = b.detail ? JSON.stringify(b.detail).slice(0, 2000) : "";
+  const detail = b.detail ? JSON.stringify(b.detail) : "";
+  if (detail.length > 2000) return send(res, 400, { error: "일정 세부가 너무 깁니다" });
   const base = new Date(b.date + "T00:00:00");
   const ids = [];
   // 반복은 통째로 되거나 통째로 안 된다 — 중간에 멈추면 앞부분만 남고,
@@ -1128,7 +1137,8 @@ route("POST", /^\/events\/(\d+)$/, false, async (req, res, user, m) => {
   }
   if (b.date !== undefined && !isDate(b.date))
     return send(res, 400, { error: "날짜는 2026-08-01 형식으로 넣어 주세요: " + b.date });
-  const nextDetail = b.detail !== undefined ? JSON.stringify(b.detail).slice(0, 2000) : e.detail;
+  const nextDetail = b.detail !== undefined ? JSON.stringify(b.detail) : e.detail;
+  if (nextDetail && nextDetail.length > 2000) return send(res, 400, { error: "일정 세부가 너무 깁니다" });
   db.prepare("UPDATE events SET member_email = ?, date = ?, start = ?, end = ?, kind = ?, title = ?, place = ?, detail = ? WHERE id = ?")
     .run(nextEmail, b.date ?? e.date, b.start ?? e.start, b.end ?? e.end,
          b.kind ?? e.kind, b.title ?? e.title, b.place ?? e.place, nextDetail, e.id);
@@ -1186,7 +1196,7 @@ route("POST", /^\/push\/test$/, false, async (req, res, user) => send(res, 200, 
 function reportDue(date) {
   const done = new Set(db.prepare("SELECT email FROM attendance WHERE date = ?").all(date).map(a => a.email));
   return db.prepare("SELECT email, role, active, team_id FROM members").all()
-    .filter(m => m.active !== 0 && m.team_id != null && m.role !== "부지점장" && m.role !== "지점장" && !done.has(m.email))
+    .filter(m => m.active !== 0 && m.team_id != null && roleRank(m.role) > roleRank("부지점장") && !done.has(m.email))
     .map(m => m.email);
 }
 async function pushTick(at = Date.now()) {
@@ -1219,6 +1229,9 @@ route("GET", /^\/attendance$/, false, (req, res, user) => {
 route("POST", /^\/attendance$/, false, async (req, res, user) => {
   const b = await readJson(req);
   const date = b.date || today();
+  if (!isDate(date)) return send(res, 400, { error: "날짜 형식이 올바르지 않습니다: " + date });
+  // 보고 칸은 한 칸 2,000자까지 — 상한이 없으면 실수 붙여넣기 한 번에 표 전체가 무거워진다
+  for (const k of ["reason", "work", "lunch", "afternoon", "note"]) if (b[k] != null) b[k] = String(b[k]).slice(0, 2000);
   const prev = db.prepare("SELECT * FROM attendance WHERE email = ? AND date = ?").get(user.email, date) || {};
   // 보낸 값만 갱신 — 출근일정만 고쳐도 출석 체크가 풀리지 않는다
   const present = b.present != null ? (b.present ? 1 : 0) : (prev.present || 0);
@@ -1844,6 +1857,8 @@ route("POST", /^\/pending\/approve$/, false, async (req, res, user) => {
   if (b.mergeFrom) {
     from = getMember(db, String(b.mergeFrom).toLowerCase());
     if (!from) return send(res, 404, { error: "이어받을 자리가 없습니다" });
+    // 계정 연결(/admin/members/link)과 같은 선 — 아직 계정이 없는 자리만 넘긴다(서버 점검 2026-10-04)
+    if (!from.email.includes("@미등록.local")) return send(res, 400, { error: "이미 계정이 붙은 자리는 이어받을 수 없습니다" });
     if (!canWriteTeam(user, from.team_id)) return send(res, 403, { error: "권한 없는 팀입니다" });
   }
   const teamId = from ? from.team_id
@@ -2202,7 +2217,7 @@ const server = createServer(async (req, res) => {
     if (path === "/join" && req.method === "POST") {
       const b = await readJson(req).catch(() => ({}));
       const inv = b.code
-        ? db.prepare("SELECT * FROM invites WHERE code = ? AND expires_at > ?").get(String(b.code), now())
+        ? db.prepare("SELECT * FROM invites WHERE code = ? AND expires_at > ?").get(String(b.code), new Date().toISOString())
         : null;
       db.prepare(
         `INSERT INTO pending (email, name, team_id, role, invite_code, by_name, created)
@@ -2229,6 +2244,8 @@ const server = createServer(async (req, res) => {
     if (r.needManager && !user.isManager) return send(res, 403, { error: "관리자만" });
     try { return await r.handler(req, res, user, m); }
     catch (e) {
+      // 보낸 쪽 잘못(깨진 JSON·너무 큰 본문)은 400·413으로 — 서버 오류로 섞으면 로그가 스택으로 찬다
+      if (e && (e.status === 400 || e.status === 413)) return send(res, e.status, { error: e.status === 413 ? "보낸 내용이 너무 큽니다" : "보낸 내용을 읽지 못했습니다" });
       // 로그가 없으면 장애 원인을 알 수 없다 (journalctl -u ourbranch 로 확인)
       console.error("[" + req.method + " " + path + "]", e && e.message, e && e.stack);
       return send(res, 500, { error: "서버 오류" });
@@ -2240,16 +2257,12 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => console.log("ourbranch API :" + PORT));
 
 // 보관기간 청소 — 켤 때 한 번, 이후 하루 한 번
-purgeOldTa();
-setInterval(purgeOldTa, 24 * 3600e3).unref();
-
-// 주인 없는 서류 파일 청소 — 같은 주기
-purgeOrphanFiles();
-setInterval(purgeOrphanFiles, 24 * 3600e3).unref();
-
-// 요청에 안 붙은 캡처 청소 — 같은 주기
-purgeLooseShots();
-setInterval(purgeLooseShots, 24 * 3600e3).unref();
+// 청소는 실패해도 서버를 세우지 않는다 — 로그만 남기고 다음 주기에 다시(서버 점검 2026-10-04)
+const safely = (name, fn) => () => { try { fn(); } catch (e) { console.error("[" + name + "]", e && e.stack || e); } };
+for (const [name, fn] of [["TA 보관기간", purgeOldTa], ["서류 청소", purgeOrphanFiles], ["캡처 청소", purgeLooseShots]]) {
+  safely(name, fn)();
+  setInterval(safely(name, fn), 24 * 3600e3).unref();
+}
 
 // 일일보고 알림 — 1분마다 시각을 본다
 if (process.env.PUSH_TEST !== "1") setInterval(() => pushTick().catch(e => console.error("[푸시]", e && e.message)), 60e3).unref();

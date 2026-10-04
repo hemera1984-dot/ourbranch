@@ -309,6 +309,7 @@ function makeGrid(root, opts) {
     e.preventDefault();
     var startRi = Number(td.parentNode.dataset.ri), startCi = Number(td.dataset.ci);
     var lines = text.replace(/\r/g, "").split("\n").filter(function (l, i, a) { return !(i === a.length - 1 && l === ""); });
+    var touched = [];
     lines.forEach(function (line, li) {
       var ri = startRi + li;
       if (ri >= rows.length) { var nr = newRow(); rows.push(nr); added.add(nr); }
@@ -320,8 +321,12 @@ function makeGrid(root, opts) {
         setVal(r, c, c.date ? normDate(val) : c.num ? val.replace(/,/g, "").trim() : val.trim());
       });
       if (r._id != null) dirty.add(r._id); else added.add(r);
+      touched.push(r);
     });
     render();
+    // 칸을 벗어나면 저장하는 표(TA·업적·가계부)는 붙여 넣은 줄도 그 자리에서 보낸다 —
+    // 전에는 붙여 넣은 칸에서 포커스가 빠져도 값이 같아 저장이 불리지 않았다(웹 점검 2026-10-04)
+    if (opts.onRowCommit) touched.forEach(function (r) { opts.onRowCommit(r); });
     var back = cellAt(startRi, startCi);
     if (back) back.focus();
   });
@@ -334,9 +339,10 @@ function makeGrid(root, opts) {
     if (r._id != null) {
       if (!opts.onDeleteRow) return;
       if (!confirm("이 줄을 삭제할까?")) return;
-      opts.onDeleteRow(r, function () { rows.splice(ri, 1); dirty.delete(r._id); render(); });
+      // 응답을 기다리는 사이 다른 사람 갱신으로 순서가 바뀔 수 있다 — 지울 때 그 줄을 다시 찾는다
+      opts.onDeleteRow(r, function () { var k = rows.indexOf(r); if (k >= 0) rows.splice(k, 1); dirty.delete(r._id); render(); });
     } else {
-      rows.splice(ri, 1); added.delete(r); render();
+      var k = rows.indexOf(r); if (k >= 0) rows.splice(k, 1); added.delete(r); render();
     }
   });
 

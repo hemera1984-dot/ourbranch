@@ -442,6 +442,14 @@ export function openDb(file) {
     `);
   } catch (e) { /* 최초 생성 시엔 대상이 없다 */ }
 
+  // 날짜·달로만 거르는 조회가 많다(팀 경계는 JS에서). 기존 인덱스는 team_id가 첫 열이라 쓰이지 않았다(서버 점검 2026-10-04)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_ta_date ON ta_logs(date);
+    CREATE INDEX IF NOT EXISTS idx_perf_month ON perf(month);
+    CREATE INDEX IF NOT EXISTS idx_goals_month ON perf_goals(month);
+    CREATE INDEX IF NOT EXISTS idx_att_date ON attendance(date);
+  `);
+
   return db;
 }
 
