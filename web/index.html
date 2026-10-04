@@ -358,6 +358,7 @@
       <div class="desktop-only">
       <div class="toolbar" style="margin-bottom:10px">
         <span class="seg">
+          <button class="btn seg-btn" id="view-wl">주</button>
           <button class="btn seg-btn active" id="view-cal">달력</button>
           <button class="btn seg-btn" id="view-week">주간 확인표</button>
           <button class="btn seg-btn" id="view-day">하루</button>
@@ -373,6 +374,11 @@
           <span class="tb-right"><button class="btn text" id="cal-copy-month" hidden>지난달 일정 가져오기</button>
           <button class="btn text scan-btn">수첩 스캔</button></span>
         </span>
+        <span id="wl-controls" hidden>
+          <span class="month-nav"><button type="button" class="db-ar" id="wl-prev" aria-label="이전 주">‹</button><strong id="wl-label"></strong><button type="button" class="db-ar" id="wl-next" aria-label="다음 주">›</button></span>
+          <button class="btn text" id="wl-today">이번 주</button>
+          <span class="tb-right"><button class="btn text scan-btn">수첩 스캔</button><button class="btn primary" id="wl-add">일정 추가</button></span>
+        </span>
         <span id="week-controls" hidden>
           <span class="month-nav"><button type="button" class="db-ar" id="week-prev" aria-label="이전 주">‹</button><strong id="week-label"></strong><button type="button" class="db-ar" id="week-next" aria-label="다음 주">›</button></span>
           <button class="btn text" id="week-today">이번 주</button>
@@ -382,6 +388,11 @@
           <button class="btn text" id="dc-today">오늘</button>
           <span class="note">사람이 열, 시간이 세로 — 빈 칸이 그 사람이 비는 시간입니다. 빈 칸을 누르면 그 시간에 일정을 넣습니다.</span>
         </span>
+      </div>
+      <!-- 「주」 보기 — 일곱 날을 일곱 줄 목록으로, 한 건을 두 줄로 다 쓴다(잘리는 글자 없음) -->
+      <div id="wl-wrap" hidden>
+        <div class="people-pick wl-people" id="wl-people" hidden></div>
+        <div class="wl" id="wl-view"></div>
       </div>
       <div id="cal-wrap" class="cal-layout">
         <div class="card"><div id="cal-view"></div></div>
@@ -3706,7 +3717,8 @@
   // 폰에서도 사람별 열 보기 (2026-09-18 사용자). 목록 자리에 열 표가 대신 선다 — 옆으로 넘겨 본다.
   var mColsOn = (function () { try { return localStorage.getItem("ob_m_cols") === "1"; } catch (e) { return false; } })();
   // ── 이번 주 띠(폰 기본) ↔ 월 달력 ──
-  var mWeek = (function () { try { return localStorage.getItem("ob_m_week") !== "0"; } catch (e) { return true; } })();
+  // 폰 기본은 월 달력, 「주 보기」로 바꾸면 기억(2026-10-04 사용자: 폰은 달력, 노트북은 주)
+  var mWeek = (function () { try { return localStorage.getItem("ob_m_week") === "1"; } catch (e) { return false; } })();
   var mRange = ["", ""];
   function weekOf(ds) {
     var d = new Date(ds + "T00:00:00"), k = (d.getDay() + 6) % 7, out = [];
@@ -3832,7 +3844,7 @@
   $("day-view").addEventListener("click", function (e) { dayListClick(e, loadDay); });
 
   // ── 데스크톱: 달력 보기 (기본) ↔ 주간 확인표 전환 ──
-  var schedView = (function () { try { return localStorage.getItem("ob_sched_view") || "cal"; } catch (e) { return "cal"; } })();
+  var schedView = (function () { try { return localStorage.getItem("ob_sched_view2") || "wl"; } catch (e) { return "wl"; } })();
   var calBase = new Date();
   // 범위: esl = 부지점장 일정만(지점장·총관리자 기본 — 전 팀원이 다 뜨면 정신없다) /
   //        team = 팀 전체 / mine = 내 일정
@@ -3864,14 +3876,17 @@
     calScope = b.dataset.scope;
     syncScopeSeg();
     if (isMobile()) { renderCalGrid("m-cal-view", true); renderMobileDay(); }
-    else { renderCalGrid(); renderCalDay(); }
+    else deskRender();
   }
   document.getElementById("scope-seg").addEventListener("click", onScopeClick);
   document.getElementById("m-scope-seg").addEventListener("click", onScopeClick);
 
   function setSchedView(v) {
     schedView = v;
-    try { localStorage.setItem("ob_sched_view", v); } catch (e) {}
+    try { localStorage.setItem("ob_sched_view2", v); } catch (e) {}
+    $("view-wl").classList.toggle("active", v === "wl");
+    $("wl-controls").hidden = v !== "wl";
+    $("wl-wrap").hidden = v !== "wl";
     $("view-cal").classList.toggle("active", v === "cal");
     $("view-week").classList.toggle("active", v === "week");
     $("view-day").classList.toggle("active", v === "day");
@@ -3881,7 +3896,7 @@
     $("cal-wrap").style.display = v === "cal" ? "" : "none";
     $("week-wrap").hidden = v !== "week";
     $("dcol-wrap").hidden = v !== "day";
-    if (v === "cal") loadCal(); else if (v === "day") loadDayCols(); else loadWeek();
+    if (v === "cal" || v === "wl") loadCal(); else if (v === "day") loadDayCols(); else loadWeek();
   }
 
   // ── 하루 보기 — 사람이 열, 시간이 세로 (2026-09-18 사용자, Teamup 스케줄러) ──
@@ -3956,6 +3971,7 @@
       + "<span>" + esc(evLabel(e)) + "</span></div>";
   }
   $("view-day").addEventListener("click", function () { setSchedView("day"); });
+  $("view-wl").addEventListener("click", function () { setSchedView("wl"); });
   $("dc-prev").addEventListener("click", function () { var d = new Date(dcDate + "T00:00:00"); d.setDate(d.getDate() - 1); dcDate = fmtDate(d); loadDayCols(); });
   $("dc-next").addEventListener("click", function () { var d = new Date(dcDate + "T00:00:00"); d.setDate(d.getDate() + 1); dcDate = fmtDate(d); loadDayCols(); });
   $("dc-today").addEventListener("click", function () { dcDate = fmtDate(new Date()); loadDayCols(); });
@@ -3994,7 +4010,7 @@
   // 고른 날짜의 출석을 본다 — 출석 체크는 홈의 「출석 체크」와 같은 기록(attendance)이다.
   var ppAtt = { date: null, list: [] };
   function renderPeoplePick() {
-    var box = $(isMobile() ? "m-people" : "people-pick");
+    var box = $(isMobile() ? "m-people" : schedView === "wl" ? "wl-people" : "people-pick");
     var list = calScope === "mine" ? [] : rosterOf(myTeamId()).filter(function (m) { return calScope !== "esl" || m.role === "부지점장"; });
     box.hidden = !list.length;
     if (!list.length) return;
@@ -4034,11 +4050,81 @@
     else if (e.target.closest(".pp-me")) { peopleOff = {}; list.forEach(function (m) { if (m.email !== BOOT.me.email) peopleOff[m.email] = 1; }); }
     else return;
     savePeopleOff();
-    if (isMobile()) { renderCalGrid("m-cal-view", true); renderMobileDay(); } else { renderCalGrid(); renderCalDay(); }
+    if (isMobile()) { renderCalGrid("m-cal-view", true); renderMobileDay(); } else deskRender();
   }
   $("people-pick").addEventListener("click", onPeopleClick);
+  $("wl-people").addEventListener("click", onPeopleClick);
   $("m-people").addEventListener("click", onPeopleClick);
+  function deskRender() { if (schedView === "wl") renderWL(); else { renderCalGrid(); renderCalDay(); } }
+  // ── 「주」 보기(노트북 기본, 2026-10-04 사용자) ──
+  var wlBase = (function () { var d = new Date(), k = (d.getDay() + 6) % 7; return fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - k)); })();
+  function wlDays() {
+    var d = new Date(wlBase + "T00:00:00"), out = [];
+    for (var i = 0; i < 7; i++) out.push(fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + i)));
+    return out;
+  }
+  function loadWL() {
+    initScope();
+    var ds = wlDays(), teamId = myTeamId();
+    var a = new Date(ds[0] + "T00:00:00"), z = new Date(ds[6] + "T00:00:00");
+    $("wl-label").textContent = (a.getMonth() + 1) + "월 " + a.getDate() + "일 – " + (z.getMonth() !== a.getMonth() ? (z.getMonth() + 1) + "월 " : "") + z.getDate() + "일";
+    api("/events?from=" + ds[0] + "&to=" + ds[6]).then(function (evs) {
+      calEvs = evs.filter(function (e) {
+        var visible = e.team_id === teamId || e.team_id == null || (e.member_email && BOOT.me.recruits.indexOf(e.member_email) >= 0);
+        return visible && e.status !== "취소";
+      });
+      evsById = {};
+      calEvs.forEach(function (e) { evsById[e.id] = e; });
+      renderWL();
+    });
+  }
+  function wlItem(e) {
+    var off = isOfficial(e), fromMg = e.source === "myguardian";
+    var editable = !fromMg && canWriteCell(e.member_email || "");
+    var kindCls = "k-" + (e.kind === "고객미팅" ? "고객미팅" : knownKind(e.kind) ? e.kind : "기타");
+    // 이름이 같은 사람의 구분 표식은 작게 — 색 점이 먼저 가른다
+    var lb = e.member_email ? nameOf(e.member_email) || "" : "", cut = lb.indexOf("(");
+    var who = e.member_email ? pdot(e.member_email) + esc(cut > 0 ? lb.slice(0, cut) : lb) + (cut > 0 ? "<small>" + esc(lb.slice(cut)) + "</small>" : "") : "팀 공유";
+    return '<div class="slot wl-ev' + (off ? " official" : "") + (editable ? " editable" : "") + '" data-eid="' + e.id + '"' + (editable ? ' tabindex="0"' : "") + ">"
+      + '<div class="wl-l1"><b class="wl-t">' + esc(e.start || "종일") + '</b><span class="wl-ti">' + esc(e.title || e.kind) + "</span></div>"
+      + '<div class="wl-l2"><span class="wl-who">' + who + "</span>" + (e.place ? '<span class="wl-pl">' + esc(e.place) + "</span>" : "")
+      + '<span class="chip ' + kindCls + '">' + esc(e.kind) + "</span></div></div>";
+  }
+  function renderWL() {
+    renderPeoplePick();
+    var today = fmtDate(new Date()), DW = ["월", "화", "수", "목", "금", "토", "일"], canAdd = canWriteCell(BOOT.me.email);
+    // 평일 다섯 칸 + 주말 한 칸(토·일을 위아래로) — 주말은 대개 적어서, 그 폭을 평일 글자에 준다
+    function day(ds, i) {
+      var list = calEvs.filter(function (e) { return e.date === ds && scopePass(e); })
+        .sort(function (a, b) { return (a.start || "") < (b.start || "") ? -1 : 1; });
+      var offs = list.filter(isOfficial), mine = list.filter(function (e) { return !isOfficial(e); });
+      var d = new Date(ds + "T00:00:00");
+      return '<div class="wl-day' + (ds === today ? " today" : "") + (i > 4 ? " we" : "") + '" data-date="' + ds + '">'
+        + '<header class="wl-head"><span class="wl-dow">' + DW[i] + '</span><b class="wl-dn">' + d.getDate() + "</b>"
+        + (list.length ? '<span class="wl-n">' + list.length + "건</span>" : "") + "</header>"
+        + (offs.length ? '<div class="wl-off">' + offs.map(wlItem).join("") + "</div>" : "")
+        + (mine.length ? mine.map(wlItem).join("") : (offs.length ? "" : '<p class="wl-empty">일정 없음</p>'))
+        + (canAdd ? '<button type="button" class="wl-add" data-date="' + ds + '">+ 일정</button>' : "")
+        + "</div>";
+    }
+    var ds7 = wlDays();
+    $("wl-view").innerHTML = ds7.slice(0, 5).map(function (ds, i) {
+      return '<section class="wl-col">' + day(ds, i) + "</section>";
+    }).join("") + '<section class="wl-col wl-weekend">' + day(ds7[5], 5) + day(ds7[6], 6) + "</section>";
+  }
+  $("wl-view").addEventListener("click", function (e) {
+    var add = e.target.closest(".wl-add");
+    if (add) { openPop(add, { em: BOOT.me.email, date: add.dataset.date, pickMember: true, onDone: loadCal }); return; }
+    dayListClick(e, loadCal);
+  });
+  function wlStep(k) { var d = new Date(wlBase + "T00:00:00"); wlBase = fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7 * k)); loadWL(); }
+  $("wl-prev").addEventListener("click", function () { wlStep(-1); });
+  $("wl-next").addEventListener("click", function () { wlStep(1); });
+  $("wl-today").addEventListener("click", function () { var d = new Date(), k = (d.getDay() + 6) % 7; wlBase = fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - k)); loadWL(); });
+  $("wl-add").addEventListener("click", function () { openPop(null, { em: BOOT.me.email, date: fmtDate(new Date()), pickMember: true, onDone: loadCal }); });
+
   function loadCal() {
+    if (!isMobile() && schedView === "wl") { loadWL(); return; }
     initScope();
     var y = calBase.getFullYear(), mo = calBase.getMonth();
     $("cal-label").textContent = y + "년 " + (mo + 1) + "월";

@@ -1492,3 +1492,40 @@ html, body { overscroll-behavior-y: contain; }
 /* 코덱스 교차검증 반영(2026-10-04) — 떠 있는 단추가 맨 아래 입력을 덮지 않게, 조직도 조작 크기 */
 @media (max-width: 900px) { #screen-home, #screen-sched .mobile-only { padding-bottom: 96px; } }
 @media (pointer: coarse) { .oc-under, .oc-off { width: 40px; height: 40px; line-height: 38px; font-size: var(--fs-b); } .oc-off { margin-left: 6px; } }
+
+/* ── 「주」 보기(노트북 기본) — 글자를 키우고 잘리지 않게(2026-10-04 사용자: 가독성을 더 키워야) ── */
+.wl-people { padding: 0 0 10px; }
+.wl-people .pp-head strong { display: none; }
+.wl { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, .9fr); gap: 8px; align-items: start; }
+.wl-col { background: var(--surface); border-radius: var(--r-lg); padding: 10px 10px 8px; min-width: 0; min-height: 220px; }
+.wl-day.today { box-shadow: 0 0 0 2px var(--blue); border-radius: var(--r-md); }
+.wl-weekend .wl-day + .wl-day { margin-top: 12px; padding-top: 6px; border-top: 2px solid var(--line); }
+.wl-who small { font-size: var(--fs-cap); color: var(--ter); font-weight: 500; margin-left: 2px; }
+.wl-head { display: flex; align-items: baseline; gap: 6px; padding: 2px 4px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.wl-dow { font-size: var(--fs-s); font-weight: 700; color: var(--sub); }
+.wl-dn { font-size: var(--fs-h); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.wl-day.today .wl-dn, .wl-day.today .wl-dow { color: var(--blue); }
+.wl-day.we .wl-dow, .wl-day.we .wl-dn { color: var(--red); }
+.wl-n { margin-left: auto; font-size: var(--fs-xs); color: var(--ter); font-variant-numeric: tabular-nums; }
+.wl-off { display: grid; gap: 4px; margin: 6px 0 4px; }
+.wl .slot.wl-ev { display: block; min-height: 0; padding: 8px 6px; border-radius: var(--r-md); }
+.wl .slot.wl-ev + .slot.wl-ev { border-top: 1px solid var(--line); border-radius: 0; }
+.wl-off .slot.wl-ev, .wl-off .slot.wl-ev + .slot.wl-ev { background: var(--off-bg); border-top: 0; border-radius: var(--r-md); }
+.wl-l1 { display: flex; align-items: baseline; gap: 7px; }
+.wl-t { flex: none; font-size: var(--fs-b); font-weight: 800; font-variant-numeric: tabular-nums; }
+.wl-ti { font-size: calc(var(--fs-b) + 1px); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.wl-off .wl-t, .wl-off .wl-ti { color: var(--off-fg); }
+.wl-l2 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-top: 3px; font-size: var(--fs-s); color: var(--sub); }
+.wl-who { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--ink); }
+.wl-pl::before { content: "· "; }
+.wl-l2 .chip { font-size: var(--fs-cap); }
+.wl .slot.editable:hover { background: var(--blue-bg); }
+.wl .slot.picked { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--blue-bg); }
+.wl .slot.picked::after { display: block; margin: 4px 0 0; }
+.wl-empty { margin: 14px 4px; color: var(--ter); font-size: var(--fs-s); }
+.wl-add { display: block; width: 100%; margin-top: 6px; min-height: 36px; border: 1px dashed var(--line-input); border-radius: var(--r-md); background: transparent; color: var(--sub); font-weight: 600; cursor: pointer; opacity: .55; transition: opacity var(--t-2); }
+.wl-day:hover .wl-add, .wl-add:focus-visible { opacity: 1; }
+.wl-add:hover { color: var(--blue); border-color: var(--blue); }
+#wl-controls { display: inline-flex; align-items: center; gap: 10px; flex: 1; }
+#wl-controls[hidden] { display: none; }
+@media (max-width: 1280px) { .wl { gap: 6px; } .wl-col { padding: 8px 6px; } }
